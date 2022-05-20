@@ -1,0 +1,10 @@
+include guifold/ui/*.ui
+include guifold/icons/*.png
+include guifold/config/guifold.conf
+include guifold/templates/*.j2
+include guifold/templates/*.html
+include guifold/templates/*.js
+include guifold/templates/*.css
+include guifold/templates/*.pml
+include guifold/*.qss
+include guifold/images/*.png

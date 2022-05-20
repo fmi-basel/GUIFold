@@ -1,0 +1,34 @@
+<a name="models"><h2>Models</h2></a>
+
+<p>Models colored by pLDDT score. The pLDDT score represents the confidence in the local fold.</p>
+
+<div class="tab">
+    {% for pdb in pdb_path_list %}
+    <ul>
+        <button class="tablinks" onclick="onTab(event, 'model', {{loop.index}})">{{pdb[0]}}</button>
+    </ul>
+    {% endfor %}
+</div>
+
+
+
+{% for pdb in pdb_path_list %}
+<div id="tabs-model-{{loop.index}}" class="tabcontent-model tabcontent">
+    <div id="container-{{loop.index}}" style="height: 800px; width: 800px; position: relative;"
+         data-ui='True' class='viewer_3Dmoljs'></div>
+    <input type="button" id="btn_plddt_{{loop.index}}" value="Color by pLDDT" />
+    <input type="button" id="btn_bychains_{{loop.index}}" value="Color by chain"/>
+</div>
+{% endfor %}
+<br />
+<span style="background-color: blue;">&nbsp;&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;Very high (pLDDT > 90)&nbsp;&nbsp;
+<span style="background-color: green;">&nbsp;&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;
+<span style="background-color: yellow;">&nbsp;&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;
+<span style="background-color: orange;">&nbsp;&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;
+<span style="background-color: red;">&nbsp;&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;Very low (pLDDT < 50)<br />
+<br /><br />
+<h2>Models aligned on longest chain</h2>
+<div id="container-aligned" style="height: 800px; width: 800px; position: relative;"
+     data-ui='True' class='viewer_3Dmoljs'></div>
+<input type="button" id="btn_plddt_aligned" value="Color by pLDDT"></input>
+<input type="button" id="btn_bychains_aligned" value="Color by chain"></input>

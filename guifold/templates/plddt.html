@@ -1,0 +1,22 @@
+<a name="plddt_summary">
+    <h2>pLDDT score</h2>
+    <h4>Helps to assess confidence in the local fold and to select the best output model when running a monomer prediction.</h4>
+    <p>The table below lists for each predicted model the mean pLDDT score. The pLDDT for individual residues can be visualized in 3D model viewers by coloring the protein chain by B-factor. The model with the highest overall pLDDT is considered the best model.
+        In case of multimer prediction the <a href="#pae_plots">PAE score</a> is more relevant and should be used to rank models.</p>
+
+    <table border = "1">
+        {% for plddt, name in plddt_list %}
+        {% if loop.index == 1 %}
+        <tr>
+            <th>Model number</th>
+            <th>Overall</th>
+        </tr>
+        {% endif %}
+
+        <tr id="plddt-table-{{loop.index}}">
+            <td>{{name}}</td>
+            <td>{{plddt}}</td>
+        </tr>
+        {% endfor %}
+    </table>
+

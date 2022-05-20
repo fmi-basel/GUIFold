@@ -1,0 +1,66 @@
+{% if pae_results %}
+<a name="pae_summary">
+<h2>Predicted aligned error (PAE) summary</h2>
+    <h3>Helps to assess confidence in multimer prediction and which multimer output model is the best.
+        For monomer predictions pLDDT score is more important.</h3>
+<p>The table below lists for each predicted model the PAE values for the complete
+    prediction (Overall) and individual subunits against each other. The PAE reflects the confidence in the
+    relative orientation of a residue pair/domain/subunit.</p>
+
+
+
+
+
+<div id="pae_modal" class="modal">
+    <div class="modal_content">
+        <span class="modal_close"><img src="{{pae_examples_path}}" width="80%"/></span>
+        <p>Examples of different multimer prediction results (applies also to individual domains in a subunit): Left panel illustrates
+            a very good result where the positional confidence for almost every residue pair is high.
+            Middle panel shows a result where the confidence for regions between proteins A and B is high.
+            These are likely the residues that participate in the interaction or are part of the interacting (rigid) domains.
+            Residue pairs with low confidence might be part of other domains or disordered regions that do not contribute to the interaction.
+            Right panel shows a result without any confidence in an interaction between A and B.</p>
+    </div>
+
+</div><br /><br />
+
+<table border = "1">
+    {% for model in pae_results %}
+    {% if loop.index == 1 %}
+    <tr>
+        <th>Model number</th>
+        {% for name in model[1].keys() %}
+        <th>{{name}}</th>
+        {% endfor %}
+    </tr>
+    {% endif %}
+
+    <tr id="pae-table-{{loop.index}}">
+        <td>{{model[0]}}</td>
+        {% for value in model[1].values() %}
+        <td>{{value}}</td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</table>
+<br /><br />
+
+<a name="pae_plots"><h2>Predicted aligned error (PAE) plots</h2></a>
+<p>Plot for each model with pairwise PAE plotted for all subunits. Click the button below to see some examples with different levels of confidence for a multimer prediction.</p><br/>
+    <button id="pae_examples_link">Show example plots for multimer predictions</button><br/><br/>
+
+<div class="tab">
+    {% for name, path in images %}
+    <ul>
+        <button class="tablinks-pae" onclick="onTab(event, 'pae', '{{loop.index}}')">{{name}}</button>
+    </ul>
+    {% endfor %}
+</div>
+
+{% for name, path in images %}
+<div id="tabs-pae-{{loop.index}}" class="tabcontent-pae tabcontent">
+    <img src="{{path}}" width="40%" /><br /><br />
+</div>
+{% endfor %}
+<p>Blue = Low predicted error, Red = Large predicted error</p>
+{% endif %}

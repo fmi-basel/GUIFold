@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+   <head>
+       <meta charset = "utf-8">
+       <title>Alphafold results</title>
+       <!--<link href = "https://code.jquery.com/ui/1.10.4/themes/ui-lightness/jquery-ui.css" rel = "stylesheet">-->
+       <!--<<script src = "https://code.jquery.com/jquery-1.10.2.js"></script>-->
+       <!--<<script src = "https://code.jquery.com/ui/1.10.4/jquery-ui.js"></script>-->
+       {% if use_model_viewer %}
+       <script src = "http://3Dmol.csb.pitt.edu/build/3Dmol-min.js""></script>
+       {% endif %}
+       <script>{% include 'scripts.js' %}</script>
+
+       <style>{% include 'style.css' %}</style>
+
+
+   </head>
+
+   <body>
+
+
+   <div class="page">
+       <div class="sidenav">
+       {% include 'navigation.html' %}
+       </div>
+
+
+
+        <div class="main">
+            <div style="">
+                <h1 style="margin: 0;">AlphaFold results</h1>
+            </div>
+            <div>
+                {% if not multimer %}
+                    {% include 'plddt.html' %}
+                <br />
+                {% endif %}
+                {% if pae_results is not none %}
+                {% include 'pae.html' %}
+                {% endif %}
+                <br />
+                <!--Lack of WebGL support on some platforms causes too many complications. Locally installed model viewers should be used in the meantime-->
+                {% if use_model_viewer %}
+                <span id="model_viewer">{% include 'model_viewer.html' %}</span>
+                <br />
+                {% endif %}
+                    {% if multimer %}
+                        {% include 'plddt.html' %}
+                    {% endif %}
+                </div>
+            </div>
+            <\br><\br><\br><\br>
+       </div>
+   </script>
+   </body>
+
+</html>

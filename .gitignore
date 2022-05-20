@@ -1,0 +1,13 @@
+/.idea/
+/guifold/.idea/
+/build/
+/dist/
+/webview_test/
+/guifold/style.qss
+/guifold/utils.py
+/guifold/config/guifold.conf
+/guifold/templates/submit_script.j2
+/pae_examples.ai
+/guifold.egg-info/
+/install.sh
+
