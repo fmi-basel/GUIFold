@@ -39,6 +39,8 @@ import argparse
 
 #Required for WebGL to work
 os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = "--ignore-gpu-blacklist"
+#Prevent error when OpenGL not available
+os.environ['QMLSCENE_DEVICE'] = "softwarecontext"
 #Maybe makes Webview loading faster
 QNetworkProxyFactory.setUseSystemConfiguration(False)
 

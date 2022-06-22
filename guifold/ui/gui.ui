@@ -6,663 +6,687 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1481</width>
-    <height>891</height>
+    <width>1265</width>
+    <height>771</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
   </property>
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QFrame" name="frame">
-    <property name="geometry">
-     <rect>
-      <x>0</x>
-      <y>0</y>
-      <width>1491</width>
-      <height>851</height>
-     </rect>
-    </property>
-    <property name="frameShape">
-     <enum>QFrame::StyledPanel</enum>
-    </property>
-    <property name="frameShadow">
-     <enum>QFrame::Raised</enum>
-    </property>
-    <widget class="QTabWidget" name="MainNotebook">
-     <property name="geometry">
-      <rect>
-       <x>0</x>
-       <y>0</y>
-       <width>1131</width>
-       <height>771</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <family>Arial</family>
-       <pointsize>12</pointsize>
-      </font>
-     </property>
-     <property name="currentIndex">
-      <number>0</number>
-     </property>
-     <property name="tabBarAutoHide">
-      <bool>false</bool>
-     </property>
-     <widget class="QWidget" name="InputTab">
-      <attribute name="title">
-       <string>Input</string>
-      </attribute>
-      <widget class="QGroupBox" name="groupBox">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>10</y>
-         <width>1101</width>
-         <height>331</height>
-        </rect>
-       </property>
-       <property name="title">
-        <string>Sequences</string>
-       </property>
-       <widget class="QPushButton" name="btn_read_sequences">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>290</y>
-          <width>151</width>
-          <height>32</height>
-         </rect>
-        </property>
-        <property name="toolTip">
-         <string>Parse the sequence information given above.</string>
-        </property>
-        <property name="statusTip">
-         <string>Parse the sequence information given above.</string>
-        </property>
-        <property name="text">
-         <string>Read Sequences</string>
-        </property>
-       </widget>
-       <widget class="QPlainTextEdit" name="pte_jobparams_sequences">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>40</y>
-          <width>1081</width>
-          <height>241</height>
-         </rect>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter one (monomer prediction) or more sequences (multimer prediction) in FASTA format. The sequence name will become the subunit name in evaluation.&lt;br&gt;&lt;br&gt;&gt;Subunit A&lt;br&gt;GSGSGS&lt;br&gt;&lt;br&gt;&gt;Subunit B&lt;br&gt;SGSGSG&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-        </property>
-        <property name="placeholderText">
-         <string/>
-        </property>
-       </widget>
-      </widget>
-      <widget class="QGroupBox" name="groupBox_2">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>350</y>
-         <width>1101</width>
-         <height>371</height>
-        </rect>
-       </property>
-       <property name="title">
-        <string>Settings</string>
-       </property>
-       <widget class="QWidget" name="gridLayoutWidget">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>300</y>
-          <width>690</width>
-          <height>52</height>
-         </rect>
-        </property>
-        <layout class="QGridLayout" name="gridLayout">
-         <property name="sizeConstraint">
-          <enum>QLayout::SetFixedSize</enum>
-         </property>
-         <property name="leftMargin">
-          <number>10</number>
-         </property>
-         <property name="topMargin">
-          <number>10</number>
-         </property>
-         <property name="rightMargin">
-          <number>10</number>
-         </property>
-         <property name="bottomMargin">
-          <number>10</number>
-         </property>
-         <property name="spacing">
-          <number>30</number>
-         </property>
-         <item row="0" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_use_precomputed_msas">
-           <property name="toolTip">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;This option can be used when a path is given in the Precomputed MSAs field or a job is re-run in a directory with existing MSA files.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-           </property>
-           <property name="statusTip">
-            <string>This option can be used when a path is given in the Precomputed MSAs field or a job is re-run in a directory with existing MSA files.</string>
-           </property>
-           <property name="text">
-            <string>Use precomputed MSAs</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="4">
-          <widget class="QPushButton" name="btn_jobparams_advanced_settings">
-           <property name="toolTip">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;More settings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-           </property>
-           <property name="statusTip">
-            <string>More settings.</string>
-           </property>
-           <property name="text">
-            <string>Advanced Settings</string>
-           </property>
-           <property name="checkable">
-            <bool>false</bool>
-           </property>
-           <property name="default">
-            <bool>false</bool>
-           </property>
-           <property name="flat">
-            <bool>false</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="3">
-          <widget class="QCheckBox" name="chk_jobparams_queue">
-           <property name="toolTip">
-            <string>Use queueing system as configured in settings or config file. See documentation for further information.</string>
-           </property>
-           <property name="statusTip">
-            <string>Use queueing system as configured in settings or config file. See documentation for further information.</string>
-           </property>
-           <property name="whatsThis">
-            <string/>
-           </property>
-           <property name="text">
-            <string>Queue</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="0">
-          <widget class="QCheckBox" name="chk_jobparams_run_relax">
-           <property name="toolTip">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run Amber minimization of predicted models.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-           </property>
-           <property name="statusTip">
-            <string>Run Amber minimization of predicted models.</string>
-           </property>
-           <property name="text">
-            <string>Run Relax</string>
-           </property>
-           <property name="checked">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="2">
-          <widget class="QCheckBox" name="chk_jobparams_only_msa">
-           <property name="toolTip">
-            <string>Stop the pipeline after feature generation (MSA and template search). These steps do not require GPU.</string>
-           </property>
-           <property name="statusTip">
-            <string>Stop the pipeline after feature generation (MSA and template search). These steps do not require GPU.</string>
-           </property>
-           <property name="text">
-            <string>Only Features</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QTableWidget" name="tbl_jobparams_sequence_params">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>30</y>
-          <width>1081</width>
-          <height>161</height>
-         </rect>
-        </property>
-        <property name="toolTip">
-         <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Custom Template: Load a local file to be used as template. Only this template will be used and search for other templates is disabled. The template model needs to be in CIF format. Use https://mmcif.pdbj.org/converter/ or the maxit tool (https://sw-tools.rcsb.org/apps/MAXIT/) to convert PDB files.&lt;p&gt;&lt;p&gt;No MSA: Skip MSA generation and use empty MSA features for prediction.&lt;p&gt;&lt;p&gt;No Templates: Use empty template features in prediction.&lt;br&gt;&lt;body&gt;&lt;html&gt;</string>
-        </property>
-       </widget>
-       <widget class="QWidget" name="gridLayoutWidget_2">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>210</y>
-          <width>621</width>
-          <height>80</height>
-         </rect>
-        </property>
-        <layout class="QGridLayout" name="gridLayout_2">
-         <item row="1" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_precomputed_msas_path">
-           <property name="toolTip">
-            <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
-           </property>
-           <property name="statusTip">
-            <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="0">
-          <widget class="QLabel" name="label_7">
-           <property name="toolTip">
-            <string>Refinement space</string>
-           </property>
-           <property name="text">
-            <string>Job name</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_job_name">
-           <property name="toolTip">
-            <string>This will also be the name for the job directory.</string>
-           </property>
-           <property name="statusTip">
-            <string>This will also be the name for the job directory.</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="label">
-           <property name="text">
-            <string>Precomputed MSAs path</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="2">
-          <widget class="QToolButton" name="btn_precomputed_msas_path">
-           <property name="text">
-            <string>...</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </widget>
-     </widget>
-     <widget class="QWidget" name="LogTab">
-      <attribute name="title">
-       <string>Log</string>
-      </attribute>
-      <widget class="QGroupBox" name="groupBox_3">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>10</y>
-         <width>1101</width>
-         <height>711</height>
-        </rect>
-       </property>
-       <property name="title">
-        <string>Log</string>
-       </property>
-       <widget class="QPlainTextEdit" name="pte_job_log">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>260</y>
-          <width>1061</width>
-          <height>431</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>12</pointsize>
-         </font>
-        </property>
-        <property name="verticalScrollBarPolicy">
-         <enum>Qt::ScrollBarAlwaysOn</enum>
-        </property>
-        <property name="horizontalScrollBarPolicy">
-         <enum>Qt::ScrollBarAlwaysOff</enum>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-       <widget class="QLabel" name="label_3">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>230</y>
-          <width>171</width>
-          <height>16</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="text">
-         <string>AlphaFold Log</string>
-        </property>
-       </widget>
-       <widget class="QWidget" name="gridLayoutWidget_3">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>50</y>
-          <width>411</width>
-          <height>162</height>
-         </rect>
-        </property>
-        <layout class="QGridLayout" name="gridLayout_3">
-         <item row="3" column="0">
-          <widget class="QLabel" name="lbl_status_model_3">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Prediction model 3</string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="lbl_status_model_1">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Prediction model 1</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="lbl_status_model_4">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Prediction model 4</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="lbl_status_model_2">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Prediction model 2</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="0">
-          <widget class="QLabel" name="lbl_status_db_search">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Sequence database search</string>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="lbl_status_model_5">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Prediction model 5</string>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="lbl_status_evaluation">
-           <property name="styleSheet">
-            <string notr="true">color: gray;</string>
-           </property>
-           <property name="text">
-            <string>Evaluation</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QLabel" name="label_13">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>30</y>
-          <width>171</width>
-          <height>16</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="text">
-         <string>Progress</string>
-        </property>
-       </widget>
-      </widget>
-     </widget>
-     <widget class="QWidget" name="tab">
-      <attribute name="title">
-       <string>Evaluation</string>
-      </attribute>
-      <widget class="QGroupBox" name="groupBox_4">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>10</y>
-         <width>1151</width>
-         <height>981</height>
-        </rect>
-       </property>
-       <property name="title">
-        <string>Evaluation</string>
-       </property>
-       <widget class="QWebEngineView" name="web_evaluation_results" native="true">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>80</y>
-          <width>1081</width>
-          <height>631</height>
-         </rect>
-        </property>
-        <property name="autoFillBackground">
-         <bool>false</bool>
-        </property>
-       </widget>
-       <widget class="QProgressBar" name="pro_evaluation_pbar">
-        <property name="geometry">
-         <rect>
-          <x>560</x>
-          <y>380</y>
-          <width>118</width>
-          <height>23</height>
-         </rect>
-        </property>
-        <property name="value">
-         <number>24</number>
-        </property>
-       </widget>
-       <widget class="QWidget" name="gridLayoutWidget_4">
-        <property name="geometry">
-         <rect>
-          <x>20</x>
-          <y>30</y>
-          <width>843</width>
-          <height>41</height>
-         </rect>
-        </property>
-        <layout class="QGridLayout" name="gridLayout_5">
-         <item row="0" column="1">
-          <widget class="QPushButton" name="btn_evaluation_open_pymol">
-           <property name="text">
-            <string>Open output models in PyMOL</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="0">
-          <widget class="QPushButton" name="btn_evaluation_open_results_folder">
-           <property name="text">
-            <string>Open results folder</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="2">
-          <widget class="QPushButton" name="btn_evaluation_open_chimerax">
-           <property name="text">
-            <string>Open output models in ChimeraX</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="3">
-          <widget class="QPushButton" name="btn_evaluation_open_browser">
-           <property name="toolTip">
-            <string>Open results page including embedded 3Dmol.js model viewer in external browser (requires WebGL).</string>
-           </property>
-           <property name="statusTip">
-            <string>Open results page including embedded 3Dmol.js model viewer in external browser (requires WebGL).</string>
-           </property>
-           <property name="text">
-            <string>Open in external browser </string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </widget>
-     </widget>
-    </widget>
-    <widget class="QGroupBox" name="groupBox_5">
-     <property name="geometry">
-      <rect>
-       <x>1140</x>
-       <y>110</y>
-       <width>341</width>
-       <height>661</height>
-      </rect>
-     </property>
-     <property name="title">
-      <string>Jobs</string>
-     </property>
-     <widget class="QTableWidget" name="tbl_job_list">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>30</y>
-        <width>321</width>
-        <height>621</height>
-       </rect>
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="QFrame" name="frame">
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
       </property>
+      <property name="frameShadow">
+       <enum>QFrame::Raised</enum>
+      </property>
+      <layout class="QHBoxLayout" name="horizontalLayout_5">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="3,1">
+         <item>
+          <widget class="QTabWidget" name="MainNotebook">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="font">
+            <font>
+             <family>Arial</family>
+             <pointsize>12</pointsize>
+            </font>
+           </property>
+           <property name="currentIndex">
+            <number>0</number>
+           </property>
+           <property name="tabBarAutoHide">
+            <bool>false</bool>
+           </property>
+           <widget class="QWidget" name="InputTab">
+            <attribute name="title">
+             <string>Input</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="verticalLayout_4">
+             <item>
+              <widget class="QGroupBox" name="groupBox">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="title">
+                <string>Sequences</string>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout_3">
+                <item>
+                 <widget class="QPlainTextEdit" name="pte_jobparams_sequences">
+                  <property name="enabled">
+                   <bool>true</bool>
+                  </property>
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="toolTip">
+                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enter one (monomer prediction) or more sequences (multimer prediction) in FASTA format. The sequence name will become the subunit name in evaluation.&lt;br&gt;&lt;br&gt;&gt;Subunit A&lt;br&gt;GSGSGS&lt;br&gt;&lt;br&gt;&gt;Subunit B&lt;br&gt;SGSGSG&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                  </property>
+                  <property name="placeholderText">
+                   <string/>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="btn_read_sequences">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="toolTip">
+                   <string>Parse the sequence information given above.</string>
+                  </property>
+                  <property name="statusTip">
+                   <string>Parse the sequence information given above.</string>
+                  </property>
+                  <property name="text">
+                   <string>Read Sequences</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QGroupBox" name="groupBox_2">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="title">
+                <string>Settings</string>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout">
+                <item>
+                 <widget class="QTableWidget" name="tbl_jobparams_sequence_params">
+                  <property name="toolTip">
+                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Custom Template: Load a local file to be used as template. Only this template will be used and search for other templates is disabled. The template model needs to be in CIF format. Use https://mmcif.pdbj.org/converter/ or the maxit tool (https://sw-tools.rcsb.org/apps/MAXIT/) to convert PDB files.&lt;p&gt;&lt;p&gt;No MSA: Skip MSA generation and use empty MSA features for prediction.&lt;p&gt;&lt;p&gt;No Templates: Use empty template features in prediction.&lt;br&gt;&lt;body&gt;&lt;html&gt;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QGridLayout" name="gridLayout_2">
+                  <item row="1" column="2">
+                   <widget class="QToolButton" name="btn_precomputed_msas_path">
+                    <property name="text">
+                     <string>...</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QLabel" name="label_7">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="toolTip">
+                     <string>Refinement space</string>
+                    </property>
+                    <property name="text">
+                     <string>Job name</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="1">
+                   <widget class="QLineEdit" name="lei_jobparams_precomputed_msas_path">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="toolTip">
+                     <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QLabel" name="label">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="text">
+                     <string>Precomputed MSAs path</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="3">
+                   <spacer name="horizontalSpacer">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>20</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item row="0" column="1">
+                   <widget class="QLineEdit" name="lei_jobparams_job_name">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="toolTip">
+                     <string>This will also be the name for the job directory.</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>This will also be the name for the job directory.</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="3">
+                   <spacer name="horizontalSpacer_3">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <layout class="QGridLayout" name="gridLayout">
+                  <property name="sizeConstraint">
+                   <enum>QLayout::SetFixedSize</enum>
+                  </property>
+                  <property name="leftMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>10</number>
+                  </property>
+                  <property name="spacing">
+                   <number>30</number>
+                  </property>
+                  <item row="0" column="2">
+                   <widget class="QCheckBox" name="chk_jobparams_only_msa">
+                    <property name="toolTip">
+                     <string>Stop the pipeline after feature generation (MSA and template search). These steps do not require GPU.</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>Stop the pipeline after feature generation (MSA and template search). These steps do not require GPU.</string>
+                    </property>
+                    <property name="text">
+                     <string>Only Features</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="3">
+                   <widget class="QCheckBox" name="chk_jobparams_queue">
+                    <property name="toolTip">
+                     <string>Use queueing system as configured in settings or config file. See documentation for further information.</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>Use queueing system as configured in settings or config file. See documentation for further information.</string>
+                    </property>
+                    <property name="whatsThis">
+                     <string/>
+                    </property>
+                    <property name="text">
+                     <string>Queue</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="1">
+                   <widget class="QCheckBox" name="chk_jobparams_use_precomputed_msas">
+                    <property name="toolTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;This option can be used when a path is given in the Precomputed MSAs field or a job is re-run in a directory with existing MSA files.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>This option can be used when a path is given in the Precomputed MSAs field or a job is re-run in a directory with existing MSA files.</string>
+                    </property>
+                    <property name="text">
+                     <string>Use precomputed MSAs</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="4">
+                   <widget class="QPushButton" name="btn_jobparams_advanced_settings">
+                    <property name="toolTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;More settings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>More settings.</string>
+                    </property>
+                    <property name="text">
+                     <string>Advanced Settings</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>false</bool>
+                    </property>
+                    <property name="default">
+                     <bool>false</bool>
+                    </property>
+                    <property name="flat">
+                     <bool>false</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QCheckBox" name="chk_jobparams_run_relax">
+                    <property name="toolTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run Amber minimization of predicted models.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>Run Amber minimization of predicted models.</string>
+                    </property>
+                    <property name="text">
+                     <string>Run Relax</string>
+                    </property>
+                    <property name="checked">
+                     <bool>true</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="5">
+                   <spacer name="horizontalSpacer_2">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="LogTab">
+            <attribute name="title">
+             <string>Log</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="verticalLayout_8">
+             <item>
+              <widget class="QGroupBox" name="groupBox_3">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="title">
+                <string>Log</string>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout_7">
+                <item>
+                 <widget class="QLabel" name="label_13">
+                  <property name="font">
+                   <font>
+                    <weight>75</weight>
+                    <bold>true</bold>
+                   </font>
+                  </property>
+                  <property name="text">
+                   <string>Progress</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <layout class="QGridLayout" name="gridLayout_3">
+                  <item row="3" column="0">
+                   <widget class="QLabel" name="lbl_status_model_3">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Prediction model 3</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="1" column="0">
+                   <widget class="QLabel" name="lbl_status_model_1">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Prediction model 1</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="4" column="0">
+                   <widget class="QLabel" name="lbl_status_model_4">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Prediction model 4</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="0">
+                   <widget class="QLabel" name="lbl_status_model_2">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Prediction model 2</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QLabel" name="lbl_status_db_search">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Sequence database search</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="5" column="0">
+                   <widget class="QLabel" name="lbl_status_model_5">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Prediction model 5</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="6" column="0">
+                   <widget class="QLabel" name="lbl_status_evaluation">
+                    <property name="styleSheet">
+                     <string notr="true">color: gray;</string>
+                    </property>
+                    <property name="text">
+                     <string>Evaluation</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QLabel" name="label_3">
+                  <property name="font">
+                   <font>
+                    <weight>75</weight>
+                    <bold>true</bold>
+                   </font>
+                  </property>
+                  <property name="text">
+                   <string>AlphaFold Log</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPlainTextEdit" name="pte_job_log">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="font">
+                   <font>
+                    <family>Arial</family>
+                    <pointsize>12</pointsize>
+                   </font>
+                  </property>
+                  <property name="verticalScrollBarPolicy">
+                   <enum>Qt::ScrollBarAlwaysOn</enum>
+                  </property>
+                  <property name="horizontalScrollBarPolicy">
+                   <enum>Qt::ScrollBarAlwaysOff</enum>
+                  </property>
+                  <property name="readOnly">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+           <widget class="QWidget" name="tab">
+            <attribute name="title">
+             <string>Evaluation</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="verticalLayout_9">
+             <item>
+              <widget class="QGroupBox" name="groupBox_4">
+               <property name="title">
+                <string>Evaluation</string>
+               </property>
+               <layout class="QVBoxLayout" name="verticalLayout_10">
+                <item>
+                 <layout class="QGridLayout" name="gridLayout_5">
+                  <item row="0" column="1">
+                   <widget class="QPushButton" name="btn_evaluation_open_pymol">
+                    <property name="text">
+                     <string>Open output models in PyMOL</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="0">
+                   <widget class="QPushButton" name="btn_evaluation_open_results_folder">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="text">
+                     <string>Open results folder</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="2">
+                   <widget class="QPushButton" name="btn_evaluation_open_chimerax">
+                    <property name="text">
+                     <string>Open output models in ChimeraX</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="3">
+                   <widget class="QPushButton" name="btn_evaluation_open_browser">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                    <property name="toolTip">
+                     <string>Open results page including embedded 3Dmol.js model viewer in external browser (requires WebGL).</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>Open results page including embedded 3Dmol.js model viewer in external browser (requires WebGL).</string>
+                    </property>
+                    <property name="text">
+                     <string>Open in external browser </string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item>
+                 <widget class="QWebEngineView" name="web_evaluation_results" native="true">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="autoFillBackground">
+                   <bool>false</bool>
+                  </property>
+                  <layout class="QVBoxLayout" name="verticalLayout_11">
+                   <item>
+                    <widget class="QProgressBar" name="pro_evaluation_pbar">
+                     <property name="value">
+                      <number>24</number>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <widget class="QGroupBox" name="groupBox_8">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="title">
+              <string>Projects</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_5">
+              <item>
+               <layout class="QGridLayout" name="gridLayout_4">
+                <item row="0" column="3">
+                 <widget class="QToolButton" name="btn_prj_update">
+                  <property name="toolTip">
+                   <string>Update existing project.</string>
+                  </property>
+                  <property name="statusTip">
+                   <string>Update existing project.</string>
+                  </property>
+                  <property name="text">
+                   <string>...</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QToolButton" name="btn_prj_add">
+                  <property name="toolTip">
+                   <string>Add a new project.</string>
+                  </property>
+                  <property name="statusTip">
+                   <string>Add a new project.</string>
+                  </property>
+                  <property name="text">
+                   <string>...</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="2">
+                 <widget class="QToolButton" name="btn_prj_remove">
+                  <property name="toolTip">
+                   <string>Delete a project and associated jobs.</string>
+                  </property>
+                  <property name="statusTip">
+                   <string>Delete a project and associated jobs.</string>
+                  </property>
+                  <property name="text">
+                   <string>...</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="0">
+                 <widget class="QComboBox" name="cmb_project_list">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="toolTip">
+                   <string>List of projects.</string>
+                  </property>
+                  <property name="statusTip">
+                   <string>List of projects.</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupBox_7">
+             <property name="title">
+              <string>Jobs</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_6">
+              <item>
+               <widget class="QTableWidget" name="tbl_job_list"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+      </layout>
      </widget>
-    </widget>
-    <widget class="QGroupBox" name="groupBox_6">
-     <property name="geometry">
-      <rect>
-       <x>1140</x>
-       <y>10</y>
-       <width>341</width>
-       <height>81</height>
-      </rect>
-     </property>
-     <property name="title">
-      <string>Projects</string>
-     </property>
-    </widget>
-    <widget class="QWidget" name="horizontalLayoutWidget_2">
-     <property name="geometry">
-      <rect>
-       <x>1150</x>
-       <y>40</y>
-       <width>331</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_2">
-      <item>
-       <widget class="QComboBox" name="cmb_project_list">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="toolTip">
-         <string>List of projects.</string>
-        </property>
-        <property name="statusTip">
-         <string>List of projects.</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="btn_prj_add">
-        <property name="toolTip">
-         <string>Add a new project.</string>
-        </property>
-        <property name="statusTip">
-         <string>Add a new project.</string>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="btn_prj_remove">
-        <property name="toolTip">
-         <string>Delete a project and associated jobs.</string>
-        </property>
-        <property name="statusTip">
-         <string>Delete a project and associated jobs.</string>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="btn_prj_update">
-        <property name="toolTip">
-         <string>Update existing project.</string>
-        </property>
-        <property name="statusTip">
-         <string>Update existing project.</string>
-        </property>
-        <property name="text">
-         <string>...</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <layout class="QGridLayout" name="gridLayout_4"/>
-      </item>
-     </layout>
-    </widget>
-   </widget>
+    </item>
+   </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1481</width>
+     <width>1265</width>
      <height>24</height>
     </rect>
    </property>

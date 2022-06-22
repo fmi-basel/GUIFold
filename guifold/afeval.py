@@ -218,6 +218,12 @@ class EvaluationPipeline:
             new_pae_list.append([best_pae[model_num][0], best_pae[model_num][1]])
         return new_pae_list
 
+    def get_major_tick_spacing(self, num_elements):
+        if num_elements < 4:
+            return 100
+        if num_elements > 4:
+            return 200
+
     def extract_and_plot_pae(self, pae_list, indices, seq_titles):
         """Plots PAE. From https://github.com/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb"""
         num_models = len(pae_list)
@@ -281,7 +287,7 @@ class EvaluationPipeline:
                     num_rows = data.shape[0]
                     num_cols = data.shape[1]
                     num_rows_cols_list.append((num_rows, num_cols))
-                    im = axs[u, v].pcolor(data,cmap="bwr", vmin=0, vmax=30)#,
+                    im = axs[u, v].pcolor(data,cmap="bwr", vmin=0, vmax=30, rasterized=True)#,
                               #extent=(0, num_cols, num_rows, 0),
                               #interpolation='nearest'
                               #)
@@ -294,7 +300,7 @@ class EvaluationPipeline:
                     if v % len(indices) == 0:
                         logging.debug(f"logging.debug y label {u} {v}")
                         axs[u, v].set_ylabel(f"{y_labels[count]} (aa)")
-                    axs[u, v].xaxis.set_major_locator(MultipleLocator(100))
+                    axs[u, v].xaxis.set_major_locator(MultipleLocator(self.get_major_tick_spacing(len(indices))))
                     axs[u, v].xaxis.set_major_formatter(FormatStrFormatter('%d'))
                     axs[u, v].xaxis.set_minor_locator(MultipleLocator(50))
                     axs[u, v].yaxis.set_major_locator(MultipleLocator(100))
@@ -309,6 +315,7 @@ class EvaluationPipeline:
             cbar.set_label('Predicted aligned error (PAE) [$\AA$]', rotation=90, labelpad=10)
             #plt.tight_layout()
             plt.savefig(os.path.join(self.results_dir, f'pae_{model_name}.png'), dpi=300)
+            plt.savefig(os.path.join(self.results_dir, f'pae_{model_name}.svg'), dpi=300)
         logging.debug(average_paes)
         return average_paes
         #plt.show()
@@ -388,7 +395,7 @@ class EvaluationPipeline:
             if re.search("_pred_", item[0]):
                 pred_index = re.search("_pred_(\d+)", item[0]).group(1)
             else:
-                pred_index == None
+                pred_index = None
 
             for f in files_unrelaxed:
                 logging.debug(f"Index {model_index} {f}")

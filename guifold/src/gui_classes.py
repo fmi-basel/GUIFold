@@ -642,8 +642,9 @@ class Evaluation(GUIVariables):
             results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
             if not results_path is None:
                 logger.debug(results_path)
-                self.results.ctrl.settings().setAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled, True)
+                self.results.ctrl.settings().setAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled, False)
                 logger.debug(f"WebGL enabled: {self.results.ctrl.settings().testAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled)}")
+                logger.debug(f"QMLSCENE_DEVICE: {os.environ['QMLSCENE_DEVICE']}")
 
                 self.results.ctrl.loadStarted.connect(self.print_load_started)
                 self.results.ctrl.loadProgress.connect(self.print_load_percent)
