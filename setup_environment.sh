@@ -8,7 +8,7 @@ cd $base_dir && \
 conda env create -p $(pwd)/$CONDA_ENV_NAME -f GUIFold/conda_pkgs.yml
 conda activate $(pwd)/$CONDA_ENV_NAME && \
 pip install --upgrade pip && \
-pip install jaxlib==0.1.69+cuda111 -f https://storage.googleapis.com/jax-releases/jax_releases.html && \
+pip install jaxlib==0.1.69+cuda111 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
 cd $(pwd)/$CONDA_ENV_NAME/lib/python3.8/site-packages && \
 patch -p0 < $base_dir/AF4GUIFold/docker/openmm.patch && \
 cd $base_dir && \
