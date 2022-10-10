@@ -20,7 +20,7 @@ import logging
 from contextlib import contextmanager
 import os
 #Base = declarative_base()
-logger = logging.getLogger('RosEM')
+logger = logging.getLogger('guifold')
 
 
 def get_type(type):
@@ -35,12 +35,12 @@ def get_type(type):
 
 
 class DBHelper:
-    def __init__(self, shared_objects):
+    def __init__(self, shared_objects, db_path):
         self.shared_objects = shared_objects
         #self.add_attr(self.job)
         #self.add_attr(self.prj)
         self._DATABASE_NAME = 'guifold'
-        db_path = os.path.join(os.path.expanduser("~"), '.guifold.db')
+        self.db_path = db_path
         self.engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
         self.reflect_tables()
         self.create_tables()

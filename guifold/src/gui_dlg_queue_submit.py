@@ -15,7 +15,7 @@ class QueueSubmitDlg(QtWidgets.QDialog):
         self.submit_script_field = self.findChild(QtWidgets.QPlainTextEdit, 'pte_job_queue_submit')
         self.queue_submit_dialog = self.settings.queue_submit_dialog
         self.queue_submit_dialog.ctrl = self.findChild(QtWidgets.QCheckBox, 'chk_settings_queue_submit_dialog')
-        self.submit_script_path = os.path.join(self.job_params['job_path'], 'submit_script.run')
+        self.submit_script_path = os.path.join(self.job_params['job_path'], f'submit_script_{self.job_params["type"]}.run')
         with open(self.submit_script_path, 'r') as f:
             text = f.read()
         self.submit_script_field.setPlainText(text)

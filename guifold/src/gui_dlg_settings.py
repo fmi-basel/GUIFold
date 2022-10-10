@@ -19,9 +19,6 @@ from guifold.src.gui_dialogs import message_dlg
 
 logger = logging.getLogger("guifold")
 
-class UnequalListLength(Exception):
-    pass
-
 class SettingsDlg(QtWidgets.QDialog):
     def __init__(self, _parent):
         super(SettingsDlg, self).__init__()
@@ -101,19 +98,6 @@ class SettingsDlg(QtWidgets.QDialog):
 
     def accept(self):
         self.settings.update_from_gui()
-        len_gpu_name_list = len(self.settings.gpu_name_list.value.split(','))
-        len_gpu_mem_list = len(self.settings.gpu_mem_list.value.split(','))
-        logger.debug(f"Len gpu name list: {len_gpu_name_list} Len gpu mem list: {len_gpu_mem_list}"
-                     f" gpu names {self.settings.gpu_name_list.value} gpu mem {self.settings.gpu_mem_list.value}")
-        if not len_gpu_name_list == len_gpu_mem_list\
-                or (len_gpu_name_list == len_gpu_mem_list and (self.settings.gpu_name_list.value == ''\
-                or self.settings.gpu_mem_list.value == '')):
-                error_msg = "GPU names and GPU memory lists must have matching number of elements."
-                message_dlg("error", error_msg)
-
-                raise UnequalListLength(error_msg)
-
-
         self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
         self.settings.unset_controls(self, self.settings.db_table)
         super().accept()

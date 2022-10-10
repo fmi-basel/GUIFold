@@ -15,6 +15,12 @@ Main Features:
 ![Demo-Image](guifold/images/screenshots.png)
 
 
+## Recent updates
+
+* Split job setting
+* GPU and queue/partition selection moved to submission template
+* Addition of variables (total_sequence_length, split_job) that can be used in the submission template logic
+
 ## Installation
 
 The installation requires conda.
@@ -84,36 +90,42 @@ cd GUIFold
 python setup.py clean --all install clean --all
 ```
 
-GUIFold supports the following variables that can be used in the submission template. The parameters are determined dynamically based on the input and settings (configuration file or Settings dialog in the app):<br/><br/>
+#### Automatically splitting a job into CPU and GPU parts
+If the queueing system supports dependencies (i.e. a job waits in the queue until another job has finished), the "split job feature" can be activated in the GUI settings if needed. Since the feature generation step does not require GPU, this step can be run on CPU-only resources. Two jobs will be submitted, the first job will request CPU (`use_gpu=False`) and the second job (`use_gpu=True`) will wait for the first job to finish (if the dependency is configured). An example how to add a dependency for SLURM and how to create a conditional to request CPU or GPU resources is provided below. Alternatively, the job can be manually devided into CPU and GPU steps by choosing `Only Features` in the GUI and, after this job has finished, re-starting the job with `Only Features` deactivated. 
+
+#### Variables that can be accessed in the submission template
+GUIFold supports the following variables that can be used in the submission template. The parameters are determined based on the input and settings (configuration file or Settings dialog in the app):<br/><br/>
 `{{logfile}}` (required) Path to the log file<br/>
 `{{account}}` (optional) When a specific account is needed to run jobs on the cluster<br/>
 `{{use_gpu}}` (optional) This can be used to build a conditional (example below) to select CPU or GPU nodes/queues<br/>
-`{{gpu_name}}` (optional) If several GPU models are available on the cluster and if they are given in the settings, the app will select the model that has enough memory to run the job. It can also be used in a conditional (see example below).<br/>
-`{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory or for unified memory.<br/>
+`{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory for unified memory.<br/>
+`{{num_cpus}}` (optional) Number of CPUs to request
+`{{total_sequence_length}}` (optional) Total sequence length (not accounting for identical sequences)<br/>
 `{{gpu_mem}}` (optional) Useful when the queuing system supports selection of GPU by memory requirement. Value in GB.<br/>
 `{{split_mem}}` (optional) If the required memory exceeds the available GPU memory, the job can be run with unified memory. The split_mem variable holds None or the memory split fraction and can be used for a conditional to set the FLAGS required to enable unified memory use (see SLURM example below).<br/>
+`{{add_dependency}}` (required) When the job is started with "split job setting", this variable will be True for the second job (prediction step) and allows adding a dependency on the first job (feature step). <br/>
 `{{commnad}}` (required) The command to run the AlphaFold job
 
-To cancel jobs from the GUI the script also needs to write the Job ID to the logfile.
+To cancel jobs from the GUI, the script also needs to write the Job ID to the logfile.
 The pattern needs to be as follows:<br/>
 ```echo "QUEUE_JOB_ID=$JOB_ID_VARIABLE_FROM_QUEUING_SYSTEM"```<br/>
 In case of SLURM it would be:<br/>
 ```echo "QUEUE_JOB_ID=$SLURM_JOB_ID"```
 
-The number of CPUs should be set to 24 (at maximum 2 jackhmmer and 1 hhblits jobs are run in parallel, each set to use 8 CPUs).
+The number of CPUs should be set to 16 (at maximum 1 jackhmmer and 1 hhblits jobs are run in parallel, each set to use 8 CPUs in the respective alphafold.data.tools classes).
 
 
 #### Example of a template for a SLURM cluster.
 
-The cluster has two types of GPUs, V100 (32 GB) and A100 (80 GB).
-When the memory requirement is below 32 GB the scheduler should decide which GPU to use. If the job exceeds 32 GB, only the node with the A100 GPUs is to be used.
-Alternatively one could also use `--gres:{{gpu_name}}:1` but it will give less flexibility.
+The cluster in the example below has two types of GPUs, V100 (32 GB) and A100 (80 GB). The variable gpu_mem can be used
+to build conditionals for choosing the appropriate GPU. 
+
 
 ```
 #!/bin/bash
 #SBATCH --account={{account}}
 #SBATCH --job-name=alphafold
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task={{num_cpus}}
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -121,53 +133,48 @@ Alternatively one could also use `--gres:{{gpu_name}}:1` but it will give less f
 #SBATCH --error={{logfile}}
 #Append to logfile
 #SBATCH --open-mode=append
-{% if use_gpu %}
-#SBATCH --partition=gpu_queue
-{% else %}
-#SBATCH --partition=cpu_queue
-{% endif %}
 #SBATCH --mem={{mem}}G
+
+
 {% if use_gpu %}
-{% if gpu_name == "a100" %}
-#SBATCH --nodelist=a100_node
-{% endif %}
 #SBATCH --gres=gpu:1
+{% if add_dependency %}
+#If "Split Job" is selected in the GUI, add_dependency will be True for the second job and create a dependency on the first job (CPU-only)
+#SBATCH --dependency=afterok:{{queue_job_id}}
+#SBATCH --kill-on-invalid-dep=yes
+{% endif %}
+{% if gpu_mem|int <= 31 %}
+#Select appropriate GPUs by e.g. constraint, nodename or gpu_name
+#SBATCH --constraint=
+#SBATCH --partition=
+{% elif gpu_mem|int > 31 %}
+#Select GPUs with > 31 GB memory by e.g. constraint, nodename or gpu_name
+#SBATCH --constraint=
+#SBATCH --partition=
+{% endif %}
+
+{% else %}
+#If job only needs CPU
+{% if total_sequence_length|int > 2000 %}
+#SBATCH --partition=
+{% else %}
+#SBATCH --partition=
+{% endif %}
 {% endif %}
 
 
 {% if split_mem %}
+#If job needs to run with unified memory
 export TF_FORCE_UNIFIED_MEMORY=True
 export XLA_PYTHON_CLIENT_MEM_FRACTION={{split_mem}}
 {% endif %}
 
-module load ... (or conda activate ...)
-{{ command }}
-```
-
-#### Example of a template for an IBM LSF cluster (NOT TESTED)
-
-```
-{% if use_gpu %}
-#BSUB -q gpu_queue
-{% else %}
-#BSUB -q cpu_queue
-{% endif %}
-#BSUB -n 24                             # 24 cores
-#BSUB -W 8:00                           # 8-hour run-time
-#BSUB -R "rusage[mem={{mem / 24}}GB]"   # Estimated RAM per core
-#BSUB -M {{mem / 24}}GB                 # Maximum RAM per core
-#BSUB -J alphafold                      # Jobname
-#BSUB -R "span[hosts=1]"                # Run on a single host
-#BSUB -o {{logfile}}
-#BSUB -e {{logfile}}
-{% if use_gpu %}
-#BSUB -R "select[gpu_mtotal0>={{gpu_mem}}GB]"
-{% endif %}
-
+echo "QUEUE_JOB_ID=$SLURM_JOB_ID"
 
 module load ... (or conda activate ...)
 {{ command }}
 ```
+
 
 ### Setup of a modulefile
 Instead of activating the conda env you can also create an [environment modulefile](#https://modules.readthedocs.io/) for production use.

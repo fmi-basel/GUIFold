@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --account={{account}}
 #SBATCH --job-name=alphafold
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task={{num_cpus}}
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -9,10 +9,37 @@
 #SBATCH --error={{logfile}}
 #Append to logfile
 #SBATCH --open-mode=append
-#SBATCH --partition=gpu_long,gpu_short
 #SBATCH --mem={{mem}}G
+
+{% if split_job %}
+#If job is split into CPU and GPU part set dependency
+#SBATCH --dependency=afterok:{{queue_job_id}}
+#SBATCH --kill-on-invalid-dep=yes
+{% endif %}
+
+
+# Settings when GPU required
 {% if use_gpu %}
-#SBATCH --gres=gpu:{{gpu_name}}:1
+#SBATCH --gres=gpu:1
+# Select appropriate GPU model based on estimated memory
+   {% if gpu_mem | int <= 31 %}
+#SBATCH --constraint=
+#SBATCH --partition=gpu_short,gpu_long
+   {% elif gpu_mem | int > 31 and gpu_mem | int <= 45 %}
+#SBATCH --constraint=
+#SBATCH --partition=gpu_short,gpu_long
+   {% elif gpu_mem | int > 45 %}
+#SBATCH --constraint=
+#SBATCH --partition=
+   {% endif %}
+
+# Settings when job only needs CPU, i.e. use_gpu is False
+{% else %}
+    {% if total_sequence_length|int > 2000 %}
+#SBATCH --partition=
+    {% else %}
+#SBATCH --partition=
+    {% endif %}
 {% endif %}
 
 START=$(date +%s)
@@ -21,7 +48,7 @@ echo "[INFO] [$STARTDATE] [$$] Starting SLURM job $SLURM_JOB_ID"
 echo "[INFO] [$STARTDATE] [$$] QUEUE_JOB_ID=$SLURM_JOB_ID"
 echo "[INFO] [$STARTDATE] [$$] Running on $(hostname -s)"
 echo "[INFO] [$STARTDATE] [$$] Working directory: $(pwd)"
-
+echo "[INFO} [$STARTDATE] [$$] Total sequence length is {{total_sequence_length}}"
 
 {% if split_mem %}
 export TF_FORCE_UNIFIED_MEMORY=True

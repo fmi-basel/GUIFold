@@ -17,6 +17,8 @@ import os
 import shlex
 import time
 from PyQt5.QtCore import QObject, pyqtSignal, QFileSystemWatcher, pyqtSlot
+import traceback
+import re
 
 logger = logging.getLogger('guifold')
 
@@ -210,20 +212,38 @@ class RunProcessThread(QObject):
         logger.debug("job params")
         logger.debug(cmd)
 
-        with Popen(cmd, preexec_fn=os.setsid, shell=True) as p, open(self.job_params['log_file'], 'w') as f:
+        with Popen(cmd, preexec_fn=os.setsid, shell=True, stdout=PIPE) as p, open(self.job_params['log_file'], 'w') as f:
             cpid = p.pid
             logger.debug("PID of child is {}".format(cpid))
+            if self.job_params['queue']:
+                try:
+                    output = p.communicate()[0].decode()
+                    logger.debug(output)
+                    regex = rf'{job_params["queue_jobid_regex"]}'
+                    if re.match(regex, output):
+                        queue_job_id = re.match(regex, output).group(1)
+                        logger.debug(f"pid from queue {queue_job_id}")
+                    else:
+                        logger.debug("Could not match queue_job_id pattern to queue submit output.")
+                        queue_job_id = None
+                except:
+                    logger.debug("Could not get queue_id from queue submit output.")
+                    queue_job_id = None
+                    traceback.print_exc()
+                self.job_params['pid'] = queue_job_id
+            else:
+                self.job_params['pid'] = cpid
             self.job_params['status'] = "running"
-            self.job_params['pid'] = cpid
-            if not self.job_params['queue']:
-                self._parent.job.update_pid(cpid, self.job_params['job_id'], self.sess)
-            logger.debug("Job started. emitting signals from run process thread")
+            if not self.job_params['pid'] is None:
+                self._parent.job.update_pid(self.job_params['pid'], self.job_params['job_id'], self.sess)
+                self._parent.gui_params['pid'] = self.job_params['pid']
+            logger.debug(f"Job started. emitting signals from run process thread. pid is {self.job_params['pid']}")
             self.job_status.emit(self.job_params)
             self.change_tab.emit()
             f.write("############################################################\n\n")
             f.write(f"Job command:\n\n{cmd}\n\n")
             f.write(f"Estimated GPU memory: {self.job_params['calculated_mem']} GB\n")
             if not self.job_params['queue']:
-                f.write(f"Job PID: {cpid}\n")
+                f.write(f"Job PID: {self.job_params['pid']}\n")
                 f.write(f"Host: {self.job_params['host']}\n\n")
             f.write("############################################################\n\n")

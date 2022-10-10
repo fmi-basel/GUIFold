@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>836</width>
-    <height>676</height>
+    <height>783</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -35,7 +35,7 @@
      <x>10</x>
      <y>20</y>
      <width>391</width>
-     <height>341</height>
+     <height>411</height>
     </rect>
    </property>
    <property name="title">
@@ -47,59 +47,39 @@
       <x>10</x>
       <y>30</y>
       <width>371</width>
-      <height>301</height>
+      <height>351</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="gridLayout">
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="lei_settings_queue_cancel">
+     <item row="4" column="1">
+      <widget class="QSpinBox" name="sbo_settings_max_gpu_mem">
        <property name="toolTip">
-        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+        <string>Maximum GPU memory available in the cluster. </string>
        </property>
        <property name="statusTip">
-        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+        <string>Maximum GPU memory available in the cluster.</string>
        </property>
-       <property name="placeholderText">
-        <string>scancel</string>
+       <property name="maximum">
+        <number>9999</number>
+       </property>
+       <property name="value">
+        <number>80</number>
        </property>
       </widget>
      </item>
      <item row="3" column="1">
-      <widget class="QLineEdit" name="lei_settings_cpu_lane_list">
+      <widget class="QSpinBox" name="sbo_settings_num_cpus">
        <property name="toolTip">
-        <string>(Optional) Queue/Lane name for CPU jobs.</string>
+        <string>Number of CPUs is relevant for MSA generation. </string>
        </property>
        <property name="statusTip">
-        <string>(Optional) Queue/Lane name for CPU jobs.</string>
+        <string>Number of CPUs is relevant for MSA generation. </string>
        </property>
-       <property name="placeholderText">
-        <string>cpu_short,cpu_long</string>
+       <property name="maximum">
+        <number>9999</number>
        </property>
-      </widget>
-     </item>
-     <item row="6" column="0">
-      <widget class="QLabel" name="label_6">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>The GPU memories must be in the same order as the GPU names.</string>
-       </property>
-       <property name="statusTip">
-        <string>The GPU memories must be in the same order as the GPU names.</string>
-       </property>
-       <property name="text">
-        <string>GPU memory list</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_28">
-       <property name="text">
-        <string>CPU lanes</string>
+       <property name="value">
+        <number>20</number>
        </property>
       </widget>
      </item>
@@ -116,30 +96,29 @@
        </property>
       </widget>
      </item>
+     <item row="5" column="0">
+      <widget class="QLabel" name="label_6">
+       <property name="font">
+        <font>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+       </property>
+       <property name="statusTip">
+        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+       </property>
+       <property name="text">
+        <string>Max RAM (GB)</string>
+       </property>
+      </widget>
+     </item>
      <item row="2" column="0">
       <widget class="QLabel" name="label_27">
        <property name="text">
         <string>Queue account</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="1">
-      <widget class="QLineEdit" name="lei_settings_min_ram">
-       <property name="placeholderText">
-        <string>60</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="1">
-      <widget class="QLineEdit" name="lei_settings_cpu_lane_list_2">
-       <property name="toolTip">
-        <string>(Optional) Queue/Lane name for GPU jobs.</string>
-       </property>
-       <property name="statusTip">
-        <string>(Optional) Queue/Lane name for CPU jobs.</string>
-       </property>
-       <property name="placeholderText">
-        <string>gpu_short,gpu_long</string>
        </property>
       </widget>
      </item>
@@ -156,7 +135,7 @@
        </property>
       </widget>
      </item>
-     <item row="7" column="0">
+     <item row="6" column="0">
       <widget class="QLabel" name="label_3">
        <property name="font">
         <font>
@@ -171,11 +150,11 @@
         <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
        </property>
        <property name="text">
-        <string>Minimum RAM (GB)</string>
+        <string>Min RAM (GB)</string>
        </property>
       </widget>
      </item>
-     <item row="5" column="0">
+     <item row="4" column="0">
       <widget class="QLabel" name="label_7">
        <property name="font">
         <font>
@@ -183,8 +162,14 @@
          <bold>true</bold>
         </font>
        </property>
+       <property name="toolTip">
+        <string>Maximum GPU memory available in the cluster.</string>
+       </property>
+       <property name="statusTip">
+        <string>Maximum GPU memory available in the cluster.</string>
+       </property>
        <property name="text">
-        <string>GPU name list</string>
+        <string>Max GPU memory (GB)</string>
        </property>
       </widget>
      </item>
@@ -201,33 +186,6 @@
        </property>
       </widget>
      </item>
-     <item row="4" column="0">
-      <widget class="QLabel" name="label_29">
-       <property name="text">
-        <string>GPU lanes</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="1">
-      <widget class="QLineEdit" name="lei_settings_gpu_name_list">
-       <property name="toolTip">
-        <string>At least one GPU model and memory needs to be given to check if the memory is sufficient for the given sequence length.</string>
-       </property>
-       <property name="statusTip">
-        <string>At least one GPU model and memory needs to be given to check if the memory is sufficient for the given sequence length.</string>
-       </property>
-       <property name="placeholderText">
-        <string>v100,a40</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="1">
-      <widget class="QLineEdit" name="lei_settings_gpu_mem_list">
-       <property name="placeholderText">
-        <string>32,40</string>
-       </property>
-      </widget>
-     </item>
      <item row="0" column="1">
       <widget class="QLineEdit" name="lei_settings_queue_submit">
        <property name="toolTip">
@@ -241,7 +199,7 @@
        </property>
       </widget>
      </item>
-     <item row="8" column="0">
+     <item row="9" column="0">
       <widget class="QLabel" name="label">
        <property name="toolTip">
         <string>Activate Queue checkbox on Input Page by default.</string>
@@ -254,15 +212,27 @@
        </property>
       </widget>
      </item>
-     <item row="8" column="1">
+     <item row="9" column="1">
       <widget class="QCheckBox" name="chk_settings_queue_default">
+       <property name="toolTip">
+        <string>Activate Queue checkbox on Input Page by default.</string>
+       </property>
+       <property name="statusTip">
+        <string>Activate Queue checkbox on Input Page by default.</string>
+       </property>
        <property name="text">
         <string/>
        </property>
       </widget>
      </item>
-     <item row="9" column="1">
+     <item row="10" column="1">
       <widget class="QCheckBox" name="chk_settings_queue_submit_dialog">
+       <property name="toolTip">
+        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
+       </property>
+       <property name="statusTip">
+        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
+       </property>
        <property name="text">
         <string/>
        </property>
@@ -271,7 +241,20 @@
        </property>
       </widget>
      </item>
-     <item row="9" column="0">
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="lei_settings_queue_cancel">
+       <property name="toolTip">
+        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+       </property>
+       <property name="statusTip">
+        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+       </property>
+       <property name="placeholderText">
+        <string>scancel</string>
+       </property>
+      </widget>
+     </item>
+     <item row="10" column="0">
       <widget class="QLabel" name="label_30">
        <property name="toolTip">
         <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
@@ -284,14 +267,102 @@
        </property>
       </widget>
      </item>
+     <item row="7" column="0">
+      <widget class="QLabel" name="label_31">
+       <property name="toolTip">
+        <string>Split job into CPU and GPU submissions.</string>
+       </property>
+       <property name="statusTip">
+        <string>Split job into CPU and GPU submissions.</string>
+       </property>
+       <property name="text">
+        <string>Split job</string>
+       </property>
+      </widget>
+     </item>
+     <item row="7" column="1">
+      <widget class="QCheckBox" name="chk_settings_split_job">
+       <property name="toolTip">
+        <string>Split job into CPU and GPU submissions. Requires Job ID Regular Expression to be defined. Only tested on SLURM.</string>
+       </property>
+       <property name="statusTip">
+        <string>Split job into CPU and GPU submissions. Requires JobID Regular Expression to be defined. Only tested on SLURM.</string>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="label_32">
+       <property name="toolTip">
+        <string>Number of CPUs is relevant for MSA generation. </string>
+       </property>
+       <property name="statusTip">
+        <string>Number of CPUs is relevant for MSA generation. </string>
+       </property>
+       <property name="text">
+        <string>Number of CPUs</string>
+       </property>
+      </widget>
+     </item>
+     <item row="5" column="1">
+      <widget class="QSpinBox" name="sbo_settings_max_ram">
+       <property name="toolTip">
+        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+       </property>
+       <property name="statusTip">
+        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+       </property>
+       <property name="maximum">
+        <number>9999</number>
+       </property>
+       <property name="value">
+        <number>900</number>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="1">
+      <widget class="QSpinBox" name="sbo_settings_min_ram">
+       <property name="toolTip">
+        <string>Minimum RAM to reserve. When reserved RAM is too little some MSAs can cause out-of-memory error.</string>
+       </property>
+       <property name="statusTip">
+        <string>Minimum RAM to reserve. When reserved RAM is too little (&lt; 50 GB) some MSAs can cause out-of-memory error.</string>
+       </property>
+       <property name="maximum">
+        <number>9999</number>
+       </property>
+       <property name="value">
+        <number>70</number>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="1">
+      <widget class="QLineEdit" name="lei_settings_queue_jobid_regex">
+       <property name="toolTip">
+        <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+       </property>
+       <property name="statusTip">
+        <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="0">
+      <widget class="QLabel" name="label_28">
+       <property name="text">
+        <string>JobID regular expression</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </widget>
   </widget>
   <widget class="QGroupBox" name="groupBox_3">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>370</y>
+     <x>20</x>
+     <y>440</y>
      <width>391</width>
      <height>291</height>
     </rect>

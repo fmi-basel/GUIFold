@@ -56,7 +56,8 @@ ctrl_type_dict = {'dsb': QtWidgets.QDoubleSpinBox,
                   'pte': QtWidgets.QPlainTextEdit,
                   'chk': QtWidgets.QCheckBox,
                   'web': QtWebEngineWidgets.QWebEngineView,
-                  'pro': QtWidgets.QProgressBar}
+                  'pro': QtWidgets.QProgressBar,
+                  'tre': QtWidgets.QTreeWidget}
 
 install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 
@@ -483,6 +484,7 @@ class GUIVariables:
             if hasattr(obj, 'ctrl') and hasattr(obj, 'value'):
                 obj.update_from_self()
 
+
     # Read values from gui controls and update variables
     def update_from_gui(self):
         logger.debug("Update from GUI")
@@ -675,6 +677,7 @@ class JobParams(GUIVariables):
                                                       ctrl_type='tbl')
         self.custom_template_list = Variable('custom_template_list', 'str', cmd=True)
         self.use_precomputed_msas = Variable('use_precomputed_msas', 'bool', ctrl_type='chk', cmd=True)
+        self.continue_from_features = Variable('continue_from_features', 'bool', ctrl_type='chk', cmd=True)
         self.no_msa_list = Variable('no_msa_list', 'str', cmd=True)
         self.no_template_list = Variable('no_template_list', 'str', cmd=True)
         self.run_relax = Variable('run_relax', 'bool', ctrl_type='chk', cmd=True)
@@ -694,8 +697,10 @@ class JobParams(GUIVariables):
         self.random_seed = Variable('random_seed', 'str', ctrl_type='lei', cmd=True)
         self.max_template_date = Variable('max_template_date', 'str', ctrl_type='lei', cmd=True)
         self.precomputed_msas_path = Variable('precomputed_msas_path', 'str', ctrl_type='lei')
-        self.only_msa = Variable('only_msa', 'bool', ctrl_type='chk', cmd=True)
+        self.only_features = Variable('only_features', 'bool', ctrl_type='chk', cmd=True)
         self.force_cpu = Variable('force_cpu', 'bool', ctrl_type='chk')
+        self.num_recycle = Variable('num_recycle', 'int', ctrl_type="sbo", cmd=True)
+
 
     def set_db(self, db):
         self.db = db
@@ -820,6 +825,7 @@ class JobParams(GUIVariables):
         self.no_template_list.value, \
         self.seq_names.value = self.sequence_params.get_from_table(self.seq_names.value.split(','))
 
+
     def get_name_by_job_id(self, job_id, sess):
         result = sess.query(self.db.Jobparams.job_name).filter_by(job_id=job_id).one()
         logger.debug(result[0])
@@ -861,6 +867,7 @@ class Job(GUIVariables):
         self.pid = Variable('pid', 'str', db=True)
         self.host = Variable('host', 'str', db=True)
         self.path = Variable('path', 'str', db=True)
+        self.type = Variable('type', 'str', db=True)
 
     def set_db(self, db):
         self.db = db
@@ -928,6 +935,22 @@ class Job(GUIVariables):
         result = sess.query(self.db.Job).filter_by(project_id=project_id)
         return result
 
+    def get_type(self, job_params):
+        if job_params['continue_from_features']:
+            type = "prediction"
+        elif job_params['only_features']:
+            type = "features"
+        elif not job_params['continue_from_features'] and not job_params['only_features']:
+            type = "full"
+        return type
+
+    def get_type_by_job_id(self, job_id):
+        result = sess.query(self.db.Job).get(job_id)
+        return result.type
+
+    def set_type(self, type):
+        self.type.set_value(type)
+
     #ToDo: check usage and change to var.set()
     def set_project_id(self, project_id):
         self.project_id.value = project_id
@@ -953,13 +976,14 @@ class Job(GUIVariables):
         else:
             return False
 
-    def prepare_submit_script(self, job_params, job_args, mem, split_mem, gpu_name):
+    def prepare_submit_script(self, job_params, job_args, estimated_gpu_mem, split_mem):
         msgs = []
         logger.debug("Preparing submit script")
+        logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
         command = ["run_alphafold.py "] + job_args
         command = ' '.join(command)
         logfile = job_params["log_file"]
-        submit_script = f"{job_params['job_path']}/submit_script.run"
+        submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
 
         #templates = pkg_resources.resource_filename("guifold", "templates")
         env = Environment(loader=PackageLoader("guifold", "templates"))
@@ -970,49 +994,83 @@ class Job(GUIVariables):
         logger.debug("Template vars:")
         logger.debug(template_vars)
         to_render = {}
+
+        if 'num_cpus' in template_vars:
+            if job_params['use_precomputed_msas']:
+                to_render['num_cpus'] = 1
+            else:
+                to_render['num_cpus'] = job_params['num_cpus']
         if 'use_gpu' in template_vars:
-            if job_params['only_msa'] or job_params['force_cpu']:
+            if job_params['only_features'] or job_params['force_cpu']:
                 to_render['use_gpu'] = False
             else:
                 to_render['use_gpu'] = True
+            logger.debug(f"{to_render['use_gpu']} {job_params['force_cpu']}")
+        if 'add_dependency' in template_vars:
+            to_render['add_dependency'] = job_params['split_job']
+            # logger.debug(f"only msa {job_params['only_features']}")
+            #     if job_params['only_features']:
+            #         if job_params['cpu_lane_list']:
+            #             logger.debug(f"lanes {job_params['cpu_lane_list']}")
+            #             to_render['cpu_lanes'] = job_params['cpu_lane_list']
+            #         to_render['use_gpu'] = False
+            #     else:
+            #         to_render['use_gpu'] = True
+            #         if job_params['gpu_lane_list']:
+            #             to_render['gpu_lanes'] = job_params['gpu_lane_list']
+            #         if 'num_cpus' in template_vars:
+            #             to_render['num_cpus'] = 1
+        else:
+            if job_params['split_job']:
+                msgs.append("Job splitting selected in the GUI"
+                            " but the submission template is not configured correctly,"
+                            " i.e. missing add_dependency parameter. See documentation.")
+        if 'queue_job_id' in template_vars:
+            to_render['queue_job_id'] = job_params['queue_pid']
         if 'mem' in template_vars:
-            #hhblits sometimes needs a lot of RAM
-            if mem < 70:
-                ram = 70
+            if estimated_gpu_mem < job_params['min_ram']:
+                ram = job_params['min_ram']
             else:
-                ram = mem
+                if job_params['force_cpu'] or job_params['only_features']:
+                    ram = job_params['min_ram']
+                else:
+                    ram = estimated_gpu_mem
             to_render['mem'] = int(ram)
         if 'gpu_mem' in template_vars:
-            to_render['gpu_mem'] = int(mem)
-        if 'gpu_name' in template_vars:
-            if not gpu_name is None:
-                to_render['gpu_name'] = gpu_name
-            else:
-                msgs.append("GPU name variable specified in template but no GPU names found."
-                            " Please specify available GPUs in the settings Dialog"
-                            " or remove the variable from the template.")
+            to_render['gpu_mem'] = estimated_gpu_mem
+        # if 'gpu_name' in template_vars:
+        #     if not gpu_name is None:
+        #         to_render['gpu_name'] = gpu_name
+        #     else:
+        #         msgs.append("GPU name variable specified in template but no GPU names found."
+        #                     " Please specify available GPUs in the settings Dialog"
+        #                     " or remove the variable from the template.")
         if 'account' in template_vars:
             if not job_params['queue_account'] is None:
                 to_render['account'] = job_params['queue_account']
             else:
                 msgs.append("Queue account name variable specified in template but no account found."
                             " Please specify account in the Settings dialog or remove the variable from the template.")
-        if split_mem in template_vars:
+        if 'split_mem' in template_vars:
             to_render['split_mem'] = split_mem
-        if 'lanes' in template_vars:
-            if job_params['gpu_lanes'] or job_params['cpu_lanes']:
-                if job_params['only_msa'] or job_params['force_cpu']:
-                    if job_params['queue_cpu_lanes']:
-                        to_render['cpu_lanes'] = job_params['queue_cpu_lanes']
-                else:
-                    if job_params['gpu_lanes']:
-                        to_render['gpu_lanes'] = job_params['queue_gpu_lanes']
-                    else:
-                        to_render['cpu_lanes'] = job_params['queue_cpu_lanes']
-            else:
-                msgs.append("Lanes variable specified in template but no lanes found. "
-                            "Please specify GPU and/or CPU lanes in the Settings dialog or remove"
-                            " the variable form the template.")
+        if 'total_sequence_length' in template_vars:
+            to_render['total_sequence_length'] = job_params['total_seqlen']
+        #Suitable cluster lanes/partitions should be defined only in the submission script
+        # based on use_gpu and total_sequence_length
+        # if 'lanes' in template_vars:
+        #     if job_params['gpu_lane_list'] or job_params['cpu_lane_list']:
+        #         if job_params['only_features'] or job_params['force_cpu']:
+        #             if job_params['cpu_lane_list']:
+        #                 to_render['lanes'] = job_params['cpu_lane_list']
+        #         else:
+        #             if job_params['gpu_lane_list']:
+        #                 to_render['lanes'] = job_params['gpu_lane_list']
+        #             else:
+        #                 to_render['lanes'] = job_params['cpu_lane_list']
+        #     else:
+        #         msgs.append("Lanes variable specified in template but no lanes found. "
+        #                     "Please specify GPU and/or CPU lanes in the Settings dialog or remove"
+        #                     " the variable form the template.")
 
         rendered = template.render(**to_render,
                                    command=command,
@@ -1025,7 +1083,7 @@ class Job(GUIVariables):
     #Calculate required gpu memory in GB by sequence length
     def calculate_gpu_mem(self, total_seq_length):
         logger.debug(total_seq_length)
-        mem = math.ceil(5.5905*math.exp(0.001*total_seq_length))
+        mem = int(math.ceil(5.561*math.exp(0.00095881*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
 
@@ -1036,7 +1094,12 @@ class Job(GUIVariables):
         info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
         return float(info.total) / 10**9
 
-    def prepare_cmd(self, job_params, cmd_dict):
+    def get_max_ram(self):
+        mem = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+        mem_gb = int(mem/(1024.**3))
+        return mem_gb
+
+    def prepare_cmd(self, job_params, cmd_dict, split_job_step=None):
         #cmd_dict = job_params.copy()
         error_msgs, warn_msgs = [], []
         logger.debug(cmd_dict)
@@ -1063,44 +1126,33 @@ class Job(GUIVariables):
 
 
         #Switch to unified memory if GPU memory is not enough for given sequence length
-        calculated_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
-        gpu_name = None
-        gpu_mem = None
+        estimated_gpu_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
+        #gpu_name = None
+        #gpu_mem = None
+        if not 'max_ram' in job_params:
+            job_params['max_ram'] = self.get_max_ram()
 
         #Decide which GPUs to use if several are available on a cluster
         if job_params['queue']:
-            logger.debug(f"gpu name list {job_params['gpu_name_list']}")
-            if not job_params['gpu_name_list'] is None and not job_params['gpu_mem_list'] is None:
-                if len(job_params['gpu_name_list']) == len(job_params['gpu_mem_list']):
-                    gpu_name_to_mem_mapping = {gpu_name: float(gpu_mem) for gpu_name, gpu_mem in zip(job_params['gpu_name_list'], job_params['gpu_mem_list'])}
-                    gpu_name_to_mem_mapping_sorted = {k: v for k, v in sorted(gpu_name_to_mem_mapping.items(), key=lambda item: item[1])}
-                    for name, mem in gpu_name_to_mem_mapping_sorted.items():
-                        if calculated_mem < float(mem):
-                            gpu_name = name
-                            gpu_mem = mem
-                            break
-                        else:
-                            gpu_name = name
-                            gpu_mem = mem
-                else:
-                    msg.append("GPU name and GPU memory lists must have the same length")
+            gpu_mem = job_params['max_gpu_mem']
         else:
             gpu_mem = self.get_gpu_mem()
 
         split_mem = None
-        if not gpu_mem is None and not calculated_mem is None:
-            if calculated_mem > gpu_mem:
-                split_mem = calculated_mem / gpu_mem
-                if not job_params['force_cpu'] and not job_params['only_msa']:
-                    warn_msgs.append(f"The estimated memory of {calculated_mem} GB for a total sequence length of {job_params['total_seqlen']}"
+        if not any([gpu_mem is None, estimated_gpu_mem is None, job_params['force_cpu'], job_params['only_features']]):
+            if estimated_gpu_mem > gpu_mem:
+                if estimated_gpu_mem > job_params['max_ram']:
+                    error_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
+                                      f" is larger than the maximum availabe GPU memory ({gpu_mem}) GB"
+                                      f" and system RAM ({job_params['max_ram']} GB).")
+                else:
+                    split_mem = estimated_gpu_mem / gpu_mem
+                    warn_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
                                 f" is larger than the availabe GPU memory ({gpu_mem} GB). Confirm to run the job with "
                                 f"unified memory (slow; job can only be cancelled from command line)?")
         if job_params['queue']:
-            #dlg = self.dlg_queue
-            #if dlg.ShowModal():
-            #    dlg.Close()
             queue_submit = job_params['queue_submit']
-            submit_script, more_msgs = self.prepare_submit_script(job_params, job_args, gpu_mem, split_mem, gpu_name)
+            submit_script, more_msgs = self.prepare_submit_script(job_params, job_args, estimated_gpu_mem, split_mem)
             error_msgs.extend(more_msgs)
             with open(job_params['log_file'], 'a') as log_handle, open(submit_script, 'r') as submit_script_handle:
                 log_handle.write(submit_script_handle.read())
@@ -1110,12 +1162,12 @@ class Job(GUIVariables):
             if not split_mem is None and not job_params['force_cpu']:
                 cmd = [f'export TF_FORCE_UNIFIED_MEMORY=True; export XLA_PYTHON_CLIENT_MEM_FRACTION={split_mem}; ']
             #cmd = [f"/bin/bash -c \'echo test > {job_params['log_file']}\'"]
-            if job_params['only_msa'] or job_params['force_cpu']:
+            if job_params['only_features'] or job_params['force_cpu']:
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
             cmd += [f"run_alphafold.py"] + job_args + [f">> {job_params['log_file']} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
-        return cmd, error_msgs, warn_msgs, calculated_mem
+        return cmd, error_msgs, warn_msgs, estimated_gpu_mem
 
     def insert_evaluation(self, _evaluation, job_params, sess):
         if not _evaluation.check_exists(job_params['job_id'], sess):
@@ -1259,11 +1311,15 @@ class Job(GUIVariables):
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
-    def get_log_file(self, project_path, job_name):
+    def build_log_file_path(self, project_path, job_name, type):
         job_dir = self.get_job_dir(job_name)
         job_path = self.get_job_path(project_path, job_dir)
-        log_file = os.path.join(job_path, f"{job_name}.log")
+        log_file = os.path.join(job_path, f"{job_name}_{type}.log")
         return log_file
+
+    def get_log_file(self, job_id, sess):
+        result = sess.query(self.db.Job.log_file).filter_by(id=job_id).first()
+        return result[0]
 
     def get_queue_pid(self, log_file, job_id, sess):
         pid = None
@@ -1320,12 +1376,13 @@ class Job(GUIVariables):
         # Fill job list
         self.list.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.list.ctrl.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
-        self.list.ctrl.setColumnCount(3)
+        self.list.ctrl.setColumnCount(4)
         self.list.ctrl.verticalHeader().setVisible(False)
-        self.list.ctrl.setHorizontalHeaderLabels(('ID', 'Name', 'Status'))
+        self.list.ctrl.setHorizontalHeaderLabels(('ID', 'Name', 'Type', 'Status'))
         self.list.ctrl.setColumnWidth(0, 50)
         self.list.ctrl.setColumnWidth(1, 100)
-        self.list.ctrl.setColumnWidth(2, 100)
+        self.list.ctrl.setColumnWidth(2, 70)
+        self.list.ctrl.setColumnWidth(3, 70)
         project_id = gui_params['project_id']
         if not project_id is None:
             gui_params['project_path'] = self.get_path_by_project_id(project_id, sess)
@@ -1340,7 +1397,8 @@ class Job(GUIVariables):
                 self.list.ctrl.insertRow(rows)
                 self.list.ctrl.setItem(rows , 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
                 self.list.ctrl.setItem(rows , 1, QtWidgets.QTableWidgetItem(job.name))
-                self.list.ctrl.setItem(rows , 2, QtWidgets.QTableWidgetItem(status))
+                self.list.ctrl.setItem(rows , 2, QtWidgets.QTableWidgetItem(job.type.capitalize()))
+                self.list.ctrl.setItem(rows , 3, QtWidgets.QTableWidgetItem(status))
         return gui_params
 
 
@@ -1494,12 +1552,18 @@ class Settings(GUIVariables):
         self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
-        self.queue_cpu_lane_list = Variable('queue_cpu_lanes', 'str', ctrl_type='lei')
-        self.queue_gpu_lane_list = Variable('queue_gpu_lanes', 'str', ctrl_type='lei')
-        self.gpu_name_list = Variable('gpu_name_list', 'str', ctrl_type='lei')
-        self.gpu_mem_list = Variable('gpu_mem_list', 'str', ctrl_type='lei')
-        self.min_ram = Variable('min_ram', 'str', ctrl_type='lei')
+        self.num_cpus = Variable('num_cpus', 'int', ctrl_type='sbo')
+        #self.cpu_lane_list = Variable('cpu_lane_list', 'str', ctrl_type='lei')
+        #self.gpu_lane_list = Variable('gpu_lane_list', 'str', ctrl_type='lei')
+        #self.gpu_name_list = Variable('gpu_name_list', 'str', ctrl_type='lei')
+        #self.gpu_mem_list = Variable('gpu_mem_list', 'str', ctrl_type='lei')
+        self.max_gpu_mem = Variable('max_gpu_mem', 'int', ctrl_type='sbo')
+        self.split_job = Variable('split_job', 'bool', ctrl_type='chk')
+        self.min_ram = Variable('min_ram', 'int', ctrl_type='sbo')
+        self.max_ram = Variable('max_ram', 'int', ctrl_type='sbo')
         self.queue_submit_dialog = Variable('queue_submit_dialog', 'bool', ctrl_type='chk')
+        self.queue_jobid_regex = Variable('queue_jobid_regex', 'str', ctrl_type='lei')
+        #r'\D*(\d+)\D*'
         self.queue_default = Variable('queue_default', 'bool', ctrl_type='chk')
         self.jackhmmer_binary_path =  Variable('jackhmmer_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.hhblits_binary_path = Variable('hhblits_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -1548,14 +1612,14 @@ class Settings(GUIVariables):
     def get_slurm_account(self):
         account = None
         try:
-            account_raw = check_output("sacctmgr show User $(whoami) -p -n", shell=True)
+            account_raw = check_output("sacctmgr show User $(whoami) -p -n &> /dev/null", shell=True)
             account_raw = account_raw.decode()
             logger.debug(f'Output from sacctmgr: {account_raw}')
             if not account_raw is None:
                 account = account_raw.split("|")[1]
-        except:
-            logger.debug("Could not retrieve slurm account")
-            traceback.print_exc()
+        except Exception as e:
+            logger.debug("Could not retrieve SLURM account. You can ignore this if you are not using accounts or a different queueing system")
+            logger.debug(traceback.print_exc())
         return account
 
     def set_slurm_account(self, account, sess):
@@ -1634,9 +1698,10 @@ class Settings(GUIVariables):
     def add_blank_entry(self, sess):
         settings = self.get_from_db(sess)
         if settings is None:
-            logger.debug("Adding frist entry to settings")
+            logger.debug("Adding first entry to settings")
             blank = {}
             for var in vars(self):
+                logger.debug(var)
                 obj = getattr(self, var)
                 try:
                     if hasattr(obj, db):

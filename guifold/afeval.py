@@ -33,11 +33,15 @@ import typing
 
 
 class EvaluationPipeline:
-    def __init__(self, sequence_file: str, continue_from_existing_results: bool = False):
+    def __init__(self, sequence_file: str, continue_from_existing_results: bool = False, custom_spacing: bool = False,
+                 custom_start_residue_list: str = None, custom_axis_label_list: str = None):
         self.sequence_file = sequence_file
         self.continue_from_existing_results = continue_from_existing_results
         self.output_dir = os.path.split(os.path.realpath(self.sequence_file))[0]
         self.results_dir = os.path.join(self.output_dir, os.path.splitext(os.path.basename(sequence_file))[0])
+        self.custom_spacing = custom_spacing
+        self.custom_start_residue_list = custom_start_residue_list
+        self.custom_axis_label_list = custom_axis_label_list
         if not os.path.exists(self.results_dir):
             raise SystemExit(f"Output directory {self.results_dir} not found")
 
@@ -81,7 +85,12 @@ class EvaluationPipeline:
                 plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
             logging.debug(pae_list)
             if not self.check_none(pae_list):
-                pae_results = self.extract_and_plot_pae(pae_list, indices, seq_titles)
+                pae_results = self.extract_and_plot_pae(pae_list,
+                                                        indices,
+                                                        seq_titles,
+                                                        self.custom_spacing,
+                                                        self.custom_start_residue_list,
+                                                        self.custom_axis_label_list)
             else:
                 no_pae = True
                 pae_results = [(model_name, None) for pae, model_name in pae_list]
@@ -218,18 +227,39 @@ class EvaluationPipeline:
             new_pae_list.append([best_pae[model_num][0], best_pae[model_num][1]])
         return new_pae_list
 
-    def get_major_tick_spacing(self, num_elements):
-        if num_elements < 4:
+    def get_major_tick_spacing(self, num_elements, len_seq, custom_spacing):
+        if custom_spacing:
+            return int(custom_spacing)
+        elif len_seq <= 50:
+            return 10
+        elif num_elements < 4 and not len_seq >= 2000:
             return 100
-        if num_elements > 4:
+        elif num_elements >= 4 or len_seq >= 2000:
             return 200
 
-    def extract_and_plot_pae(self, pae_list, indices, seq_titles):
-        """Plots PAE. From https://github.com/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb"""
+    def extract_and_plot_pae(self, pae_list, indices, seq_titles, custom_spacing=None, custom_aa_start=None, custom_labels=None):
+        """Plots PAE. Adapted from https://github.com/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb"""
         num_models = len(pae_list)
         num_seqs = len(indices)
         matrix_len = num_seqs * num_seqs
+        custom_aa_start_list = []
+        if custom_aa_start:
+            custom_aa_start_list = custom_aa_start.split(',')
+            if not isinstance(custom_aa_start_list, list):
+                custom_aa_start_list = [custom_aa_start_list]
+            custom_aa_start_list = [int(x) for x in custom_aa_start_list] * num_seqs
 
+            if len(custom_aa_start_list) != num_seqs*num_seqs:
+                raise ValueError(f"Number of given starting residue values ({len(custom_aa_start_list)})"
+                                 f" does not match the number of protein subunits ({num_seqs*num_seqs}).")
+
+
+
+        if custom_labels:
+            custom_labels_list = custom_labels.split(',')
+            if not isinstance(custom_labels_list, list):
+                custom_labels_list = [custom_labels_list]
+            seq_titles = custom_labels_list
 
         u = 0
         y_labels = []
@@ -295,17 +325,60 @@ class EvaluationPipeline:
                     #Show labels only for bottom row
                     if u == len(indices) - 1:
                         logging.debug(f"logging.debug x label {u} {v}")
-                        axs[u, v].set_xlabel(f"{x_labels[count]} (aa)")
+                        axs[u, v].set_xlabel(f"{x_labels[count]} [aa]")
 
                     if v % len(indices) == 0:
                         logging.debug(f"logging.debug y label {u} {v}")
-                        axs[u, v].set_ylabel(f"{y_labels[count]} (aa)")
-                    axs[u, v].xaxis.set_major_locator(MultipleLocator(self.get_major_tick_spacing(len(indices))))
-                    axs[u, v].xaxis.set_major_formatter(FormatStrFormatter('%d'))
-                    axs[u, v].xaxis.set_minor_locator(MultipleLocator(50))
-                    axs[u, v].yaxis.set_major_locator(MultipleLocator(100))
-                    axs[u, v].yaxis.set_major_formatter(FormatStrFormatter('%d'))
-                    axs[u, v].yaxis.set_minor_locator(MultipleLocator(50))
+                        axs[u, v].set_ylabel(f"{y_labels[count]} [aa]")
+
+                    if len(custom_aa_start_list) > 0:
+                        start_tick = custom_aa_start_list[count]
+                        major_start_tick_rounded = round(start_tick/100)*100
+                        minor_start_tick_rounded = round(start_tick/10)*10
+                    else:
+                        minor_start_tick_rounded = major_start_tick_rounded = start_tick = 0
+                    logging.debug(f"u: {u}\nv: {v}\nx label {x_labels[count]}\ny label {y_labels[count]}\nlen_data: {len(data)}\nmajor tick spacing: {self.get_major_tick_spacing(len(indices), len(data), custom_spacing)}")
+                    logging.debug(f"len_data_x: {np.size(data, 1)} len_data_y: {np.size(data, 0)}")
+                    len_y_axis = np.size(data, 0)
+                    len_x_axis = np.size(data, 1)
+                    major_tick_spacing_x = self.get_major_tick_spacing(len(indices), len_x_axis, custom_spacing)
+                    major_tick_spacing_y = self.get_major_tick_spacing(len(indices), len_y_axis, custom_spacing)
+                    major_tick_positions_x = np.arange(major_start_tick_rounded - start_tick,
+                                                       len_x_axis,
+                                                       major_tick_spacing_x)
+                    minor_tick_positions_x = np.arange(minor_start_tick_rounded - start_tick,
+                                                       len_x_axis,
+                                                       major_tick_spacing_x / 10)
+                    major_tick_positions_y = np.arange(major_start_tick_rounded - start_tick,
+                                                       len_y_axis,
+                                                       major_tick_spacing_y)
+                    minor_tick_positions_y = np.arange(minor_start_tick_rounded - start_tick,
+                                                        len_y_axis,
+                                                        major_tick_spacing_y / 10)
+                    tick_labels_x = np.arange(major_start_tick_rounded,
+                                              len_x_axis + start_tick,
+                                              major_tick_spacing_x)
+                    tick_labels_y = np.arange(major_start_tick_rounded,
+                                              len_y_axis + start_tick,
+                                              major_tick_spacing_y)
+                    axs[u,v].set_xticks(major_tick_positions_x)
+                    axs[u,v].set_xticks(minor_tick_positions_x, minor=True)
+                    axs[u,v].set_xticklabels(tick_labels_x)
+                    axs[u,v].set_yticks(major_tick_positions_y)
+                    axs[u,v].set_yticks(minor_tick_positions_y, minor=True)
+                    axs[u,v].set_yticklabels(tick_labels_y)
+
+                        #plt.sca(axs[u, v])
+                        #plt.xticks(np.arange(len(data)), np.arange(custom_aa_start_list[count],
+                        #                                         len(data)+custom_aa_start_list[count]))
+
+                    #axs[u, v].xaxis.set_major_locator(MultipleLocator(
+                    #    self.get_major_tick_spacing(len(indices), len(data), custom_spacing)))
+                    #axs[u, v].xaxis.set_major_formatter(FormatStrFormatter('%d'))
+                    #axs[u, v].xaxis.set_minor_locator(MultipleLocator(50))
+                    #axs[u, v].yaxis.set_major_locator(MultipleLocator(100))
+                    #axs[u, v].yaxis.set_major_formatter(FormatStrFormatter('%d'))
+                    #axs[u, v].yaxis.set_minor_locator(MultipleLocator(50))
                     count += 1
             #fig.subplots_adjust(hspace=0.6, wspace=0.3)
             #adjustw(ims, wspace=1)
@@ -452,11 +525,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=".")
     parser.add_argument('--fasta_path', help='Path to input FASTA file (must be located below the results folder).')
     parser.add_argument('--debug', action='store_true', help='Debug mode.')
-    parser.add_argument('--continue_from_existing_results', action='store_true', help='Continue from previously extracted PAE values.')
+    parser.add_argument('--continue_from_existing_results', action='store_true',
+                        help='Continue from previously extracted PAE values.')
+    parser.add_argument('--custom_spacing', help='Custom value for spacing of major tick labels.')
+    parser.add_argument('--custom_start_residue_list', help='Define custom axes minimum number. If the prediction was done with internal segments of the proteins,'
+                                                            'the actual residue numbering can be restored in the plot by'
+                                                            'giving the starting residue numbers of the segments separated by a comma.'
+                                                            'For example, if there are two subunits with predicted segments'
+                                                            '15-100 and 50-300, the list would be --custom_start_residue_list 15,50')
+    parser.add_argument('--custom_axis_label_list', help='Define custom axes labels.'
+                                                          ' Labels for different subunits need to be separated by a comma'
+                                                          ' and given in the same order as the sequences in the fasta file. Example: --custom_axis_label_list \"Protein A\", \"Protein B\"')
     args, unknown = parser.parse_known_args()
     if not args.debug:
         logging.set_verbosity(logging.INFO)
     else:
         logging.set_verbosity(logging.DEBUG)
 
-    EvaluationPipeline(args.fasta_path, args.continue_from_existing_results).run_pipeline()
+    EvaluationPipeline(args.fasta_path, args.continue_from_existing_results, args.custom_spacing, args.custom_start_residue_list, args.custom_axis_label_list).run_pipeline()
