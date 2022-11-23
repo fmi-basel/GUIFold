@@ -85,7 +85,7 @@ class SettingsDlg(QtWidgets.QDialog):
             var.ctrl.setText(path)
 
     def OnBtnLoadGlobalSettings(self):
-        msgs = self.settings.update_from_global_config(self.sess)
+        msgs = self.settings.update_from_global_config()
         self.settings.update_from_self()
         for msg in msgs:
             message_dlg("error", msg)

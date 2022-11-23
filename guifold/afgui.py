@@ -32,12 +32,13 @@ from PyQt5.QtCore import QThread, pyqtSignal, Qt, QUrl
 from PyQt5.QtGui import QIcon, QDesktopServices
 import logging
 from guifold.src.db_helper import DBHelper
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, orm
 import traceback
 from guifold.src.gui_classes import Job, Settings, JobParams, Project, Evaluation, DefaultValues
 from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedParamsDefaultValues
 from shutil import copyfile
 import argparse
+import configparser
 
 DB_REVISION = 3
 
@@ -129,7 +130,10 @@ def main():
 
 def backup_db(db_path):
     prev_db_revision = DB_REVISION - 1
-    backup_db_path = os.path.join(os.path.expanduser("~"), f'.guifold.db.{prev_db_revision}')
+    guifold_dir = os.path.join(os.path.expanduser("~"), f'.guifold')
+    if not os.path.exists(guifold_dir):
+        os.mkdir(guifold_dir)
+    backup_db_path = os.path.join(guifold_dir, f'guifold.db.{prev_db_revision}')
     if not os.path.exists(backup_db_path):
         if os.path.exists(db_path):
             copyfile(db_path, backup_db_path)
@@ -151,14 +155,39 @@ def update_job_type(db, sess):
             job.type = type
     sess.commit()
 
+def check_settings_locked():
+    lock_settings = False
+    config_file = pkg_resources.resource_filename('guifold.config', 'guifold.conf')
+    if os.path.exists(config_file):
+        config = configparser.ConfigParser()
+        config.read(config_file)
+        if 'OTHER' in config:
+            if 'lock_settings' in config['OTHER']:
+                if lock_settings in ['True', 'true']:
+                    lock_settings = True
+            else:
+                logger.debug("lock_settings not found in config.")
+        else:
+            logger.debug("\'OTHER\' section not found in config.")
+    else:
+        logger.debug("Config file not found")
+    return lock_settings
+
 def update_queue_jobid_regex(db, sess):
-    result_settings = sess.query(db.Settings).filter_by(id=1).one()
-    if not result_settings is None:
-        if result_settings.queue_jobid_regex is None:
-            if result_settings.queue_submit == "sbatch":
-                logger.debug("Setting queue_jobid_regex")
-                result_settings.queue_jobid_regex = "\D*(\d+)\D*"
-    sess.commit()
+    try:
+        result_settings = sess.query(db.Settings).filter_by(id=1).one()
+        if not result_settings is None:
+            if result_settings.queue_jobid_regex is None:
+                if result_settings.queue_submit == "sbatch":
+                    logger.debug("Setting queue_jobid_regex")
+                    result_settings.queue_jobid_regex = "\D*(\d+)\D*"
+        sess.commit()
+    except orm.exc.NoResultFound:
+        logger.debug("No settings found. This is normal when the application is started for the first time.")
+    except:
+        logger.debug("Could not update jobidregex")
+
+
 
 
 def upgrade_db():
@@ -168,14 +197,14 @@ def upgrade_db():
     engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
     stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
     stmts += ['ALTER TABLE settings ADD split_job BOOLEAN DEFAULT FALSE']
-    stmts += ['ALTER TABLE settings ADD num_cpus INTEGER NOT NULL DEFAULT(20)']
-    stmts += ['ALTER TABLE settings ADD max_ram INTEGER NOT NULL DEFAULT(100)']
-    stmts += ['ALTER TABLE settings ADD max_gpu_mem INTEGER NOT NULL DEFAULT(80)']
+    stmts += ['ALTER TABLE settings ADD num_cpus INTEGER DEFAULT(20)']
+    stmts += ['ALTER TABLE settings ADD max_ram INTEGER DEFAULT(100)']
+    stmts += ['ALTER TABLE settings ADD max_gpu_mem INTEGER DEFAULT(80)']
     #Change VARCHAR to INTEGER
     stmts += ['ALTER TABLE settings RENAME COLUMN min_ram TO min_ram_deprec']
-    stmts += ['ALTER TABLE settings ADD COLUMN min_ram INTEGER NOT NULL DEFAULT(50)']
+    stmts += ['ALTER TABLE settings ADD COLUMN min_ram INTEGER DEFAULT(50)']
     stmts += ['UPDATE settings set min_ram=(SELECT min_ram_deprec FROM settings WHERE id=1)']
-    stmts += ['ALTER TABLE jobparams ADD num_recycle INTEGER NOT NULL DEFAULT(3)']
+    stmts += ['ALTER TABLE jobparams ADD num_recycle INTEGER DEFAULT(3)']
     stmts += ['ALTER TABLE settings RENAME COLUMN queue_cpu_lane_list TO cpu_lane_list']
     stmts += ['ALTER TABLE settings RENAME COLUMN queue_gpu_lane_list TO gpu_lane_list']
     stmts += ['ALTER TABLE settings DROP COLUMN min_ram_deprec']
@@ -183,6 +212,9 @@ def upgrade_db():
     stmts += ['ALTER TABLE jobparams ADD COLUMN continue_from_features BOOLEAN DEFAULT FALSE']
     stmts += ['ALTER TABLE job ADD COLUMN type VARCHAR DEFAULT NULL']
     stmts += ['ALTER TABLE settings ADD COLUMN queue_jobid_regex VARCHAR DEFAULT NULL']
+    stmts += ['ALTER TABLE settings ADD COLUMN uniref30_database_path VARCHAR DEFAULT NULL']
+    stmts += ['ALTER TABLE settings ADD COLUMN colabfold_envdb_database_path VARCHAR DEFAULT NULL']
+    stmts += ['ALTER TABLE settings ADD COLUMN mmseqs_binary_path VARCHAR DEFAULT NULL']
     with engine.connect() as conn:
         for stmt in stmts:
             try:
@@ -211,6 +243,7 @@ class MainFrame(QtWidgets.QMainWindow):
                            'job_project_id': None,
                            'project_id': None,
                            'queue': None}
+        self.gui_params['settings_locked'] = check_settings_locked()
         self.files_selected_item = None
         self.db = db
         self.sess = sess
@@ -337,11 +370,15 @@ class MainFrame(QtWidgets.QMainWindow):
     def init_settings(self):
         logger.debug("=== Initializing Settings ===")
         if self.settings.add_blank_entry(self.sess):
+            self.settings.update_from_global_config()
             slurm_account = self.settings.get_slurm_account()
             if not slurm_account is None:
                 self.settings.set_slurm_account(slurm_account, self.sess)
-            self.settings.update_from_global_config(self.sess)
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
+        elif self.gui_params['settings_locked']:
+            self.settings.update_from_global_config()
+            self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
+
 
     def create_monitor_thread(self, job_params):
         self.monitor_thread = QThread()
@@ -462,8 +499,12 @@ class MainFrame(QtWidgets.QMainWindow):
                     if job_params['split_job'] and not job_params['split_job_step'] == 'gpu':
                         if not job_params['pid'] is None:
                             logger.debug(f"Submit second step with PID dependency {job_params['pid']}.")
-                            self.jobparams.only_features.set_value(False)
-                            self.OnBtnRun(split_job_step='gpu', queue_pid=job_params['pid'])
+                            if job_params['pid'] is None:
+                                message_dlg("Error", "Could not get JobID from queue submission command."
+                                                     " Second job cannot be submitted.")
+                            else:
+                                self.jobparams.only_features.set_value(False)
+                                self.OnBtnRun(split_job_step='gpu', queue_pid=job_params['pid'])
                         else:
                             logger.debug("Failed to submit gpu job because no queue_pid was found.")
             elif job_params['status'] == "finished":
@@ -592,6 +633,7 @@ class MainFrame(QtWidgets.QMainWindow):
                             #logger.debug(f"Precomputed msa path {job_params['precomputed_msas_path']}")
                             #self.jobparams.precomputed_msas_path.set_value(job_params['precomputed_msas_path'])
                             job_params['only_features'] = False
+                            self.jobparams.only_features.set_value(False)
                             job_params['continue_from_features'] = True
                             job_params['force_cpu'] = False
                             job_params['num_cpus'] = 1
@@ -752,7 +794,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     else:
                         job_params['queue_submit'] = settings.queue_submit
                 job_params['total_seqlen'] = sum([len(s) for s in sequences])
-                logger.debug(f"Number of sequences: {job_params['total_seqlen']}")
+                logger.debug(f"Number of amino acids: {job_params['total_seqlen']}")
                 job_params['multimer'] = True if len(sequences) > 1 else False
                 logger.debug(job_params)
                 logger.debug(self.gui_params)
@@ -794,6 +836,9 @@ class MainFrame(QtWidgets.QMainWindow):
                 if job_params['db_preset'] == 'reduced_dbs':
                     del cmd_dict['bfd_database_path']
                     del cmd_dict['uniclust30_database_path']
+                if job_params['db_preset'] == 'colabfold':
+                    del cmd_dict['small_bfd_database_path']
+
                 logger.debug(job_params['force_cpu'])
                 logger.debug(cmd_dict)
                 logger.debug("Job IDs before notebook: {}".format(self.gui_params['job_id']))
@@ -961,11 +1006,11 @@ class MainFrame(QtWidgets.QMainWindow):
             self.set_finished_action = QtWidgets.QAction("Set to finished", self)
             self.set_running_action = QtWidgets.QAction("Set to running", self)
             menu.addAction(self.delete_job_action)
-            menu.addAction(self.delete_jobfiles_action)
+            #menu.addAction(self.delete_jobfiles_action)
             menu.addAction(self.set_finished_action)
             menu.addAction(self.set_running_action)
             self.delete_job_action.triggered.connect(lambda state, x=job_id: self.OnDeleteEntry(x))
-            self.delete_jobfiles_action.triggered.connect(lambda state, x=job_id, y=job_path: self.OnDeleteEntryFiles(x, y))
+            #self.delete_jobfiles_action.triggered.connect(lambda state, x=job_id, y=job_path: self.OnDeleteEntryFiles(x, y))
             self.set_finished_action.triggered.connect(lambda state, x=job_id: self.OnStatusFinished(x))
             self.set_running_action.triggered.connect(lambda state, x=job_id: self.OnStatusRunning(x))
             menu.exec_(self.job.list.ctrl.mapToGlobal(pos))
@@ -1016,8 +1061,11 @@ class MainFrame(QtWidgets.QMainWindow):
         dlg.exec()
 
     def OnBtnSettings(self):
-        dlg = SettingsDlg(self)
-        dlg.exec()
+        if not self.gui_params['settings_locked']:
+            dlg = SettingsDlg(self)
+            dlg.exec()
+        else:
+            message_dlg("Info", "Changing of settings is locked by the administrator.")
 
     def OnBtnPrecomputedMSAsPath(self):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')

@@ -188,8 +188,10 @@ class Variable:
                 self.value = self.ctrl.currentText()
             #if self.value == "":
             #    self.value = None
+            logger.debug(f"Value of {self.var_name}: {self.value}")
         else:
             logger.debug(f"ctrl of {self.var_name} is not bound.")
+
 
     def reset_ctrl(self):
         """ Clear variable values and GUI controls """
@@ -685,7 +687,8 @@ class JobParams(GUIVariables):
                                                            'int', ctrl_type='sbo', cmd=True)
         self.queue = Variable('queue', 'bool', ctrl_type='chk')
         self.db_preset_dict = {0: 'full_dbs',
-                               1: 'reduced_dbs'}
+                               1: 'reduced_dbs',
+                               2: 'colabfold'}
         self.db_preset = Variable('db_preset', 'str', ctrl_type='cmb', cmb_dict=self.db_preset_dict, cmd=True)
         self.model_preset_dict = {0: 'automatic',
                                   1: 'monomer',
@@ -1364,7 +1367,8 @@ class Job(GUIVariables):
                                  'status': job.status,
                                  'job_path': job.path,
                                  'log_file': job.log_file,
-                                 'pid': job.pid})
+                                 'pid': job.pid,
+                                 'time_started': job.timestamp})
         return jobs_running
 
     def init_gui(self, gui_params, sess=None):
@@ -1540,8 +1544,8 @@ class Project(GUIVariables):
             return gui_params
         else:
             gui_params['project_id'] = None
-            return gui_params
             logger.debug("No project found.")
+            return gui_params
 
 
 class Settings(GUIVariables):
@@ -1553,20 +1557,16 @@ class Settings(GUIVariables):
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
         self.num_cpus = Variable('num_cpus', 'int', ctrl_type='sbo')
-        #self.cpu_lane_list = Variable('cpu_lane_list', 'str', ctrl_type='lei')
-        #self.gpu_lane_list = Variable('gpu_lane_list', 'str', ctrl_type='lei')
-        #self.gpu_name_list = Variable('gpu_name_list', 'str', ctrl_type='lei')
-        #self.gpu_mem_list = Variable('gpu_mem_list', 'str', ctrl_type='lei')
         self.max_gpu_mem = Variable('max_gpu_mem', 'int', ctrl_type='sbo')
         self.split_job = Variable('split_job', 'bool', ctrl_type='chk')
         self.min_ram = Variable('min_ram', 'int', ctrl_type='sbo')
         self.max_ram = Variable('max_ram', 'int', ctrl_type='sbo')
         self.queue_submit_dialog = Variable('queue_submit_dialog', 'bool', ctrl_type='chk')
         self.queue_jobid_regex = Variable('queue_jobid_regex', 'str', ctrl_type='lei')
-        #r'\D*(\d+)\D*'
         self.queue_default = Variable('queue_default', 'bool', ctrl_type='chk')
         self.jackhmmer_binary_path =  Variable('jackhmmer_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.hhblits_binary_path = Variable('hhblits_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.mmseqs_binary_path = Variable('mmseqs_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.hhsearch_binary_path = Variable('hhsearch_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.hmmsearch_binary_path = Variable('hmmsearch_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.hmmbuild_binary_path = Variable('hmmbuild_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -1574,6 +1574,8 @@ class Settings(GUIVariables):
         self.kalign_binary_path = Variable('kalign_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.data_dir = Variable('data_dir', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref90_database_path = Variable('uniref90_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.uniref30_database_path = Variable('uniref30_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.colabfold_envdb_database_path = Variable('colabfold_envdb_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.mgnify_database_path = Variable('mgnify_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.bfd_database_path = Variable('bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.small_bfd_database_path = Variable('small_bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -1629,7 +1631,7 @@ class Settings(GUIVariables):
         sess.commit()
 
 
-    def update_from_global_config(self, sess):
+    def update_from_global_config(self):
         msgs = []
         logger.debug("update from global config")
         config_file = pkg_resources.resource_filename('guifold.config', 'guifold.conf')

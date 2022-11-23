@@ -10,16 +10,18 @@ Main Features:
 * Custom Protein Template
 * Disabling MSA and/or template search
 * Splitting into feature generation (CPU) and prediction (GPU) steps
+* Support of MMseqs2/colabfold MSA pipeline (in addition to original MSA pipeline)
 * Evaluation pipeline (PAE/pLDDT tables, PAE plots)
 
 ![Demo-Image](guifold/images/screenshots.png)
 
 
-## Recent updates
+## Recent updates (v0.2)
 
 * Split job setting
 * GPU and queue/partition selection moved to submission template
 * Addition of variables (total_sequence_length, split_job) that can be used in the submission template logic
+* Addition of MMseqs2/colabfold MSA pipeline (Job tab -> "Advanced Settings" -> "DB presets" -> "colabfold")
 
 ## Installation
 
@@ -28,7 +30,7 @@ The installation requires conda.
 ```
 mkdir guifold
 cd guifold
-git clone https://github.com/fmi-basel/GUIFold
+git clone --recurse-submodules https://github.com/fmi-basel/GUIFold
 ```
 
 Before proceeding with the installation it is recommended to setup the [global configuration file](#setup-of-global-configuration-file) and [cluster submission script](#setup-of-cluster-submission-template) (if needed).
@@ -40,7 +42,6 @@ source path/to/conda_init.sh
 to the beginning of `guifold/setup_environment.sh`.
 
 Running the setup_environment file will<br/>
-* download a [modified alphafold repository](https://github.com/fmi-basel/AF4GUIFold) including some extra features<br/>
 * create a conda environment in the same folder<br/>
 * install required packages (the packages are listed in the `conda_pkgs.yml` file) <br/>
 * install the modified alphafold package<br/>

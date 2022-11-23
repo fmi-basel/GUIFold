@@ -1,0 +1,4 @@
+[submodule "alphafold"]
+	path = alphafold
+	url = https://github.com/deepmind/alphafold.git
+	branch = guifold

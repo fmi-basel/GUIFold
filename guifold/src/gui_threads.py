@@ -19,6 +19,7 @@ import time
 from PyQt5.QtCore import QObject, pyqtSignal, QFileSystemWatcher, pyqtSlot
 import traceback
 import re
+import datetime
 
 logger = logging.getLogger('guifold')
 
@@ -67,6 +68,14 @@ class MonitorJob(QObject):
     def changed_test(self):
         logger.debug("file changed test")
 
+    def check_runtime_exceeded(self, job_started):
+        job_started = datetime.datetime.strptime(job_started, '%Y-%m-%d %H:%M:%S.%f')
+        delta = datetime.datetime.now() - job_started
+        if delta > datetime.timedelta(days=10):
+            return True
+        else:
+            return False
+
     def run(self):
         self.current_job_id = self.job_params['job_id']
         logger.debug(f"In monitor thread for job id {self.current_job_id}")
@@ -80,6 +89,11 @@ class MonitorJob(QObject):
 
         i = 0
         while i < 10 or self.job_params['queue']:
+            if self.check_runtime_exceeded(self.job_params['time_started']):
+                logger.warning(f"Maximum runtime exceeded and no logfile found. Not monitoring this job any longer (JobID {self.current_job_id}).")
+                self.job_params['status'] = "unknown"
+                self._parent.job.update_status("unknown", self.job_params['job_id'], self.sess)
+                break
             if os.path.exists(self.job_params['log_file']):
                 log_file_found = True
                 logger.debug("Log file found")
@@ -104,6 +118,10 @@ class MonitorJob(QObject):
             previous_stamp = os.stat(self.job_params['log_file']).st_mtime
 
             while True:
+                if self.check_runtime_exceeded(self.job_params['time_started']):
+                    logger.warning(f"Maximum runtime exceeded. Not monitoring this job any longer (JobID {self.current_job_id}).")
+                    self.job_params['status'] = "unknown"
+                    break
                 stamp = os.stat(self.job_params['log_file']).st_mtime
                 logger.debug("setting log_watcher")
                 if stamp != previous_stamp:
@@ -219,7 +237,8 @@ class RunProcessThread(QObject):
                 try:
                     output = p.communicate()[0].decode()
                     logger.debug(output)
-                    regex = rf'{job_params["queue_jobid_regex"]}'
+                    regex = self.job_params["queue_jobid_regex"].replace('\\\\', '\\')
+                    regex = rf'{regex}'
                     if re.match(regex, output):
                         queue_job_id = re.match(regex, output).group(1)
                         logger.debug(f"pid from queue {queue_job_id}")
