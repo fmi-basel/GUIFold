@@ -10,4 +10,7 @@ cd $(pwd)/$CONDA_ENV_NAME/lib/python3.8/site-packages && \
 patch -p0 < $base_dir/GUIFold/alphafold/docker/openmm.patch && \
 cd $base_dir && \
 cd GUIFold && \
-python setup.py install
+python setup.py install && \
+cd alphafold && \
+python setup.py install && \
+cd $base_dir

@@ -1,16 +1,19 @@
-#Copyright 2022 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+# Copyright 2022 Friedrich Miescher Institute for Biomedical Research
 #
-#Licensed under the Apache License, Version 2.0 (the "License");
-#you may not use this file except in compliance with the License.
-#You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-#Unless required by applicable law or agreed to in writing, software
-#distributed under the License is distributed on an "AS IS" BASIS,
-#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#See the License for the specific language governing permissions and
-#limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+
 import pkg_resources
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QIcon
@@ -31,8 +34,11 @@ class SettingsDlg(QtWidgets.QDialog):
                                        ('hmmsearch_binary_path', False),
                                        ('hmmbuild_binary_path', False),
                                        ('hhalign_binary_path', False),
+                                       ('mmseqs_binary_path', False),
                                        ('kalign_binary_path', False),
                                        ('uniref90_database_path', False),
+                                       ('uniref30_database_path', False),
+                                       ('colabfold_envdb_database_path', False),
                                        ('mgnify_database_path', False),
                                        ('bfd_database_path', False),
                                        ('small_bfd_database_path', False),
@@ -42,6 +48,7 @@ class SettingsDlg(QtWidgets.QDialog):
                                        ('pdb_seqres_database_path', False),
                                        ('template_mmcif_database_path', True),
                                        ('obsolete_pdbs_path', False),
+                                       ('custom_tempdir', False),
                                        ('data_dir', True)]
 
         for item, folder in self.btn_choosefolder_names:
@@ -54,7 +61,9 @@ class SettingsDlg(QtWidgets.QDialog):
 
         self.settings.set_controls(self, self.settings.db_table)
         self.btn_settings_load_global_settings = self.findChild(QtWidgets.QPushButton, "btn_settings_load_global_settings")
-        #self.btn_ok =  self.findChild(QtWidgets.QDialogButtonBox, "btn_settings_button_box").button(QtWidgets.QDialogButtonBox.Ok)
+        self.button_box = self.findChild(QtWidgets.QDialogButtonBox, "btn_settings_button_box")
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
         self.bind_event_handlers()
         self.init()
 

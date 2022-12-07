@@ -1,16 +1,19 @@
-#Copyright 2022 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+# Copyright 2022 Friedrich Miescher Institute for Biomedical Research
 #
-#Licensed under the Apache License, Version 2.0 (the "License");
-#you may not use this file except in compliance with the License.
-#You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-#Unless required by applicable law or agreed to in writing, software
-#distributed under the License is distributed on an "AS IS" BASIS,
-#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#See the License for the specific language governing permissions and
-#limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+
 import pkg_resources
 from PyQt5 import QtWidgets, uic
 import logging
@@ -25,7 +28,6 @@ class DefaultValues:
         self.max_template_date = str(date.today())
         self.model_preset = 'automatic'
         self.force_cpu = False
-        self.db_preset = 'full_dbs'
         self.num_recycle = 3
         self.num_multimer_predictions_per_model = 1
 
@@ -38,7 +40,9 @@ class AdvancedParamsDlg(QtWidgets.QDialog):
         self.gui_params = _parent.gui_params
         uic.loadUi(pkg_resources.resource_filename('guifold.ui', 'advanced_params.ui'), self)
         self.jobparams.set_controls(self, self.jobparams.db_table)
-        self.accepted.connect(self.OnBtnOk)
+        self.button_box = self.findChild(QtWidgets.QDialogButtonBox, "btn_jobparams_button_box")
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
         self.init()
 
     def __del__(self):
@@ -49,10 +53,6 @@ class AdvancedParamsDlg(QtWidgets.QDialog):
         model_preset_list = self.jobparams.model_preset_dict.values()
         for item in model_preset_list:
             self.jobparams.model_preset.ctrl.addItem(item)
-        db_preset_list = self.jobparams.db_preset_dict.values()
-        for item in db_preset_list:
-            self.jobparams.db_preset.ctrl.addItem(item)
-
         if not self.gui_params['other_settings_changed']:
             if self.gui_params['job_id'] is None:
                 self.jobparams.update_from_default(default_values)
@@ -65,6 +65,10 @@ class AdvancedParamsDlg(QtWidgets.QDialog):
             logger.debug("Other params changed")
             self.jobparams.update_from_self()
 
-    def OnBtnOk(self):
+    def accept(self):
         self.jobparams.update_from_gui()
         self.gui_params['other_settings_changed'] = True
+        super().accept()
+
+    def reject(self):
+        super().reject()

@@ -1,27 +1,33 @@
-#Copyright 2022 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+# Copyright 2022 Friedrich Miescher Institute for Biomedical Research
 #
-#Licensed under the Apache License, Version 2.0 (the "License");
-#you may not use this file except in compliance with the License.
-#You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-#Unless required by applicable law or agreed to in writing, software
-#distributed under the License is distributed on an "AS IS" BASIS,
-#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#See the License for the specific language governing permissions and
-#limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+
 from sqlalchemy import MetaData, Table, Column, String, Boolean, Integer, Float, DateTime, ForeignKey, MetaData, create_engine, func
 from sqlalchemy.inspection import inspect
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import relationship, sessionmaker, scoped_session
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, orm
 import logging
 from contextlib import contextmanager
 import os
+from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
+DB_REVISION = 3
 
 def get_type(type):
     types = {'str': String,
@@ -34,6 +40,13 @@ def get_type(type):
         return None
 
 
+class DBMigration:
+    def __init__(self):
+        pass
+
+
+
+
 class DBHelper:
     def __init__(self, shared_objects, db_path):
         self.shared_objects = shared_objects
@@ -42,14 +55,17 @@ class DBHelper:
         self._DATABASE_NAME = 'guifold'
         self.db_path = db_path
         self.engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
+        name = '.'.join([__name__, self.__class__.__name__])
+        self.logger = logging.getLogger(name)
+
+    def init_db(self):
         self.reflect_tables()
         self.create_tables()
         self.conn = None
         session_factory = sessionmaker(bind=self.engine)
         self.Session = scoped_session(session_factory)
         self.sess = None
-        name = '.'.join([__name__, self.__class__.__name__])
-        self.logger = logging.getLogger(name)
+
 
     def reflect_tables(self):
         """
@@ -169,4 +185,105 @@ class DBHelper:
             raise
         finally:
             self.Session.remove()
+
+
+
+    def backup_db(self, db_path):
+        prev_db_revision = DB_REVISION - 1
+        guifold_dir = os.path.join(os.path.expanduser("~"), f'.guifold')
+        if not os.path.exists(guifold_dir):
+            os.mkdir(guifold_dir)
+        backup_db_path = os.path.join(guifold_dir, f'guifold.db.{prev_db_revision}')
+        if not os.path.exists(backup_db_path):
+            if os.path.exists(db_path):
+                copyfile(db_path, backup_db_path)
+
+    def update_job_type(self, sess):
+        result_job = sess.query(self.Job).all()
+        for job in result_job:
+            if job.type is None or job.type == "":
+                result_jobparams = sess.query(db.Jobparams).filter_by(job_id=job.id).one()
+                #only_features = bool(result_jobparams.only_features)
+                #continue_from_features = bool(result_jobparams.continue_from_features)
+                #use_precomputed_msas = bool(result_jobparams.use_precomputed_msas)
+                #batch_features = bool(result_jobparams.batch_features)
+                pipeline = result_jobparams.pipeline
+                if pipeline in ['only_features', 'batch_features']:
+                    type = "features"
+                elif pipeline in ['continue_from_features', 'continue_from_msas']:
+                    type = "prediction"
+                else:
+                    type = "full"
+                job.type = type
+        sess.commit()
+
+    def update_queue_jobid_regex(self, sess):
+        try:
+            result_settings = sess.query(self.Settings).filter_by(id=1).one()
+            if not result_settings is None:
+                if result_settings.queue_jobid_regex is None:
+                    if result_settings.queue_submit == "sbatch":
+                        logger.debug("Setting queue_jobid_regex")
+                        result_settings.queue_jobid_regex = "\D*(\d+)\D*"
+            sess.commit()
+        except orm.exc.NoResultFound:
+            logger.debug("No settings found. This is normal when the application is started for the first time.")
+        except:
+            logger.debug("Could not update jobidregex")
+
+    def migrate_to_pipeline_cmb(self, sess):
+        try:
+            result_jobparams = sess.query(self.Jobparams).all()
+            for row in result_jobparams:
+                if row.pipeline is None:
+                    if row.only_features:
+                        row.pipeline = 'only_features'
+                    elif row.batch_features:
+                        row.pipeline = 'batch_features'
+                    elif row.use_precomputed_msas:
+                        row.pipeline = 'continue_from_msas'
+                    elif row.continue_from_features:
+                        row.pipeline = 'continue_from_features'
+                    elif not any([row.only_features,
+                                  row.batch_features,
+                                  row.use_precomputed_msas,
+                                  row.continue_from_features]):
+                        row.pipeline = 'full'
+            sess.commit()
+        except:
+            logger.debug("Error while migrating to pipeline cmb.")
+
+    def upgrade_db(self):
+        self.logger.debug("Upgrading DB")
+        self.backup_db(self.db_path)
+        #stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
+        stmts = ['ALTER TABLE settings ADD split_job BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE settings ADD num_cpus INTEGER DEFAULT(20)']
+        stmts += ['ALTER TABLE settings ADD max_ram INTEGER DEFAULT(100)']
+        stmts += ['ALTER TABLE settings ADD max_gpu_mem INTEGER DEFAULT(80)']
+        #Change VARCHAR to INTEGER
+        stmts += ['ALTER TABLE settings RENAME COLUMN min_ram TO min_ram_deprec']
+        stmts += ['ALTER TABLE settings ADD COLUMN min_ram INTEGER DEFAULT(50)']
+        stmts += ['UPDATE settings set min_ram=(SELECT min_ram_deprec FROM settings WHERE id=1)']
+        stmts += ['ALTER TABLE jobparams ADD num_recycle INTEGER DEFAULT(3)']
+        stmts += ['ALTER TABLE settings RENAME COLUMN queue_cpu_lane_list TO cpu_lane_list']
+        stmts += ['ALTER TABLE settings RENAME COLUMN queue_gpu_lane_list TO gpu_lane_list']
+        stmts += ['ALTER TABLE settings DROP COLUMN min_ram_deprec']
+        stmts += ['ALTER TABLE jobparams RENAME COLUMN only_msa TO only_features']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN continue_from_features BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE job ADD COLUMN type VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN queue_jobid_regex VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN uniref30_database_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN colabfold_envdb_database_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN mmseqs_binary_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN batch_features BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN precomputed_msas_list VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN pipeline VARCHAR DEFAULT NULL']
+        with self.engine.connect() as conn:
+            for stmt in stmts:
+                try:
+                    rs = conn.execute(stmt)
+                except Exception as e:
+                    logger.debug(e)
+                    #traceback.print_exc()
 

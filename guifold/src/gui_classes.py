@@ -1,16 +1,19 @@
-#Copyright 2022 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+# Copyright 2022 Friedrich Miescher Institute for Biomedical Research
 #
-#Licensed under the Apache License, Version 2.0 (the "License");
-#you may not use this file except in compliance with the License.
-#You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-#Unless required by applicable law or agreed to in writing, software
-#distributed under the License is distributed on an "AS IS" BASIS,
-#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#See the License for the specific language governing permissions and
-#limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+
 from __future__ import absolute_import
 import pkg_resources
 import datetime
@@ -103,6 +106,19 @@ class Variable:
     def set_value(self, value):
         self.value = value
 
+    def set_cmb_by_text(self, value):
+        if self.ctrl_type == 'cmb':
+            for k, v in self.cmb_dict.items():
+                logger.debug(f"Setting cmb, {value} in dict {v}")
+                if value == v:
+                    index = self.ctrl.findText(str(v), QtCore.Qt.MatchFixedString)
+                    if index >= 0:
+                        self.ctrl.setCurrentIndex(index)
+                    else:
+                        logger.debug("Item not found")
+        else:
+            logger.debug("Not a cmb box.")
+
     def set_control(self, result_obj, result_var):
         if result_obj == 'None' or result_obj is None:
             result_obj = ''
@@ -151,6 +167,16 @@ class Variable:
                 return True
             else:
                 return False
+
+    def list_like_str_not_all_none(self):
+        if self.value:
+            lst = self.value.split(',')
+            for e in lst:
+                if not e in [None, "None", "none", ""]:
+                    return True
+        return False
+
+
 
     def update_from_self(self):
         if not self.value is None and not self.ctrl is None:
@@ -242,12 +268,29 @@ class SelectCustomTemplateWidget(QtWidgets.QWidget):
         self.btn_custom_template = btn_custom_template
         self.setLayout(hbox)
 
+class SelectPrecomputedMsasWidget(QtWidgets.QWidget):
+
+    def __init__(self, parent=None):
+        super(SelectPrecomputedMsasWidget, self).__init__(parent)
+
+        # add your buttons
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.setContentsMargins(0, 0, 0, 0)
+        lei_precomputed_msas = QtWidgets.QLineEdit()
+        btn_precomputed_msas = QtWidgets.QToolButton()
+        hbox.addWidget(lei_precomputed_msas)
+        hbox.addWidget(btn_precomputed_msas)
+        self.lei_precomputed_msas = lei_precomputed_msas
+        self.btn_precomputed_msas = btn_precomputed_msas
+        self.setLayout(hbox)
+
 
 class TblCtrlSequenceParams(Variable):
     """GUI list control which shows validation report"""
     def __init__(self, var_name=None, type=None, db=True, ctrl_type=None, db_primary_key=False, db_foreign_key=None):
         super().__init__(var_name, type, db, ctrl_type, db_primary_key, db_foreign_key)
         self.sequence_params_template =  {"custom_template_list": [],
+                                          "precomputed_msas_list": [],
                                         "no_msa_list": [],
                                         "no_template_list": []}
         self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
@@ -309,39 +352,50 @@ class TblCtrlSequenceParams(Variable):
     def init_gui(self):
         self.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.ctrl.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        self.ctrl.setColumnCount(4)
+        self.ctrl.setColumnCount(5)
         self.ctrl.setHorizontalHeaderLabels(("Sequence name",
                                              "Custom template",
+                                             "Precomputed MSAs",
                                              "No MSA",
                                              "No templates"))
         self.ctrl.setColumnWidth(0, 200)
         self.ctrl.setColumnWidth(1, 300)
-        self.ctrl.setColumnWidth(2, 200)
+        self.ctrl.setColumnWidth(2, 300)
         self.ctrl.setColumnWidth(3, 200)
+        self.ctrl.setColumnWidth(4, 200)
         self.ctrl.setStyleSheet("item { align: center; padding: 0px; margin: 0px;}")
 
-    def OnBtnCustomTemplate(self, lei):
-        logger.debug("OnBtnCustomTemplate")
+    def OnBtnSelectFile(self, lei):
         dlg = QtWidgets.QFileDialog()
         if dlg.exec_():
             path = dlg.selectedFiles()[0]
             logger.debug(path)
             lei.setText(path)
 
+    def OnBtnSelectFolder(self, lei, widget):
+        path = QtWidgets.QFileDialog.getExistingDirectory(widget, 'Select Folder')
+        lei.setText(path)
+
     def create_widgets(self, seq_names):
         self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
         for i, _ in enumerate(seq_names):
             custom_template_widget = SelectCustomTemplateWidget()
             custom_template_widget.btn_custom_template.clicked.connect(
-                lambda checked, a=custom_template_widget.lei_custom_template: self.OnBtnCustomTemplate(a))
+                lambda checked, a=custom_template_widget.lei_custom_template: self.OnBtnSelectFile(a))
             self.sequence_params_widgets["custom_template_list"].append(custom_template_widget)
 
             chk_nomsa = QtWidgets.QCheckBox()
             chk_nomsa.setStyleSheet("text-align: center; margin-left:50%; margin-right:50%;")
             self.sequence_params_widgets["no_msa_list"].append(chk_nomsa)
+
             chk_notemplate = QtWidgets.QCheckBox()
             chk_notemplate.setStyleSheet("text-align: center; margin-left:50%; margin-right:50%;")
             self.sequence_params_widgets["no_template_list"].append(chk_notemplate)
+
+            precomputed_msas_widget = SelectPrecomputedMsasWidget()
+            precomputed_msas_widget.btn_precomputed_msas.clicked.connect(
+                lambda checked, a=precomputed_msas_widget.lei_precomputed_msas, b=precomputed_msas_widget: self.OnBtnSelectFolder(a, b))
+            self.sequence_params_widgets["precomputed_msas_list"].append(precomputed_msas_widget)
         logger.debug(self.sequence_params_widgets)
 
     def add_widgets_to_cells(self, seq_names):
@@ -349,8 +403,9 @@ class TblCtrlSequenceParams(Variable):
         for i, seq_name in enumerate(seq_names):
             self.ctrl.setItem(i, 0, QtWidgets.QTableWidgetItem(seq_name))
             self.ctrl.setCellWidget(i, 1, self.sequence_params_widgets['custom_template_list'][i])
-            self.ctrl.setCellWidget(i, 2, self.sequence_params_widgets['no_msa_list'][i])
-            self.ctrl.setCellWidget(i, 3, self.sequence_params_widgets['no_template_list'][i])
+            self.ctrl.setCellWidget(i, 2, self.sequence_params_widgets['precomputed_msas_list'][i])
+            self.ctrl.setCellWidget(i, 3, self.sequence_params_widgets['no_msa_list'][i])
+            self.ctrl.setCellWidget(i, 4, self.sequence_params_widgets['no_template_list'][i])
             self.ctrl.resizeColumnsToContents()
 
     def read_sequences(self, sequence_ctrl, sess=None):
@@ -381,13 +436,17 @@ class TblCtrlSequenceParams(Variable):
             for key in self.sequence_params_widgets.keys():
                 if key == "custom_template_list":
                     value = self.sequence_params_widgets[key][i].lei_custom_template.text()
-
+                    self.sequence_params_values[key].append(value)
+                elif key == "precomputed_msas_list":
+                    value = self.sequence_params_widgets[key][i].lei_precomputed_msas.text()
                     self.sequence_params_values[key].append(value)
                 else:
                     self.sequence_params_values[key].append(str(self.sequence_params_widgets[key][i].isChecked()))
 
 
+
         return (','.join(['None' if x == "" else x for x in self.sequence_params_values['custom_template_list']]),
+                ','.join(['None' if x == "" else x for x in self.sequence_params_values['precomputed_msas_list']]),
                 ','.join(self.sequence_params_values['no_msa_list']),
                 ','.join(self.sequence_params_values['no_template_list']),
                 ','.join(seq_names))
@@ -401,6 +460,8 @@ class TblCtrlSequenceParams(Variable):
                 logger.debug(f"i {i} key {key} {self.sequence_params_values[key][i]}")
                 if key == "custom_template_list":
                     self.sequence_params_widgets[key][i].lei_custom_template.setText(self.sequence_params_values[key][i])
+                elif key == "precomputed_msas_list":
+                    self.sequence_params_widgets[key][i].lei_precomputed_msas.setText(self.sequence_params_values[key][i])
                 else:
                     val = self.sequence_params_values[key][i]
                     if val in ["1", "True"]:
@@ -423,7 +484,11 @@ class TblCtrlSequenceParams(Variable):
             if not db_result.custom_template_list is None:
                 self.sequence_params_values['custom_template_list'] = ['None' if x == '' else x for x in db_result.custom_template_list.split(',')]
             else:
-                self.sequence_params_values['custom_template_list'] = ['']
+                self.sequence_params_values['custom_template_list'] = ['None' for _ in seq_names]
+            if not db_result.precomputed_msas_list is None:
+                self.sequence_params_values['precomputed_msas_list'] = ['None' if x == '' else x for x in db_result.precomputed_msas_list.split(',')]
+            else:
+                self.sequence_params_values['precomputed_msas_list'] = ['None' for _ in seq_names]
             if not db_result.no_msa_list is None:
                 self.sequence_params_values['no_msa_list'] = db_result.no_msa_list.split(',')
             if not db_result.no_template_list is None:
@@ -678,8 +743,9 @@ class JobParams(GUIVariables):
                                                       db=False,
                                                       ctrl_type='tbl')
         self.custom_template_list = Variable('custom_template_list', 'str', cmd=True)
-        self.use_precomputed_msas = Variable('use_precomputed_msas', 'bool', ctrl_type='chk', cmd=True)
-        self.continue_from_features = Variable('continue_from_features', 'bool', ctrl_type='chk', cmd=True)
+        self.precomputed_msas_list = Variable('precomputed_msas_list', 'str', cmd=True)
+        #self.use_precomputed_msas = Variable('use_precomputed_msas', 'bool', ctrl_type='chk', cmd=True)
+        #self.continue_from_features = Variable('continue_from_features', 'bool', ctrl_type='chk', cmd=True)
         self.no_msa_list = Variable('no_msa_list', 'str', cmd=True)
         self.no_template_list = Variable('no_template_list', 'str', cmd=True)
         self.run_relax = Variable('run_relax', 'bool', ctrl_type='chk', cmd=True)
@@ -699,10 +765,17 @@ class JobParams(GUIVariables):
         self.benchmark = Variable('benchmark', 'bool', ctrl_type='chk', cmd=True)
         self.random_seed = Variable('random_seed', 'str', ctrl_type='lei', cmd=True)
         self.max_template_date = Variable('max_template_date', 'str', ctrl_type='lei', cmd=True)
-        self.precomputed_msas_path = Variable('precomputed_msas_path', 'str', ctrl_type='lei')
-        self.only_features = Variable('only_features', 'bool', ctrl_type='chk', cmd=True)
+        self.precomputed_msas_path = Variable('precomputed_msas_path', 'str', ctrl_type='lei', cmd=True)
+        #self.only_features = Variable('only_features', 'bool', ctrl_type='chk', cmd=True)
         self.force_cpu = Variable('force_cpu', 'bool', ctrl_type='chk')
         self.num_recycle = Variable('num_recycle', 'int', ctrl_type="sbo", cmd=True)
+        #self.batch_features = Variable('batch_features', 'bool', ctrl_type='chk', cmd=True)
+        self.pipeline_dict = {0: 'full',
+                              1: 'only_features',
+                              2: 'batch_features',
+                              3: 'continue_from_msas',
+                              4: 'continue_from_features'}
+        self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
 
 
     def set_db(self, db):
@@ -752,10 +825,12 @@ class JobParams(GUIVariables):
         logger.debug(f"Sequences {self.sequences.get_value()}")
         logger.debug(error_msgs)
         self.custom_template_list.value,\
+        self.precomputed_msas_list.value,\
         self.no_msa_list.value,\
         self.no_template_list.value,\
         self.seq_names.value = self.sequence_params.get_from_table(seq_names)
         logger.debug(self.custom_template_list.value)
+        logger.debug(self.precomputed_msas_list.value)
         logger.debug(self.job_name.ctrl.text())
         job_name = self.job_name.ctrl.text()
         if self.job_name.ctrl.text() == "":
@@ -824,6 +899,7 @@ class JobParams(GUIVariables):
 
     def update_from_sequence_table(self):
         self.custom_template_list.value, \
+        self.precomputed_msas_list.value, \
         self.no_msa_list.value, \
         self.no_template_list.value, \
         self.seq_names.value = self.sequence_params.get_from_table(self.seq_names.value.split(','))
@@ -939,11 +1015,11 @@ class Job(GUIVariables):
         return result
 
     def get_type(self, job_params):
-        if job_params['continue_from_features']:
+        if job_params['pipeline'] in ['continue_from_msas', 'continue_from_features']:
             type = "prediction"
-        elif job_params['only_features']:
+        elif job_params['pipeline'] in ['only_features', 'batch_features']:
             type = "features"
-        elif not job_params['continue_from_features'] and not job_params['only_features']:
+        else:
             type = "full"
         return type
 
@@ -983,7 +1059,7 @@ class Job(GUIVariables):
         msgs = []
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
-        command = ["run_alphafold.py "] + job_args
+        command = ["run_alphafold.py\\\n"] + job_args
         command = ' '.join(command)
         logfile = job_params["log_file"]
         submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
@@ -999,12 +1075,12 @@ class Job(GUIVariables):
         to_render = {}
 
         if 'num_cpus' in template_vars:
-            if job_params['use_precomputed_msas']:
+            if job_params['pipeline'] == 'continue_from_features':
                 to_render['num_cpus'] = 1
             else:
                 to_render['num_cpus'] = job_params['num_cpus']
         if 'use_gpu' in template_vars:
-            if job_params['only_features'] or job_params['force_cpu']:
+            if job_params['pipeline'] == 'only_features' or job_params['force_cpu']:
                 to_render['use_gpu'] = False
             else:
                 to_render['use_gpu'] = True
@@ -1034,7 +1110,7 @@ class Job(GUIVariables):
             if estimated_gpu_mem < job_params['min_ram']:
                 ram = job_params['min_ram']
             else:
-                if job_params['force_cpu'] or job_params['only_features']:
+                if job_params['force_cpu'] or job_params['pipeline'] == 'only_features':
                     ram = job_params['min_ram']
                 else:
                     ram = estimated_gpu_mem
@@ -1123,7 +1199,7 @@ class Job(GUIVariables):
                 job_args.append('--model_preset multimer')
             else:
                 job_args.append('--model_preset monomer_ptm')
-        job_args.extend(['--{} {}'.format(k, v) for k, v in cmd_dict.items()])
+        job_args.extend(['--{} {}\\\n'.format(k, v) if i < len(cmd_dict)-1 else '--{} {}'.format(k, v) for i, (k, v) in enumerate(cmd_dict.items())])
         logger.debug(job_args)
         #job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse$', x)]
 
@@ -1136,13 +1212,28 @@ class Job(GUIVariables):
             job_params['max_ram'] = self.get_max_ram()
 
         #Decide which GPUs to use if several are available on a cluster
-        if job_params['queue']:
-            gpu_mem = job_params['max_gpu_mem']
+        if not any([job_params['force_cpu'],
+                    job_params['pipeline'] in ['only_features', 'batch_features']]):
+            gpu_mem = None
         else:
-            gpu_mem = self.get_gpu_mem()
+            if job_params['queue']:
+                gpu_mem = job_params['max_gpu_mem']
+            else:
+                gpu_mem = self.get_gpu_mem()
+
+        #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
+        if job_params['db_preset'] == 'colabfold':
+            if job_params['pipeline'] in ['full', 'only_features', 'batch_features']:
+               if job_params['max_ram'] < 500:
+                   job_params['min_ram'] = job_params['max_ram']
+               else:
+                   job_params['min_ram'] = 500
 
         split_mem = None
-        if not any([gpu_mem is None, estimated_gpu_mem is None, job_params['force_cpu'], job_params['only_features']]):
+        if not any([gpu_mem is None,
+                    estimated_gpu_mem is None,
+                    job_params['force_cpu'],
+                    job_params['pipeline'] in ['only_features', 'batch_features']]):
             if estimated_gpu_mem > gpu_mem:
                 if estimated_gpu_mem > job_params['max_ram']:
                     error_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
@@ -1165,10 +1256,10 @@ class Job(GUIVariables):
             if not split_mem is None and not job_params['force_cpu']:
                 cmd = [f'export TF_FORCE_UNIFIED_MEMORY=True; export XLA_PYTHON_CLIENT_MEM_FRACTION={split_mem}; ']
             #cmd = [f"/bin/bash -c \'echo test > {job_params['log_file']}\'"]
-            if job_params['only_features'] or job_params['force_cpu']:
+            if job_params['pipeline'] in ['only_features', 'batch_features'] or job_params['force_cpu']:
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
-            cmd += [f"run_alphafold.py"] + job_args + [f">> {job_params['log_file']} 2>&1"]
+            cmd += [f"run_alphafold.py\\\n"] + job_args + [f">> {job_params['log_file']} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
         return cmd, error_msgs, warn_msgs, estimated_gpu_mem
 
@@ -1399,10 +1490,12 @@ class Job(GUIVariables):
 
                 rows = self.list.ctrl.rowCount()
                 self.list.ctrl.insertRow(rows)
-                self.list.ctrl.setItem(rows , 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
-                self.list.ctrl.setItem(rows , 1, QtWidgets.QTableWidgetItem(job.name))
-                self.list.ctrl.setItem(rows , 2, QtWidgets.QTableWidgetItem(job.type.capitalize()))
-                self.list.ctrl.setItem(rows , 3, QtWidgets.QTableWidgetItem(status))
+                self.list.ctrl.setItem(rows, 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
+                self.list.ctrl.setItem(rows, 1, QtWidgets.QTableWidgetItem(job.name))
+                self.list.ctrl.setItem(rows, 2, QtWidgets.QTableWidgetItem(job.type.capitalize()))
+                self.list.ctrl.setItem(rows, 3, QtWidgets.QTableWidgetItem(status))
+            self.list.ctrl.scrollToItem(self.list.ctrl.item(self.list.ctrl.currentRow(), 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+            #self.list.ctrl.scrollToBottom()
         return gui_params
 
 
@@ -1556,12 +1649,12 @@ class Settings(GUIVariables):
         self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
-        self.num_cpus = Variable('num_cpus', 'int', ctrl_type='sbo')
+        self.num_cpus = Variable('num_cpus', 'int', ctrl_type='sbo', cmd=True)
         self.max_gpu_mem = Variable('max_gpu_mem', 'int', ctrl_type='sbo')
         self.split_job = Variable('split_job', 'bool', ctrl_type='chk')
         self.min_ram = Variable('min_ram', 'int', ctrl_type='sbo')
         self.max_ram = Variable('max_ram', 'int', ctrl_type='sbo')
-        self.queue_submit_dialog = Variable('queue_submit_dialog', 'bool', ctrl_type='chk')
+        #self.queue_submit_dialog = Variable('queue_submit_dialog', 'bool', ctrl_type='chk')
         self.queue_jobid_regex = Variable('queue_jobid_regex', 'str', ctrl_type='lei')
         self.queue_default = Variable('queue_default', 'bool', ctrl_type='chk')
         self.jackhmmer_binary_path =  Variable('jackhmmer_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -1650,7 +1743,7 @@ class Settings(GUIVariables):
                                     obj.value = True
                                 elif config[section][key].lower() == 'false':
                                     obj.value = False
-                                else:
+                                elif not config[section][key] == '':
                                     obj.value = config[section][key]
                 else:
                     error_msg = f"{section} section missing from config file"
@@ -1729,10 +1822,10 @@ class Settings(GUIVariables):
             sess.merge(row)
         sess.commit()
 
-    def update_queue_submit(self, value, sess):
-        result = sess.query(self.db.Settings).get(1)
-        result.queue_submit_dialog = value
-        sess.commit()
+    # def update_queue_submit(self, value, sess):
+    #     result = sess.query(self.db.Settings).get(1)
+    #     result.queue_submit_dialog = value
+    #     sess.commit()
 
     def update_settings(self, insert_dict, sess):
         logger.debug("Update settings")
@@ -1748,6 +1841,8 @@ class DefaultValues:
     def __init__(self, other):
         self.job_name = None
         self.output_dir = None
+        self.db_preset = 'full_dbs'
+        self.pipeline = 'full'
         settings = other.settings.get_from_db(other.sess)
         if settings.queue_default:
             self.queue = True

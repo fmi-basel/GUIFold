@@ -6,1072 +6,1109 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>836</width>
-    <height>745</height>
+    <width>932</width>
+    <height>834</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
   </property>
   <property name="windowTitle">
    <string>Settings</string>
   </property>
-  <widget class="QDialogButtonBox" name="btn_settings_button_box">
-   <property name="geometry">
-    <rect>
-     <x>460</x>
-     <y>680</y>
-     <width>341</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
-  </widget>
-  <widget class="QGroupBox" name="groupBox">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>20</y>
-     <width>391</width>
-     <height>411</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Queueing System</string>
-   </property>
-   <widget class="QWidget" name="gridLayoutWidget">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>30</y>
-      <width>371</width>
-      <height>351</height>
-     </rect>
-    </property>
-    <layout class="QGridLayout" name="gridLayout">
-     <item row="4" column="1">
-      <widget class="QSpinBox" name="sbo_settings_max_gpu_mem">
-       <property name="toolTip">
-        <string>Maximum GPU memory available in the cluster. </string>
-       </property>
-       <property name="statusTip">
-        <string>Maximum GPU memory available in the cluster.</string>
-       </property>
-       <property name="maximum">
-        <number>9999</number>
-       </property>
-       <property name="value">
-        <number>80</number>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="1">
-      <widget class="QSpinBox" name="sbo_settings_num_cpus">
-       <property name="toolTip">
-        <string>Number of CPUs is relevant for MSA generation. </string>
-       </property>
-       <property name="statusTip">
-        <string>Number of CPUs is relevant for MSA generation. </string>
-       </property>
-       <property name="maximum">
-        <number>9999</number>
-       </property>
-       <property name="value">
-        <number>20</number>
-       </property>
-      </widget>
-     </item>
+  <layout class="QVBoxLayout" name="verticalLayout_6">
+   <item>
+    <layout class="QGridLayout" name="gridLayout" rowstretch="0" columnstretch="0,0,0" rowminimumheight="0">
+     <property name="sizeConstraint">
+      <enum>QLayout::SetDefaultConstraint</enum>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>5</number>
+     </property>
      <item row="0" column="0">
-      <widget class="QLabel" name="label_4">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Queue submit cmd</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="0">
-      <widget class="QLabel" name="label_6">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-       </property>
-       <property name="statusTip">
-        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-       </property>
-       <property name="text">
-        <string>Max RAM (GB)</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_27">
-       <property name="text">
-        <string>Queue account</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="lei_settings_queue_account">
-       <property name="toolTip">
-        <string>When a cluster specific account per user is required.</string>
-       </property>
-       <property name="statusTip">
-        <string>When a cluster specific account per user is required.</string>
-       </property>
-       <property name="placeholderText">
-        <string>12345</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="0">
-      <widget class="QLabel" name="label_3">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
-       </property>
-       <property name="statusTip">
-        <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
-       </property>
-       <property name="text">
-        <string>Min RAM (GB)</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="0">
-      <widget class="QLabel" name="label_7">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string>Maximum GPU memory available in the cluster.</string>
-       </property>
-       <property name="statusTip">
-        <string>Maximum GPU memory available in the cluster.</string>
-       </property>
-       <property name="text">
-        <string>Max GPU memory (GB)</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_5">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Queue cancel cmd</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QLineEdit" name="lei_settings_queue_submit">
-       <property name="toolTip">
-        <string>Command to submit batch jobs. (SLURM: sbatch; IBM LSF: bsub &lt;; UGE/SGE: qsub). </string>
-       </property>
-       <property name="statusTip">
-        <string>Command to submit batch jobs. (SLURM: sbatch; IBM LSF: bsub &lt;; UGE/SGE: qsub). </string>
-       </property>
-       <property name="placeholderText">
-        <string>sbatch</string>
-       </property>
-      </widget>
-     </item>
-     <item row="9" column="0">
-      <widget class="QLabel" name="label">
-       <property name="toolTip">
-        <string>Activate Queue checkbox on Input Page by default.</string>
-       </property>
-       <property name="statusTip">
-        <string>Activate Queue checkbox on Input Page by default.</string>
-       </property>
-       <property name="text">
-        <string>Use queue by default</string>
-       </property>
-      </widget>
-     </item>
-     <item row="9" column="1">
-      <widget class="QCheckBox" name="chk_settings_queue_default">
-       <property name="toolTip">
-        <string>Activate Queue checkbox on Input Page by default.</string>
-       </property>
-       <property name="statusTip">
-        <string>Activate Queue checkbox on Input Page by default.</string>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-     </item>
-     <item row="10" column="1">
-      <widget class="QCheckBox" name="chk_settings_queue_submit_dialog">
-       <property name="toolTip">
-        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
-       </property>
-       <property name="statusTip">
-        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="lei_settings_queue_cancel">
-       <property name="toolTip">
-        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
-       </property>
-       <property name="statusTip">
-        <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
-       </property>
-       <property name="placeholderText">
-        <string>scancel</string>
-       </property>
-      </widget>
-     </item>
-     <item row="10" column="0">
-      <widget class="QLabel" name="label_30">
-       <property name="toolTip">
-        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
-       </property>
-       <property name="statusTip">
-        <string>After pressing &quot;Run&quot; show a dialog with the generated submission script.</string>
-       </property>
-       <property name="text">
-        <string>Show submit dialog</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="0">
-      <widget class="QLabel" name="label_31">
-       <property name="toolTip">
-        <string>Split job into CPU and GPU submissions.</string>
-       </property>
-       <property name="statusTip">
-        <string>Split job into CPU and GPU submissions.</string>
-       </property>
-       <property name="text">
-        <string>Split job</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="1">
-      <widget class="QCheckBox" name="chk_settings_split_job">
-       <property name="toolTip">
-        <string>Split job into CPU and GPU submissions. Requires Job ID Regular Expression to be defined. Only tested on SLURM.</string>
-       </property>
-       <property name="statusTip">
-        <string>Split job into CPU and GPU submissions. Requires JobID Regular Expression to be defined. Only tested on SLURM.</string>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_32">
-       <property name="toolTip">
-        <string>Number of CPUs is relevant for MSA generation. </string>
-       </property>
-       <property name="statusTip">
-        <string>Number of CPUs is relevant for MSA generation. </string>
-       </property>
-       <property name="text">
-        <string>Number of CPUs</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="1">
-      <widget class="QSpinBox" name="sbo_settings_max_ram">
-       <property name="toolTip">
-        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-       </property>
-       <property name="statusTip">
-        <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-       </property>
-       <property name="maximum">
-        <number>9999</number>
-       </property>
-       <property name="value">
-        <number>900</number>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="1">
-      <widget class="QSpinBox" name="sbo_settings_min_ram">
-       <property name="toolTip">
-        <string>Minimum RAM to reserve. When reserved RAM is too little some MSAs can cause out-of-memory error.</string>
-       </property>
-       <property name="statusTip">
-        <string>Minimum RAM to reserve. When reserved RAM is too little (&lt; 50 GB) some MSAs can cause out-of-memory error.</string>
-       </property>
-       <property name="maximum">
-        <number>9999</number>
-       </property>
-       <property name="value">
-        <number>70</number>
-       </property>
-      </widget>
-     </item>
-     <item row="8" column="1">
-      <widget class="QLineEdit" name="lei_settings_queue_jobid_regex">
-       <property name="toolTip">
-        <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
-       </property>
-       <property name="statusTip">
-        <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
-       </property>
-      </widget>
-     </item>
-     <item row="8" column="0">
-      <widget class="QLabel" name="label_28">
-       <property name="text">
-        <string>JobID regular expression</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_3">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>440</y>
-     <width>391</width>
-     <height>291</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Binary paths</string>
-   </property>
-   <widget class="QWidget" name="gridLayoutWidget_3">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>30</y>
-      <width>371</width>
-      <height>251</height>
-     </rect>
-    </property>
-    <layout class="QGridLayout" name="gridLayout_3">
-     <item row="3" column="1">
-      <widget class="QLineEdit" name="lei_settings_hmmsearch_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/hhsuite/bin/hmmsearch</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="2">
-      <widget class="QToolButton" name="btn_settings_hmmsearch_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="2">
-      <widget class="QToolButton" name="btn_settings_hhsearch_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="2">
-      <widget class="QToolButton" name="btn_settings_hhblits_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="1">
-      <widget class="QLineEdit" name="lei_settings_kalign_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/kalign/bin/kalign</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="1">
-      <widget class="QLineEdit" name="lei_settings_hhalign_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/hhsuite/bin/hhalign</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="1">
-      <widget class="QLineEdit" name="lei_settings_hmmbuild_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/hhsuite/bin/hmmbuild</string>
-       </property>
-      </widget>
+      <layout class="QVBoxLayout" name="verticalLayout" stretch="3,0,2">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QGroupBox" name="groupBox">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Queueing System</string>
+         </property>
+         <widget class="QWidget" name="gridLayoutWidget">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>30</y>
+            <width>371</width>
+            <height>351</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_2">
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="lei_settings_queue_submit">
+             <property name="toolTip">
+              <string>Command to submit batch jobs. (SLURM: sbatch; IBM LSF: bsub &lt;; UGE/SGE: qsub). </string>
+             </property>
+             <property name="statusTip">
+              <string>Command to submit batch jobs. (SLURM: sbatch; IBM LSF: bsub &lt;; UGE/SGE: qsub). </string>
+             </property>
+             <property name="placeholderText">
+              <string>sbatch</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="label">
+             <property name="toolTip">
+              <string>Activate Queue checkbox on Input Page by default.</string>
+             </property>
+             <property name="statusTip">
+              <string>Activate Queue checkbox on Input Page by default.</string>
+             </property>
+             <property name="text">
+              <string>Use queue by default</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_7">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="toolTip">
+              <string>Maximum GPU memory available in the cluster.</string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum GPU memory available in the cluster.</string>
+             </property>
+             <property name="text">
+              <string>Max GPU memory (GB)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QCheckBox" name="chk_settings_queue_default">
+             <property name="toolTip">
+              <string>Activate Queue checkbox on Input Page by default.</string>
+             </property>
+             <property name="statusTip">
+              <string>Activate Queue checkbox on Input Page by default.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="lei_settings_queue_cancel">
+             <property name="toolTip">
+              <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+             </property>
+             <property name="statusTip">
+              <string>Command to cancel batch jobs. (SLURM: scancel; LSF: bkill &lt;; UGE/SGE: qdel). </string>
+             </property>
+             <property name="placeholderText">
+              <string>scancel</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_5">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Queue cancel cmd</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="label_31">
+             <property name="toolTip">
+              <string>Split job into CPU and GPU submissions.</string>
+             </property>
+             <property name="statusTip">
+              <string>Split job into CPU and GPU submissions.</string>
+             </property>
+             <property name="text">
+              <string>Split job</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QCheckBox" name="chk_settings_split_job">
+             <property name="toolTip">
+              <string>Split job into CPU and GPU submissions. Requires Job ID Regular Expression to be defined. Only tested on SLURM.</string>
+             </property>
+             <property name="statusTip">
+              <string>Split job into CPU and GPU submissions. Requires JobID Regular Expression to be defined. Only tested on SLURM.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_32">
+             <property name="toolTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="statusTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="text">
+              <string>Number of CPUs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_4">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Queue submit cmd</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QSpinBox" name="sbo_settings_num_cpus">
+             <property name="toolTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="statusTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>20</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="lei_settings_queue_account">
+             <property name="toolTip">
+              <string>When a cluster specific account per user is required.</string>
+             </property>
+             <property name="statusTip">
+              <string>When a cluster specific account per user is required.</string>
+             </property>
+             <property name="placeholderText">
+              <string>12345</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_6">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="toolTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="text">
+              <string>Max RAM (GB)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_27">
+             <property name="text">
+              <string>Queue account</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QSpinBox" name="sbo_settings_max_gpu_mem">
+             <property name="toolTip">
+              <string>Maximum GPU memory available in the cluster. </string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum GPU memory available in the cluster.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>80</number>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="label_3">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="toolTip">
+              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
+             </property>
+             <property name="statusTip">
+              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
+             </property>
+             <property name="text">
+              <string>Min RAM (GB)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QSpinBox" name="sbo_settings_max_ram">
+             <property name="toolTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>900</number>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QSpinBox" name="sbo_settings_min_ram">
+             <property name="toolTip">
+              <string>Minimum RAM to reserve. When reserved RAM is too little some MSAs can cause out-of-memory error.</string>
+             </property>
+             <property name="statusTip">
+              <string>Minimum RAM to reserve. When reserved RAM is too little (&lt; 50 GB) some MSAs can cause out-of-memory error.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>70</number>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QLineEdit" name="lei_settings_queue_jobid_regex">
+             <property name="toolTip">
+              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+             </property>
+             <property name="statusTip">
+              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <widget class="QLabel" name="label_28">
+             <property name="text">
+              <string>JobID regular expression</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Preferred</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_3">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Binary paths</string>
+         </property>
+         <widget class="QWidget" name="gridLayoutWidget_3">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>30</y>
+            <width>371</width>
+            <height>251</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_3">
+           <item row="3" column="1">
+            <widget class="QLineEdit" name="lei_settings_hmmsearch_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/hhsuite/bin/hmmsearch</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QToolButton" name="btn_settings_hmmsearch_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <widget class="QToolButton" name="btn_settings_hhsearch_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QToolButton" name="btn_settings_hhblits_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QLineEdit" name="lei_settings_kalign_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/kalign/bin/kalign</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QLineEdit" name="lei_settings_hhalign_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/hhsuite/bin/hhalign</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="lei_settings_hmmbuild_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/hhsuite/bin/hmmbuild</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QToolButton" name="btn_settings_jackhmmer_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="lei_settings_jackhmmer_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/jackhmmer/bin</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_10">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>hhsearch</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="lei_settings_hhsearch_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/hhsuite/bin/hhsearch</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="label_14">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>kalign</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="2">
+            <widget class="QToolButton" name="btn_settings_hmmbuild_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QToolButton" name="btn_settings_hhalign_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="2">
+            <widget class="QToolButton" name="btn_settings_kalign_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_13">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>hhalign</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>jackhmmer</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="lei_settings_hhblits_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/hhsuite/bin/hhblits</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_8">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>hhblits</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_11">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>hmmsearch</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_12">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>hmmbuild</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="label_34">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>mmseqs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QLineEdit" name="lei_settings_mmseqs_binary_path">
+             <property name="placeholderText">
+              <string>/path/to/kalign/bin/mmseqs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="2">
+            <widget class="QToolButton" name="btn_settings_mmseqs_binary_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
      </item>
      <item row="0" column="2">
-      <widget class="QToolButton" name="btn_settings_jackhmmer_binary_path">
-       <property name="text">
-        <string>...</string>
+      <layout class="QVBoxLayout" name="verticalLayout_4" stretch="10,1,2,2">
+       <property name="sizeConstraint">
+        <enum>QLayout::SetMinimumSize</enum>
        </property>
-      </widget>
+       <item>
+        <widget class="QGroupBox" name="groupBox_4">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Database/Model paths</string>
+         </property>
+         <widget class="QWidget" name="gridLayoutWidget_5">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>30</y>
+            <width>371</width>
+            <height>421</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_5">
+           <item row="10" column="0">
+            <widget class="QLabel" name="label_26">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>pdb_seqres</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="1">
+            <widget class="QLineEdit" name="lei_settings_pdb_seqres_database_path">
+             <property name="placeholderText">
+              <string>/path/to/pdb_seqres/pdb_seqres.txt</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="2">
+            <widget class="QToolButton" name="btn_settings_uniclust30_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="2">
+            <widget class="QToolButton" name="btn_settings_small_bfd_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="2">
+            <widget class="QToolButton" name="btn_settings_bfd_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="2">
+            <widget class="QToolButton" name="btn_settings_uniprot_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="2">
+            <widget class="QToolButton" name="btn_settings_mgnify_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QLineEdit" name="lei_settings_uniclust30_database_path">
+             <property name="placeholderText">
+              <string>/path/to/uniclust30/uniclust30_2018_08/uniclust30_2018_08</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="1">
+            <widget class="QLineEdit" name="lei_settings_uniprot_database_path">
+             <property name="placeholderText">
+              <string>/path/to/uniprot/uniprot.fasta</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="2">
+            <widget class="QToolButton" name="btn_settings_pdb70_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_35">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>uniref90</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="2">
+            <widget class="QToolButton" name="btn_settings_obsolete_pdbs_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="label_36">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>uniclust30</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QLineEdit" name="lei_settings_mgnify_database_path">
+             <property name="placeholderText">
+              <string>/path/to/mgnify/mgy_cluster.fa</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QLineEdit" name="lei_settings_small_bfd_database_path">
+             <property name="text">
+              <string/>
+             </property>
+             <property name="placeholderText">
+              <string>/path/to/small_bfd/bfd-first_non_consensus_sequences.fasta</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="0">
+            <widget class="QLabel" name="label_37">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>pdb70</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_38">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>bfd</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="lei_settings_uniref90_database_path">
+             <property name="placeholderText">
+              <string>/path/to/uniref90/uniref90.fasta</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="2">
+            <widget class="QToolButton" name="btn_settings_uniref90_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QLineEdit" name="lei_settings_bfd_database_path">
+             <property name="placeholderText">
+              <string>/path/to/bfd/bdf_metaclust_clu_complete_id30_c90_final_seq.sorted_opt</string>
+             </property>
+            </widget>
+           </item>
+           <item row="8" column="0">
+            <widget class="QLabel" name="label_39">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>uniprot</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QLineEdit" name="lei_settings_pdb70_database_path">
+             <property name="text">
+              <string/>
+             </property>
+             <property name="placeholderText">
+              <string>/path/to/pdb70/pdb70</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="label_40">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>small_bfd</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QToolButton" name="btn_settings_data_dir">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="lei_settings_data_dir">
+             <property name="placeholderText">
+              <string>/path/to/alphafold_models</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_41">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>alphafold_models</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="1">
+            <widget class="QLineEdit" name="lei_settings_template_mmcif_dir">
+             <property name="placeholderText">
+              <string>/path/to/pdb_mmcif/mmcif_files</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="2">
+            <widget class="QToolButton" name="btn_settings_template_mmcif_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="10" column="2">
+            <widget class="QToolButton" name="btn_settings_pdb_seqres_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="1">
+            <widget class="QLineEdit" name="lei_settings_obsolete_pdbs_path">
+             <property name="placeholderText">
+              <string>/path/to/pdb_mmcif/obsolete.dat</string>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="0">
+            <widget class="QLabel" name="label_42">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>obsolete_pdbs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="11" column="0">
+            <widget class="QLabel" name="label_43">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>template_mmcif</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_44">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>mgnify</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_45">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>uniref30</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QLineEdit" name="lei_settings_uniref30_database_path">
+             <property name="placeholderText">
+              <string>/path/to/uniref30_2202/uniref30_2202_db</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_46">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>colabfold_envdb</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLineEdit" name="lei_settings_colabfold_envdb_database_path">
+             <property name="placeholderText">
+              <string>/path/to/colabfold_envdb_202108/colabfold_envdb_202108_db</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="2">
+            <widget class="QToolButton" name="btn_settings_uniref30_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QToolButton" name="btn_settings_colabfold_envdb_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_2">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Other</string>
+         </property>
+         <widget class="QWidget" name="gridLayoutWidget_2">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>30</y>
+            <width>371</width>
+            <height>53</height>
+           </rect>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_6">
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="lei_settings_custom_tempdir"/>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_2">
+             <property name="text">
+              <string>Custom tempdir</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QToolButton" name="btn_settings_custom_tempdir">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_47">
+             <property name="text">
+              <string>Use GPU for relax</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QCheckBox" name="chk_settings_use_gpu_relax">
+             <property name="toolTip">
+              <string>Use GPU for the Amber minimization step. Significantly speeds up jobs with large sequences.</string>
+             </property>
+             <property name="statusTip">
+              <string>Use GPU for the Amber minimization step. Significantly speeds up jobs with large sequences.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_5">
+         <property name="sizeConstraint">
+          <enum>QLayout::SetMinimumSize</enum>
+         </property>
+         <item>
+          <widget class="QPushButton" name="btn_settings_load_global_settings">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Load global settings</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
      </item>
      <item row="0" column="1">
-      <widget class="QLineEdit" name="lei_settings_jackhmmer_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/jackhmmer/bin</string>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
        </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_10">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
+       <property name="sizeType">
+        <enum>QSizePolicy::Preferred</enum>
        </property>
-       <property name="text">
-        <string>hhsearch</string>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
        </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="lei_settings_hhsearch_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/hhsuite/bin/hhsearch</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="0">
-      <widget class="QLabel" name="label_14">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>kalign</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="2">
-      <widget class="QToolButton" name="btn_settings_hmmbuild_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="2">
-      <widget class="QToolButton" name="btn_settings_hhalign_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="2">
-      <widget class="QToolButton" name="btn_settings_kalign_binary_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="0">
-      <widget class="QLabel" name="label_13">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>hhalign</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_9">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>jackhmmer</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="lei_settings_hhblits_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/hhsuite/bin/hhblits</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_8">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>hhblits</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_11">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>hmmsearch</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="0">
-      <widget class="QLabel" name="label_12">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>hmmbuild</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="0">
-      <widget class="QLabel" name="label_34">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>mmseqs</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="1">
-      <widget class="QLineEdit" name="lei_settings_mmseqs_binary_path">
-       <property name="placeholderText">
-        <string>/path/to/kalign/bin/mmseqs</string>
-       </property>
-      </widget>
+      </spacer>
      </item>
     </layout>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_4">
-   <property name="geometry">
-    <rect>
-     <x>420</x>
-     <y>20</y>
-     <width>391</width>
-     <height>471</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Database/Model paths</string>
-   </property>
-   <widget class="QWidget" name="gridLayoutWidget_4">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>30</y>
-      <width>371</width>
-      <height>421</height>
-     </rect>
-    </property>
-    <layout class="QGridLayout" name="gridLayout_4">
-     <item row="10" column="0">
-      <widget class="QLabel" name="label_22">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>pdb_seqres</string>
-       </property>
-      </widget>
-     </item>
-     <item row="10" column="1">
-      <widget class="QLineEdit" name="lei_settings_pdb_seqres_database_path">
-       <property name="placeholderText">
-        <string>/path/to/pdb_seqres/pdb_seqres.txt</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="2">
-      <widget class="QToolButton" name="btn_settings_uniclust30_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="2">
-      <widget class="QToolButton" name="btn_settings_small_bfd_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="2">
-      <widget class="QToolButton" name="btn_settings_bfd_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="8" column="2">
-      <widget class="QToolButton" name="btn_settings_uniprot_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="2">
-      <widget class="QToolButton" name="btn_settings_mgnify_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="1">
-      <widget class="QLineEdit" name="lei_settings_uniclust30_database_path">
-       <property name="placeholderText">
-        <string>/path/to/uniclust30/uniclust30_2018_08/uniclust30_2018_08</string>
-       </property>
-      </widget>
-     </item>
-     <item row="8" column="1">
-      <widget class="QLineEdit" name="lei_settings_uniprot_database_path">
-       <property name="placeholderText">
-        <string>/path/to/uniprot/uniprot.fasta</string>
-       </property>
-      </widget>
-     </item>
-     <item row="9" column="2">
-      <widget class="QToolButton" name="btn_settings_pdb70_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_18">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>uniref90</string>
-       </property>
-      </widget>
-     </item>
-     <item row="12" column="2">
-      <widget class="QToolButton" name="btn_settings_obsolete_pdbs_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="7" column="0">
-      <widget class="QLabel" name="label_15">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>uniclust30</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="1">
-      <widget class="QLineEdit" name="lei_settings_mgnify_database_path">
-       <property name="placeholderText">
-        <string>/path/to/mgnify/mgy_cluster.fa</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="1">
-      <widget class="QLineEdit" name="lei_settings_small_bfd_database_path">
-       <property name="text">
-        <string/>
-       </property>
-       <property name="placeholderText">
-        <string>/path/to/small_bfd/bfd-first_non_consensus_sequences.fasta</string>
-       </property>
-      </widget>
-     </item>
-     <item row="9" column="0">
-      <widget class="QLabel" name="label_21">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>pdb70</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="0">
-      <widget class="QLabel" name="label_20">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>bfd</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="lei_settings_uniref90_database_path">
-       <property name="placeholderText">
-        <string>/path/to/uniref90/uniref90.fasta</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="2">
-      <widget class="QToolButton" name="btn_settings_uniref90_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="5" column="1">
-      <widget class="QLineEdit" name="lei_settings_bfd_database_path">
-       <property name="placeholderText">
-        <string>/path/to/bfd/bdf_metaclust_clu_complete_id30_c90_final_seq.sorted_opt</string>
-       </property>
-      </widget>
-     </item>
-     <item row="8" column="0">
-      <widget class="QLabel" name="label_19">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>uniprot</string>
-       </property>
-      </widget>
-     </item>
-     <item row="9" column="1">
-      <widget class="QLineEdit" name="lei_settings_pdb70_database_path">
-       <property name="text">
-        <string/>
-       </property>
-       <property name="placeholderText">
-        <string>/path/to/pdb70/pdb70</string>
-       </property>
-      </widget>
-     </item>
-     <item row="6" column="0">
-      <widget class="QLabel" name="label_16">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>small_bfd</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="2">
-      <widget class="QToolButton" name="btn_settings_data_dir">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QLineEdit" name="lei_settings_data_dir">
-       <property name="placeholderText">
-        <string>/path/to/alphafold_models</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_23">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>alphafold_models</string>
-       </property>
-      </widget>
-     </item>
-     <item row="11" column="1">
-      <widget class="QLineEdit" name="lei_settings_template_mmcif_dir">
-       <property name="placeholderText">
-        <string>/path/to/pdb_mmcif/mmcif_files</string>
-       </property>
-      </widget>
-     </item>
-     <item row="11" column="2">
-      <widget class="QToolButton" name="btn_settings_template_mmcif_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="10" column="2">
-      <widget class="QToolButton" name="btn_settings_pdb_seqres_database_path">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="12" column="1">
-      <widget class="QLineEdit" name="lei_settings_obsolete_pdbs_path">
-       <property name="placeholderText">
-        <string>/path/to/pdb_mmcif/obsolete.dat</string>
-       </property>
-      </widget>
-     </item>
-     <item row="12" column="0">
-      <widget class="QLabel" name="label_25">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>obsolete_pdbs</string>
-       </property>
-      </widget>
-     </item>
-     <item row="11" column="0">
-      <widget class="QLabel" name="label_24">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>template_mmcif</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="0">
-      <widget class="QLabel" name="label_17">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>mgnify</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_29">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>uniref30</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="lei_settings_uniref30_database_path">
-       <property name="placeholderText">
-        <string>/path/to/uniref30_2202/uniref30_2202_db</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_33">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>colabfold_envdb</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="1">
-      <widget class="QLineEdit" name="lei_settings_colabfold_envdb_database_path">
-       <property name="placeholderText">
-        <string>/path/to/colabfold_envdb_202108/colabfold_envdb_202108_db</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
-  <widget class="QPushButton" name="btn_settings_load_global_settings">
-   <property name="geometry">
-    <rect>
-     <x>430</x>
-     <y>640</y>
-     <width>181</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Load global settings</string>
-   </property>
-  </widget>
-  <widget class="QGroupBox" name="groupBox_2">
-   <property name="geometry">
-    <rect>
-     <x>430</x>
-     <y>510</y>
-     <width>391</width>
-     <height>91</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Other</string>
-   </property>
-   <widget class="QWidget" name="gridLayoutWidget_2">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>30</y>
-      <width>371</width>
-      <height>53</height>
-     </rect>
-    </property>
-    <layout class="QGridLayout" name="gridLayout_2">
-     <item row="0" column="1">
-      <widget class="QLineEdit" name="lei_settings_custom_tempdir"/>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_2">
-       <property name="text">
-        <string>Custom tempdir</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="2">
-      <widget class="QToolButton" name="btn_settings_obsolete_pdbs_path_2">
-       <property name="text">
-        <string>...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_26">
-       <property name="text">
-        <string>Use GPU for relax</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QCheckBox" name="chk_settings_use_gpu_relax">
-       <property name="toolTip">
-        <string>Use GPU for the Amber minimization step. Significantly speeds up jobs with large sequences.</string>
-       </property>
-       <property name="statusTip">
-        <string>Use GPU for the Amber minimization step. Significantly speeds up jobs with large sequences.</string>
-       </property>
-       <property name="text">
-        <string/>
-       </property>
-       <property name="checked">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="btn_settings_button_box">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
- <connections>
-  <connection>
-   <sender>btn_settings_button_box</sender>
-   <signal>accepted()</signal>
-   <receiver>Dialog</receiver>
-   <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>254</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>157</x>
-     <y>274</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>btn_settings_button_box</sender>
-   <signal>rejected()</signal>
-   <receiver>Dialog</receiver>
-   <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>316</x>
-     <y>260</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>286</x>
-     <y>274</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+ <connections/>
 </ui>

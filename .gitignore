@@ -11,3 +11,5 @@
 /guifold.egg-info/
 /install.sh
 /screenshots.ai
+/run_tests.py
+/testing/

@@ -7,70 +7,54 @@
     <x>0</x>
     <y>0</y>
     <width>971</width>
-    <height>690</height>
+    <height>662</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Batch submission script review</string>
   </property>
-  <widget class="QDialogButtonBox" name="buttonBox">
-   <property name="geometry">
-    <rect>
-     <x>570</x>
-     <y>630</y>
-     <width>341</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
-  </widget>
-  <widget class="QGroupBox" name="groupBox">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>20</y>
-     <width>931</width>
-     <height>601</height>
-    </rect>
-   </property>
-   <property name="title">
-    <string>Batch submission script review</string>
-   </property>
-   <widget class="QPlainTextEdit" name="pte_job_queue_submit">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>30</y>
-      <width>911</width>
-      <height>511</height>
-     </rect>
-    </property>
-   </widget>
-   <widget class="QCheckBox" name="chk_settings_queue_submit_dialog">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>560</y>
-      <width>211</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="toolTip">
-     <string>Can be turned on/off in Settings dialog.</string>
-    </property>
-    <property name="statusTip">
-     <string>Can be turned on/off in Settings dialog.</string>
-    </property>
-    <property name="text">
-     <string>Do not show this window again</string>
-    </property>
-   </widget>
-  </widget>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>Batch submission script review</string>
+     </property>
+     <widget class="QPlainTextEdit" name="pte_job_queue_submit">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>70</y>
+        <width>911</width>
+        <height>511</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QLabel" name="lbl_job_type_description">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>30</y>
+        <width>901</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string/>
+      </property>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections>

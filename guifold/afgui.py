@@ -1,16 +1,19 @@
-#Copyright 2022 Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+# Copyright 2022 Friedrich Miescher Institute for Biomedical Research
 #
-#Licensed under the Apache License, Version 2.0 (the "License");
-#you may not use this file except in compliance with the License.
-#You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
-#Unless required by applicable law or agreed to in writing, software
-#distributed under the License is distributed on an "AS IS" BASIS,
-#WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#See the License for the specific language governing permissions and
-#limitations under the License.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
+
 from __future__ import absolute_import
 from guifold.src import gui_threads
 from guifold.src.gui_dialogs import message_dlg
@@ -32,7 +35,6 @@ from PyQt5.QtCore import QThread, pyqtSignal, Qt, QUrl
 from PyQt5.QtGui import QIcon, QDesktopServices
 import logging
 from guifold.src.db_helper import DBHelper
-from sqlalchemy import create_engine, orm
 import traceback
 from guifold.src.gui_classes import Job, Settings, JobParams, Project, Evaluation, DefaultValues
 from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedParamsDefaultValues
@@ -40,7 +42,7 @@ from shutil import copyfile
 import argparse
 import configparser
 
-DB_REVISION = 3
+
 
 #Required for WebGL to work
 os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = "--ignore-gpu-blacklist"
@@ -113,14 +115,16 @@ def main():
     else:
         db_path = args.custom_db_path
 
-    upgrade_db()
     db = DBHelper(shared_objects, db_path)
+    db.upgrade_db()
+    db.init_db()
     with db.session_scope() as sess:
         db.set_session(sess)
     for obj in shared_objects:
         obj.set_db(db)
-    update_job_type(db, sess)
-    update_queue_jobid_regex(db, sess)
+    db.update_job_type(sess)
+    db.update_queue_jobid_regex(sess)
+    db.migrate_to_pipeline_cmb(sess)
 
     sys.excepthook = handle_exception
     app = QtWidgets.QApplication(sys.argv)
@@ -128,32 +132,9 @@ def main():
     MainFrame(shared_objects, db, sess, install_path)
     app.exec()
 
-def backup_db(db_path):
-    prev_db_revision = DB_REVISION - 1
-    guifold_dir = os.path.join(os.path.expanduser("~"), f'.guifold')
-    if not os.path.exists(guifold_dir):
-        os.mkdir(guifold_dir)
-    backup_db_path = os.path.join(guifold_dir, f'guifold.db.{prev_db_revision}')
-    if not os.path.exists(backup_db_path):
-        if os.path.exists(db_path):
-            copyfile(db_path, backup_db_path)
 
-def update_job_type(db, sess):
-    result_job = sess.query(db.Job).all()
-    for job in result_job:
-        if job.type is None or job.type == "":
-            result_jobparams = sess.query(db.Jobparams).filter_by(job_id=job.id).one()
-            only_features = bool(result_jobparams.only_features)
-            continue_from_features = bool(result_jobparams.continue_from_features)
-            use_precomputed_msas = bool(result_jobparams.use_precomputed_msas)
-            if only_features:
-                type = "features"
-            elif continue_from_features or use_precomputed_msas:
-                type = "prediction"
-            elif not only_features and not continue_from_features and not use_precomputed_msas:
-                type = "full"
-            job.type = type
-    sess.commit()
+
+
 
 def check_settings_locked():
     lock_settings = False
@@ -163,7 +144,7 @@ def check_settings_locked():
         config.read(config_file)
         if 'OTHER' in config:
             if 'lock_settings' in config['OTHER']:
-                if lock_settings in ['True', 'true']:
+                if config['OTHER']['lock_settings'] in ['True', 'true']:
                     lock_settings = True
             else:
                 logger.debug("lock_settings not found in config.")
@@ -173,56 +154,23 @@ def check_settings_locked():
         logger.debug("Config file not found")
     return lock_settings
 
-def update_queue_jobid_regex(db, sess):
-    try:
-        result_settings = sess.query(db.Settings).filter_by(id=1).one()
-        if not result_settings is None:
-            if result_settings.queue_jobid_regex is None:
-                if result_settings.queue_submit == "sbatch":
-                    logger.debug("Setting queue_jobid_regex")
-                    result_settings.queue_jobid_regex = "\D*(\d+)\D*"
-        sess.commit()
-    except orm.exc.NoResultFound:
-        logger.debug("No settings found. This is normal when the application is started for the first time.")
-    except:
-        logger.debug("Could not update jobidregex")
-
-
-
-
-def upgrade_db():
-    logger.debug("Upgrading DB")
-    db_path = os.path.join(os.path.expanduser("~"), '.guifold.db')
-    backup_db(db_path)
-    engine = create_engine('sqlite:///{}'.format(db_path), connect_args={'check_same_thread': False})
-    stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
-    stmts += ['ALTER TABLE settings ADD split_job BOOLEAN DEFAULT FALSE']
-    stmts += ['ALTER TABLE settings ADD num_cpus INTEGER DEFAULT(20)']
-    stmts += ['ALTER TABLE settings ADD max_ram INTEGER DEFAULT(100)']
-    stmts += ['ALTER TABLE settings ADD max_gpu_mem INTEGER DEFAULT(80)']
-    #Change VARCHAR to INTEGER
-    stmts += ['ALTER TABLE settings RENAME COLUMN min_ram TO min_ram_deprec']
-    stmts += ['ALTER TABLE settings ADD COLUMN min_ram INTEGER DEFAULT(50)']
-    stmts += ['UPDATE settings set min_ram=(SELECT min_ram_deprec FROM settings WHERE id=1)']
-    stmts += ['ALTER TABLE jobparams ADD num_recycle INTEGER DEFAULT(3)']
-    stmts += ['ALTER TABLE settings RENAME COLUMN queue_cpu_lane_list TO cpu_lane_list']
-    stmts += ['ALTER TABLE settings RENAME COLUMN queue_gpu_lane_list TO gpu_lane_list']
-    stmts += ['ALTER TABLE settings DROP COLUMN min_ram_deprec']
-    stmts += ['ALTER TABLE jobparams RENAME COLUMN only_msa TO only_features']
-    stmts += ['ALTER TABLE jobparams ADD COLUMN continue_from_features BOOLEAN DEFAULT FALSE']
-    stmts += ['ALTER TABLE job ADD COLUMN type VARCHAR DEFAULT NULL']
-    stmts += ['ALTER TABLE settings ADD COLUMN queue_jobid_regex VARCHAR DEFAULT NULL']
-    stmts += ['ALTER TABLE settings ADD COLUMN uniref30_database_path VARCHAR DEFAULT NULL']
-    stmts += ['ALTER TABLE settings ADD COLUMN colabfold_envdb_database_path VARCHAR DEFAULT NULL']
-    stmts += ['ALTER TABLE settings ADD COLUMN mmseqs_binary_path VARCHAR DEFAULT NULL']
-    with engine.connect() as conn:
-        for stmt in stmts:
-            try:
-                rs = conn.execute(stmt)
-            except Exception as e:
-                logger.debug(e)
-                #traceback.print_exc()
-
+def check_force_settings_update():
+    force_update = False
+    config_file = pkg_resources.resource_filename('guifold.config', 'guifold.conf')
+    if os.path.exists(config_file):
+        config = configparser.ConfigParser()
+        config.read(config_file)
+        if 'OTHER' in config:
+            if 'force_update' in config['OTHER']:
+                if config['OTHER']['force_update'] in ['True', 'true']:
+                    force_update = True
+            else:
+                logger.debug("lock_settings not found in config.")
+        else:
+            logger.debug("\'OTHER\' section not found in config.")
+    else:
+        logger.debug("Config file not found")
+    return force_update
 
 class MainFrame(QtWidgets.QMainWindow):
     def __init__(self, shared_objects, db, sess, install_path):
@@ -244,6 +192,7 @@ class MainFrame(QtWidgets.QMainWindow):
                            'project_id': None,
                            'queue': None}
         self.gui_params['settings_locked'] = check_settings_locked()
+        self.gui_params['force_settings_update'] = check_force_settings_update()
         self.files_selected_item = None
         self.db = db
         self.sess = sess
@@ -363,9 +312,17 @@ class MainFrame(QtWidgets.QMainWindow):
             self.gui_params = obj.init_gui(self.gui_params, self.sess)
             logger.debug("GUI Params")
             logger.debug(self.gui_params)
+        #Init DB Preset List
+        db_preset_list = self.jobparams.db_preset_dict.values()
+        for item in db_preset_list:
+            self.jobparams.db_preset.ctrl.addItem(item)
+        pipeline_list = self.jobparams.pipeline_dict.values()
+        for item in pipeline_list:
+            self.jobparams.pipeline.ctrl.addItem(item)
         self.jobparams.update_from_default(self.default_values)
         advanced_params_default = AdvancedParamsDefaultValues()
         self.jobparams.update_from_default(advanced_params_default)
+
 
     def init_settings(self):
         logger.debug("=== Initializing Settings ===")
@@ -375,9 +332,10 @@ class MainFrame(QtWidgets.QMainWindow):
             if not slurm_account is None:
                 self.settings.set_slurm_account(slurm_account, self.sess)
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
-        elif self.gui_params['settings_locked']:
+        elif self.gui_params['settings_locked'] or self.gui_params['force_settings_update']:
             self.settings.update_from_global_config()
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
+
 
 
     def create_monitor_thread(self, job_params):
@@ -495,16 +453,17 @@ class MainFrame(QtWidgets.QMainWindow):
             elif job_params['status'] == "running":
                 self.job.update_status("running", job_params['job_id'], self.sess)
                 #self.job.update_pid(job_params['pid'], job_params['job_id'], self.sess)
-                if 'split_job' in job_params and 'queue' in job_params:
-                    if job_params['split_job'] and not job_params['split_job_step'] == 'gpu':
+                if 'split_job' in job_params and 'queue' in job_params and 'split_job_step' in job_params:
+                    if job_params['queue'] and job_params['split_job'] and job_params['split_job_step'] == 'cpu':
                         if not job_params['pid'] is None:
                             logger.debug(f"Submit second step with PID dependency {job_params['pid']}.")
                             if job_params['pid'] is None:
                                 message_dlg("Error", "Could not get JobID from queue submission command."
                                                      " Second job cannot be submitted.")
                             else:
-                                self.jobparams.only_features.set_value(False)
-                                self.OnBtnRun(split_job_step='gpu', queue_pid=job_params['pid'])
+                                self.jobparams.pipeline.set_value("full")
+                                self.jobparams.pipeline.set_cmb_by_text("full")
+                                self.prepare_and_start_job(job_params['jobs_started'], split_job_step='gpu', queue_pid=job_params['pid'])
                         else:
                             logger.debug("Failed to submit gpu job because no queue_pid was found.")
             elif job_params['status'] == "finished":
@@ -570,313 +529,329 @@ class MainFrame(QtWidgets.QMainWindow):
         self.threads.append(self.process_thread)
         self.create_monitor_thread(self.job_params)
 
+    def OnBtnRun(self):
+        jobs_started = 0
+        self.prepare_and_start_job(jobs_started, split_job_step=None, queue_pid=None)
 
-    def OnBtnRun(self, split_job_step=None, queue_pid=None):
-        try:
-            # Prepare Job
-            exec_messages = []
-            settings = self.settings.get_from_db(self.sess)
-            self.jobparams.update_from_gui()
-            self.jobparams.update_from_sequence_table()
-            #Set template date to today if not defined by user
-            self.jobparams.set_max_template_date()
-            #If db_preset is not defined by user set it to full_dbs
-            self.jobparams.set_db_preset()
-
-
-            #exec_messages = self.settings.check_executables(self.sess)
-            logger.debug("EXEC messages")
-            logger.debug(exec_messages)
-            if not exec_messages == []:
-                for message in exec_messages:
-                    message_dlg('Error', message)
-            else:
-                #Collect params from GUI and return as dict
-                job_params = self.jobparams.get_dict_run_job()
-
-                #Prepare objects for DB insert
+    def prepare_and_start_job(self, jobs_started, split_job_step=None, queue_pid=None):
+        #Make sure that not more than one additional job (split_job) can be started without pressing the run button.
+        if not jobs_started > 2:
+            try:
+                # Prepare Job
+                exec_messages = []
+                settings = self.settings.get_from_db(self.sess)
+                self.jobparams.update_from_gui()
+                self.jobparams.update_from_sequence_table()
+                #Set template date to today if not defined by user
+                self.jobparams.set_max_template_date()
+                #If db_preset is not defined by user set it to full_dbs
+                self.jobparams.set_db_preset()
 
 
-                logger.debug("Params dict db")
+                #exec_messages = self.settings.check_executables(self.sess)
+                logger.debug("EXEC messages")
+                logger.debug(exec_messages)
+                if not exec_messages == []:
+                    for message in exec_messages:
+                        message_dlg('Error', message)
+                else:
+                    #Collect params from GUI and return as dict
+                    job_params = self.jobparams.get_dict_run_job()
+
+                    #Prepare objects for DB insert
 
 
-                self.job.set_next_job_project_id(self.gui_params['project_id'], self.sess)
-                self.job.set_timestamp()
-                self.job.set_host()
-                job_params['host'] = self.job.host.get_value()
-                self.job.set_status("starting")
-                job_params['job_name'] = self.jobparams.job_name.get_value()
-
-                job_params['split_job'] = settings.split_job
-                job_params['queue_jobid_regex'] = settings.queue_jobid_regex
-                if job_params['split_job']:
-                    if job_params['queue_jobid_regex'] is None or job_params['queue_jobid_regex'] == "":
-                        message_dlg('Error', 'Split_job requested but no queue_jobid_regex defined!')
+                    logger.debug("Params dict db")
 
 
-                job_params['queue_pid'] = queue_pid
-                if job_params['queue']:
-                    if job_params['split_job'] and not job_params['continue_from_features']\
-                            and not job_params['only_features'] and not job_params['use_precomputed_msas']:
-                        #Start with cpu step
-                        if split_job_step is None:
-                            split_job_step = job_params['split_job_step'] = 'cpu'
-                            job_params['only_features'] = True
-                            self.jobparams.only_features.set_value(True)
-                            job_params['job_name'] = f"{job_params['job_name']}"
-                            self.jobparams.job_name.set_value(job_params['job_name'])
-                        elif split_job_step == 'gpu':
-                            logger.debug(f"queue pid {queue_pid}")
-                            #job_params['precomputed_msas_path'] = os.path.join(self.job.get_job_path(
-                            #    self.gui_params['project_path'], self.job.get_job_dir(f"{job_params['job_name']}")),
-                            #    f"{job_params['job_name']}_features", "msas")
-                            #logger.debug(f"Precomputed msa path {job_params['precomputed_msas_path']}")
-                            #self.jobparams.precomputed_msas_path.set_value(job_params['precomputed_msas_path'])
-                            job_params['only_features'] = False
-                            self.jobparams.only_features.set_value(False)
-                            job_params['continue_from_features'] = True
-                            job_params['force_cpu'] = False
-                            job_params['num_cpus'] = 1
-                            job_params['split_job_step'] = 'gpu'
-                            self.jobparams.continue_from_features.set_value(True)
-                            job_params['job_name'] = f"{job_params['job_name']}"
-                            self.jobparams.job_name.set_value(job_params['job_name'])
+                    self.job.set_next_job_project_id(self.gui_params['project_id'], self.sess)
+                    self.job.set_timestamp()
+                    job_params['time_started'] = self.job.timestamp.get_value()
+                    self.job.set_host()
+                    job_params['host'] = self.job.host.get_value()
+                    self.job.set_status("starting")
+                    job_params['job_name'] = self.jobparams.job_name.get_value()
+                    job_params['num_cpus'] = settings.num_cpus
+                    job_params['split_job'] = settings.split_job
+                    job_params['split_job_step'] = None
+                    job_params['queue_jobid_regex'] = settings.queue_jobid_regex
+                    if job_params['split_job']:
+                        if job_params['queue_jobid_regex'] is None or job_params['queue_jobid_regex'] == "":
+                            message_dlg('Error', 'Split_job requested but no queue_jobid_regex defined!')
+
+
+                    job_params['queue_pid'] = queue_pid
+                    logger.debug(f"{self.jobparams.precomputed_msas_list.list_like_str_not_all_none()}")
+                    logger.debug(f"{self.jobparams.precomputed_msas_path.is_set()}")
+                    logger.debug(job_params['split_job'])
+                    logger.debug(job_params['pipeline'])
+                    logger.debug(split_job_step)
+                    if job_params['queue']:
+                        if all([job_params['split_job'],
+                                not job_params['pipeline'] in ['continue_from_features',
+                                                               'only_features',
+                                                               'continue_from_msas',
+                                                               'batch_features'],
+                                not self.jobparams.precomputed_msas_list.list_like_str_not_all_none(),
+                                not self.jobparams.precomputed_msas_path.is_set()]):
+                            #Start with cpu step
+                            if split_job_step is None:
+                                split_job_step = job_params['split_job_step'] = 'cpu'
+                                job_params['pipeline'] = 'only_features'
+                                #self.jobparams.pipeline.set_cmb_by_text('only_features')
+                                self.jobparams.pipeline.set_value('only_features')
+                                job_params['job_name'] = f"{job_params['job_name']}"
+                                self.jobparams.job_name.set_value(job_params['job_name'])
+                            elif split_job_step == 'gpu':
+                                logger.debug(f"queue pid {queue_pid}")
+                                job_params['pipeline'] = 'continue_from_features'
+                                #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
+                                self.jobparams.pipeline.set_value('continue_from_features')
+                                job_params['force_cpu'] = False
+                                job_params['num_cpus'] = 1
+                                job_params['split_job_step'] = 'gpu'
+                                job_params['job_name'] = f"{job_params['job_name']}"
+                                self.jobparams.job_name.set_value(job_params['job_name'])
+                            else:
+                                logger.debug('Unknown split_job_step.')
                         else:
-                            logger.debug('Unknown split_job_step.')
+                            job_params['split_job'] = False
                     else:
                         job_params['split_job'] = False
-                logger.debug(f"job name {job_params['job_name']}")
+                    logger.debug(f"job name {job_params['job_name']}")
 
-                if self.gui_params['project_id'] is None:
-                    message_dlg('Error', 'No Project selected!')
-                    raise NoProjectSelected("No project selected by user!")
+                    if self.gui_params['project_id'] is None:
+                        message_dlg('Error', 'No Project selected!')
+                        raise NoProjectSelected("No project selected by user!")
 
-                type = job_params['type'] = self.job.get_type(job_params)
-                self.job.set_type(type)
+                    type = job_params['type'] = self.job.get_type(job_params)
+                    self.job.set_type(type)
 
-                job_params['job_project_id'] = self.job.job_project_id.get_value()
-                #Job folder name
-                job_params['job_dir'] = self.job.get_job_dir(job_params['job_name'])
-                #Full path to job folder
-                job_params['output_dir'] = job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
-                                                               job_params['job_dir'])
-                job_params['log_file'] = self.job.build_log_file_path(self.gui_params['project_path'],
-                                                               job_params['job_name'], job_params['type'])
-                #Full path to results folder created by AF inside job folder
-                job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_name'])
-                logger.debug(f"job path {job_params['job_path']}")
-                logger.debug(f"Log file {job_params['log_file']}")
-                if os.path.exists(job_params['job_path']):
-                    if not split_job_step == 'gpu':
+                    job_params['job_project_id'] = self.job.job_project_id.get_value()
+                    #Job folder name
+                    job_params['job_dir'] = self.job.get_job_dir(job_params['job_name'])
+                    #Full path to job folder
+                    job_params['output_dir'] = job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
+                                                                   job_params['job_dir'])
+                    job_params['log_file'] = self.job.build_log_file_path(self.gui_params['project_path'],
+                                                                   job_params['job_name'], job_params['type'])
+                    #Full path to results folder created by AF inside job folder
+                    job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_name'])
+                    logger.debug(f"job path {job_params['job_path']}")
+                    logger.debug(f"Log file {job_params['log_file']}")
+
+                    if os.path.exists(job_params['job_path']):
+                        if not split_job_step == 'gpu':
+                            if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
+                                message = "Output directory already exists." \
+                                          " Existing MSAs will be overwritten by selected precomputed MSAs." \
+                                          " Confirm to overwrite files."
+                            else:
+                                message = "Output directory already exists. Confirm to overwrite files." \
+                                          " If \"continue_from_msas\" is selected, MSAs will not be overwritten."
+                            ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+                            if ret == QtWidgets.QMessageBox.No:
+                                raise JobSubmissionCancelledByUser
+                    else:
+                        os.mkdir(job_params['job_path'])
+                    #Process custom templates
+                    if self.jobparams.custom_template_list.is_set():
+                        new_custom_template_list, msgs = self.jobparams.process_custom_template_files(job_params['job_path'])
+                        self.jobparams.custom_template_list.set_value(new_custom_template_list)
+                        for msg in msgs:
+                            logger.debug(msg)
+                            message_dlg('Error', msg)
+                            raise ProcessCustomTemplateError(msg)
+                    #if self.jobparams.batch_features:
+                    #    self.jobparams.only_features.set_value(True)
+                    if self.jobparams.precomputed_msas_path.value or self.jobparams.precomputed_msas_list.list_like_str_not_all_none():
+                        self.jobparams.pipeline.set_cmb_by_text('continue_from_msas')
+                        self.jobparams.pipeline.set_value('continue_from_msas')
+                    self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
+                    job_params['fasta_path'] = self.jobparams.fasta_path.get_value()
+                    self.jobparams.write_fasta()
+                    logger.debug(f"Fasta path {self.jobparams.fasta_path.get_value()}")
+                    sequences = self.jobparams.parse_fasta(self.jobparams.fasta_path.get_value())
+                    #Check if new incompatible characters were introduced to the sequence
+                    _, error_msgs = self.jobparams.sequence_params.sanitize_sequence_str(self.jobparams.sequences.get_value())
+                    for msg in error_msgs:
+                        message_dlg('Error', msg)
+                        #Disable running a new job if sequence has incorrect format
+                        self.btn_jobparams_advanced_settings.setEnabled(False)
+                        self.tb_run.setEnabled(False)
+                        raise SequenceFormatError(msg)
+                    self.job.log_file.set_value(job_params['log_file'])
+                    self.job.path.set_value(job_params['job_path'])
+                    self.job.name.set_value(job_params['job_name'])
+                    self.jobparams.output_dir.set_value(job_params['job_path'])
+
+                    #Prepare DB objects
+                    project_obj = self.prj.get_project_by_id(self.gui_params['project_id'], self.sess)
+                    params_dict_db = self.jobparams.get_dict_db_insert()
+                    params_obj_list = self.jobparams.generate_db_object(params_dict_db)
+                    jobs_dict_db = self.job.get_dict_db_insert()
+                    logger.debug(jobs_dict_db)
+                    jobs_obj_list = self.job.generate_db_object(jobs_dict_db)
+                    jobs_obj_list[0].jobparams_collection.append(params_obj_list[0])
+                    project_obj.job_collection.append(jobs_obj_list[0])
+
+                    #DB insert
+                    self.sess.add(project_obj)
+                    self.sess.commit()
+
+                    #Get job params
+                    job_id = jobs_obj_list[0].id
+
+                    #Update job params
+                    settings = self.settings.get_from_db(self.sess)
+                    self.settings.update_from_db(settings)
+                    job_params['id'] = job_id
+                    job_params['job_id'] = job_id
+
+                    #Check if number of sequences has changed
+                    if len(self.jobparams.seq_names.get_value().split(',')) != len(sequences):
+                        logger.debug(len(self.jobparams.seq_names.value.split(',')))
+                        logger.debug(len(sequences))
+                        error = "The number of sequences has changed. Re-read sequences before running the job."
+                        message_dlg('Error', error)
+                        raise SequenceFormatError(error)
+
+                    #Setup queue related vars
+                    if self.jobparams.queue.value:
+                        job_params['queue'] = True
+                        if settings.max_gpu_mem is None or settings.max_gpu_mem == '':
+                            message_dlg("error", "Requested to submit to queue but found no GPU maximum memory value in settings.")
+                            raise QueueSubmitError("Maximum GPU memory not specified")
+                        else:
+                            job_params['max_gpu_mem'] = settings.max_gpu_mem
+                        if settings.max_ram is None or settings.max_ram == '':
+                            message_dlg("error", "Requested to submit to queue but found no maximum RAM value in settings.")
+                            raise QueueSubmitError("Maximum available RAM not specified")
+                        else:
+                            job_params['max_ram'] = settings.max_ram
+                        if settings.min_ram is None or settings.min_ram == '':
+                            message_dlg("error", "Requested to submit to queue but found no minimum RAM value in settings.")
+                            raise QueueSubmitError("Minimum RAM not specified")
+                        else:
+                            job_params['min_ram'] = settings.min_ram
+                        if settings.num_cpus is None or settings.num_cpus == '':
+                            message_dlg("error", "Requested to submit to queue but found no CPU number in settings.")
+                            raise QueueSubmitError("CPU number not specified")
+                        else:
+                            job_params['num_cpus'] = settings.num_cpus
+                        if settings.queue_account is None or settings.queue_account == '':
+                            job_params['queue_account'] = None
+                        else:
+                            job_params['queue_account'] = settings.queue_account
+
+                        if settings.queue_submit is None or settings.queue_submit == '':
+                            message_dlg("error", "Requested to submit to queue but queue submit command not specified in settings.")
+                            raise QueueSubmitError("Queue submit command not specified")
+                        elif not self.job.check_queue_submit_cmd(settings.queue_submit):
+                            message_dlg("error", f"Queue submit command {settings.queue_submit} is not available on this host.")
+                            raise QueueSubmitError("Queue submit command not found")
+                        else:
+                            job_params['queue_submit'] = settings.queue_submit
+                    job_params['total_seqlen'] = sum([len(s) for s in sequences])
+                    logger.debug(f"Number of amino acids: {job_params['total_seqlen']}")
+                    job_params['multimer'] = True if len(sequences) > 1 else False
+                    logger.debug(job_params)
+                    logger.debug(self.gui_params)
+                    self.gui_params['job_id'] = job_id
+
+
+
+                    #Clear contents of file if it already exists
+                    with open(job_params['log_file'], 'w'):
+                        pass
+
+
+                    #Start thread
+                    # if not os.path.exists(job_params['results_path']):
+                    #     try:
+                    #         os.mkdir(job_params['results_path'])
+                    #     except:
+                    #         message_dlg('Error', f"Could not create job directory in {job_params['job_path']}!")
+                    #         logger.debug("Could not create job directory!")
+                    #         raise DirectoryNotCreated
+
+
+                    #thread.daemon = True
+                    cmd_dict_jobparams = self.jobparams.get_dict_cmd()
+                    cmd_dict_settings = self.settings.get_dict_cmd()
+                    logger.debug("cmd dict settings")
+                    logger.debug(cmd_dict_settings)
+                    cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings}
+                    logger.debug(cmd_dict)
+                    if job_params['force_cpu']:
+                       del cmd_dict['use_gpu_relax']
+                    if job_params['multimer'] is True:
+                        del cmd_dict['pdb70_database_path']
+                    else:
+                        del cmd_dict['pdb_seqres_database_path']
+                        del cmd_dict['uniprot_database_path']
+                    if job_params['db_preset'] == 'full_dbs':
+                        del cmd_dict['small_bfd_database_path']
+                        del cmd_dict['uniref30_database_path']
+                        del cmd_dict['colabfold_envdb_database_path']
+                    if job_params['db_preset'] == 'reduced_dbs':
+                        del cmd_dict['bfd_database_path']
+                        del cmd_dict['uniclust30_database_path']
+                        del cmd_dict['uniref30_database_path']
+                        del cmd_dict['colabfold_envdb_database_path']
+                    if job_params['db_preset'] == 'colabfold':
+                        del cmd_dict['small_bfd_database_path']
+
+                    logger.debug(job_params['force_cpu'])
+                    logger.debug(cmd_dict)
+                    logger.debug("Job IDs before notebook: {}".format(self.gui_params['job_id']))
+
+
+                    #Prepare command to run alphafold
+                    self.job_params = job_params
+                    if job_params['split_job'] and job_params['queue']:
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
+                    else:
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict)
+
+                    for msg in error_msgs:
+                        logger.debug(msg)
+                        message_dlg('Error', msg)
+                        raise PrepareCMDError(msg)
+                    for msg in warn_msgs:
                         ret = QtWidgets.QMessageBox.question(self, 'Warning',
-                                                             "Output directory already exists. Confirm to override files (If \"Use Precomputed MSAs\" is activated these files will not be overriden).",
+                                                             msg,
                                                              QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
                         if ret == QtWidgets.QMessageBox.No:
                             raise JobSubmissionCancelledByUser
-                else:
-                    os.mkdir(job_params['job_path'])
-                #Process custom templates
-                if self.jobparams.custom_template_list.is_set():
-                    new_custom_template_list, msgs = self.jobparams.process_custom_template_files(job_params['job_path'])
-                    self.jobparams.custom_template_list.set_value(new_custom_template_list)
-                    for msg in msgs:
-                        logger.debug(msg)
-                        message_dlg('Error', msg)
-                        raise ProcessCustomTemplateError(msg)
-                precomputed_msas_path = self.jobparams.precomputed_msas_path.get_value()
-                if not precomputed_msas_path in [None, ""]:
-                    if not os.path.exists(precomputed_msas_path) and not split_job_step == 'gpu':
-                        error = "The given precomputed MSAs folder does not exist!"
-                        message_dlg('Error', error)
-                        raise MSAFolderNotExists(error)
-                    #This directory would be also created by AF pipeline
-                    if not os.path.exists(job_params['results_path']):
-                        os.mkdir(job_params['results_path'])
-                    if not os.path.exists(os.path.join(job_params['results_path'], 'msas')):
-                        os.symlink(precomputed_msas_path, os.path.join(job_params['results_path'], 'msas'))
-                    else:
-                        error = "A job folder with the same name already exists and contains a MSAs folder." \
-                                " Cannot override. Choose a different job name."
-                        message_dlg('Error', error)
-                        raise MSAFolderExists(error)
-                else:
-                    if not os.path.exists(job_params['results_path']):
-                        os.mkdir(job_params['results_path'])
-                        if not os.path.exists(os.path.join(job_params['results_path'], 'msas')):
-                            os.mkdir(os.path.join(job_params['results_path'], 'msas'))
-                    
+
+                    logger.debug(f"split queue: {job_params['split_job']} split_job_step {split_job_step}")
+                    if job_params['queue']:
+                        if job_params['split_job_step'] == 'cpu':
+                            job_type_description = "First submission script for the feature generation step (The second submission script will be shown after pressing OK):"
+                        elif job_params['split_job_step'] == 'gpu':
+                            job_type_description = "Second submission script for the prediction step:"
+                        else:
+                            job_type_description = "Submission script:"
+                        dlg = QueueSubmitDlg(self, job_type_description)
+                        result = dlg.exec()
+                        if not result:
+                            raise JobSubmissionCancelledByUser
+
+                    #Start the job and monitor threads
+                    jobs_started += 1
+                    job_params['jobs_started'] = jobs_started
+                    self.start_thread(job_params, cmd)
+
+            except Exception:
+                job_params['status'] = 'error'
+                self.OnJobStatus(job_params)
+                traceback.print_exc()
+        else:
+            logger.error("Too many jobs started without pressing run button.")
 
 
-
-                self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
-                job_params['fasta_path'] = self.jobparams.fasta_path.get_value()
-                self.jobparams.write_fasta()
-                logger.debug(f"Fasta path {self.jobparams.fasta_path.get_value()}")
-                sequences = self.jobparams.parse_fasta(self.jobparams.fasta_path.get_value())
-                #Check if new incompatible characters were introduced to the sequence
-                _, error_msgs = self.jobparams.sequence_params.sanitize_sequence_str(self.jobparams.sequences.get_value())
-                for msg in error_msgs:
-                    message_dlg('Error', msg)
-                    #Disable running a new job if sequence has incorrect format
-                    self.btn_jobparams_advanced_settings.setEnabled(False)
-                    self.tb_run.setEnabled(False)
-                    raise SequenceFormatError(msg)
-                self.job.log_file.set_value(job_params['log_file'])
-                self.job.path.set_value(job_params['job_path'])
-                self.job.name.set_value(job_params['job_name'])
-                self.jobparams.output_dir.set_value(job_params['job_path'])
-
-                #Prepare DB objects
-                project_obj = self.prj.get_project_by_id(self.gui_params['project_id'], self.sess)
-                params_dict_db = self.jobparams.get_dict_db_insert()
-                params_obj_list = self.jobparams.generate_db_object(params_dict_db)
-                jobs_dict_db = self.job.get_dict_db_insert()
-                logger.debug(jobs_dict_db)
-                jobs_obj_list = self.job.generate_db_object(jobs_dict_db)
-                jobs_obj_list[0].jobparams_collection.append(params_obj_list[0])
-                project_obj.job_collection.append(jobs_obj_list[0])
-
-                #DB insert
-                self.sess.add(project_obj)
-                self.sess.commit()
-
-                #Get job params
-                job_id = jobs_obj_list[0].id
-
-                #Update job params
-                settings = self.settings.get_from_db(self.sess)
-                self.settings.update_from_db(settings)
-                job_params['id'] = job_id
-                job_params['job_id'] = job_id
-
-                #Check if number of sequences has changed
-                if len(self.jobparams.seq_names.get_value().split(',')) != len(sequences):
-                    logger.debug(len(self.jobparams.seq_names.value.split(',')))
-                    logger.debug(len(sequences))
-                    error = "The number of sequences has changed. Re-read sequences before running the job."
-                    message_dlg('Error', error)
-                    raise SequenceFormatError(error)
-
-                #Setup queue related vars
-                if self.jobparams.queue.value:
-                    job_params['queue'] = True
-                    if settings.max_gpu_mem is None or settings.max_gpu_mem == '':
-                        message_dlg("error", "Requested to submit to queue but found no GPU maximum memory value in settings.")
-                        raise QueueSubmitError("Maximum GPU memory not specified")
-                    else:
-                        job_params['max_gpu_mem'] = settings.max_gpu_mem
-                    if settings.max_ram is None or settings.max_ram == '':
-                        message_dlg("error", "Requested to submit to queue but found no maximum RAM value in settings.")
-                        raise QueueSubmitError("Maximum available RAM not specified")
-                    else:
-                        job_params['max_ram'] = settings.max_ram
-                    if settings.min_ram is None or settings.min_ram == '':
-                        message_dlg("error", "Requested to submit to queue but found no minimum RAM value in settings.")
-                        raise QueueSubmitError("Minimum RAM not specified")
-                    else:
-                        job_params['min_ram'] = settings.min_ram
-                    if settings.num_cpus is None or settings.num_cpus == '':
-                        message_dlg("error", "Requested to submit to queue but found no CPU number in settings.")
-                        raise QueueSubmitError("CPU number not specified")
-                    else:
-                        job_params['num_cpus'] = settings.num_cpus
-                    if settings.queue_account is None or settings.queue_account == '':
-                        job_params['queue_account'] = None
-                    else:
-                        job_params['queue_account'] = settings.queue_account
-
-                    if settings.queue_submit is None or settings.queue_submit == '':
-                        message_dlg("error", "Requested to submit to queue but queue submit command not specified in settings.")
-                        raise QueueSubmitError("Queue submit command not specified")
-                    elif not self.job.check_queue_submit_cmd(settings.queue_submit):
-                        message_dlg("error", f"Queue submit command {settings.queue_submit} is not available on this host.")
-                        raise QueueSubmitError("Queue submit command not found")
-                    else:
-                        job_params['queue_submit'] = settings.queue_submit
-                job_params['total_seqlen'] = sum([len(s) for s in sequences])
-                logger.debug(f"Number of amino acids: {job_params['total_seqlen']}")
-                job_params['multimer'] = True if len(sequences) > 1 else False
-                logger.debug(job_params)
-                logger.debug(self.gui_params)
-                self.gui_params['job_id'] = job_id
-
-
-
-                #Clear contents of file if it already exists
-                with open(job_params['log_file'], 'w'):
-                    pass
-
-
-                #Start thread
-                # if not os.path.exists(job_params['results_path']):
-                #     try:
-                #         os.mkdir(job_params['results_path'])
-                #     except:
-                #         message_dlg('Error', f"Could not create job directory in {job_params['job_path']}!")
-                #         logger.debug("Could not create job directory!")
-                #         raise DirectoryNotCreated
-
-
-                #thread.daemon = True
-                cmd_dict_jobparams = self.jobparams.get_dict_cmd()
-                cmd_dict_settings = self.settings.get_dict_cmd()
-                logger.debug("cmd dict settings")
-                logger.debug(cmd_dict_settings)
-                cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings}
-                logger.debug(cmd_dict)
-                if job_params['force_cpu']:
-                   del cmd_dict['use_gpu_relax']
-                if job_params['multimer'] is True:
-                    del cmd_dict['pdb70_database_path']
-                else:
-                    del cmd_dict['pdb_seqres_database_path']
-                    del cmd_dict['uniprot_database_path']
-                if job_params['db_preset'] == 'full_dbs':
-                    del cmd_dict['small_bfd_database_path']
-                if job_params['db_preset'] == 'reduced_dbs':
-                    del cmd_dict['bfd_database_path']
-                    del cmd_dict['uniclust30_database_path']
-                if job_params['db_preset'] == 'colabfold':
-                    del cmd_dict['small_bfd_database_path']
-
-                logger.debug(job_params['force_cpu'])
-                logger.debug(cmd_dict)
-                logger.debug("Job IDs before notebook: {}".format(self.gui_params['job_id']))
-
-
-                #Prepare command to run alphafold
-                self.job_params = job_params
-                if job_params['split_job']:
-                    cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
-                else:
-                    cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict)
-
-                for msg in error_msgs:
-                    logger.debug(msg)
-                    message_dlg('Error', msg)
-                    raise PrepareCMDError(msg)
-                for msg in warn_msgs:
-                    ret = QtWidgets.QMessageBox.question(self, 'Warning',
-                                                         msg,
-                                                         QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-                    if ret == QtWidgets.QMessageBox.No:
-                        raise JobSubmissionCancelledByUser
-
-                if job_params['queue'] and self.settings.queue_submit_dialog.get_value():
-                    dlg = QueueSubmitDlg(self)
-                    result = dlg.exec()
-                    if not result:
-                        raise JobSubmissionCancelledByUser
-
-                self.start_thread(job_params, cmd)
-
-                logger.debug(f"split queue: {job_params['split_job']} split_job_step {split_job_step}")
-
-
-        except Exception:
-            job_params['status'] = 'error'
-            self.OnJobStatus(job_params)
-            traceback.print_exc()
 
     def OnChangeTab(self):
         self.notebook.setCurrentIndex(1)
@@ -1071,8 +1046,8 @@ class MainFrame(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
         self.jobparams.precomputed_msas_path.set_value(path)
         self.jobparams.precomputed_msas_path.ctrl.setText(path)
-        self.jobparams.use_precomputed_msas.set_value(True)
-        self.jobparams.use_precomputed_msas.ctrl.setChecked(True)
+        self.jobparams.pipeline.set_cmb_by_text('continue_from_msas')
+        self.jobparams.pipeline.set_value('continue_from_msas')
 
     def OnOpenModelViewer(self, model_viewer):
         if 'results_path' in self.gui_params:
@@ -1131,7 +1106,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.gui_params['job_id'] = None
         self.gui_params['job_project_id'] = None
         self.gui_params['other_settings_changed'] = False
-        self.jobparams.init_gui(self.gui_params)
+        self.jobparams.init_gui(self.gui_params, self.sess)
+        self.init_gui()
 
 
 if __name__ == "__main__":
