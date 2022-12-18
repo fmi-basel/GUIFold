@@ -769,10 +769,10 @@ class JobParams(GUIVariables):
         #self.only_features = Variable('only_features', 'bool', ctrl_type='chk', cmd=True)
         self.force_cpu = Variable('force_cpu', 'bool', ctrl_type='chk')
         self.num_recycle = Variable('num_recycle', 'int', ctrl_type="sbo", cmd=True)
-        #self.batch_features = Variable('batch_features', 'bool', ctrl_type='chk', cmd=True)
+        #self.batch_msas = Variable('batch_msas', 'bool', ctrl_type='chk', cmd=True)
         self.pipeline_dict = {0: 'full',
                               1: 'only_features',
-                              2: 'batch_features',
+                              2: 'batch_msas',
                               3: 'continue_from_msas',
                               4: 'continue_from_features'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
@@ -1017,7 +1017,7 @@ class Job(GUIVariables):
     def get_type(self, job_params):
         if job_params['pipeline'] in ['continue_from_msas', 'continue_from_features']:
             type = "prediction"
-        elif job_params['pipeline'] in ['only_features', 'batch_features']:
+        elif job_params['pipeline'] in ['only_features', 'batch_msas']:
             type = "features"
         else:
             type = "full"
@@ -1080,7 +1080,7 @@ class Job(GUIVariables):
             else:
                 to_render['num_cpus'] = job_params['num_cpus']
         if 'use_gpu' in template_vars:
-            if job_params['pipeline'] == 'only_features' or job_params['force_cpu']:
+            if job_params['pipeline'] in ['only_features', 'batch_msas'] or job_params['force_cpu']:
                 to_render['use_gpu'] = False
             else:
                 to_render['use_gpu'] = True
@@ -1110,10 +1110,11 @@ class Job(GUIVariables):
             if estimated_gpu_mem < job_params['min_ram']:
                 ram = job_params['min_ram']
             else:
-                if job_params['force_cpu'] or job_params['pipeline'] == 'only_features':
+                if job_params['force_cpu'] or job_params['pipeline'] in ['only_features', 'batch_features']:
                     ram = job_params['min_ram']
                 else:
                     ram = estimated_gpu_mem
+            ram = job_params['min_ram']
             to_render['mem'] = int(ram)
         if 'gpu_mem' in template_vars:
             to_render['gpu_mem'] = estimated_gpu_mem
@@ -1162,7 +1163,7 @@ class Job(GUIVariables):
     #Calculate required gpu memory in GB by sequence length
     def calculate_gpu_mem(self, total_seq_length):
         logger.debug(total_seq_length)
-        mem = int(math.ceil(5.561*math.exp(0.00095881*total_seq_length)))
+        mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
 
@@ -1212,8 +1213,8 @@ class Job(GUIVariables):
             job_params['max_ram'] = self.get_max_ram()
 
         #Decide which GPUs to use if several are available on a cluster
-        if not any([job_params['force_cpu'],
-                    job_params['pipeline'] in ['only_features', 'batch_features']]):
+        if any([job_params['force_cpu'],
+                    job_params['pipeline'] in ['only_features', 'batch_msas']]):
             gpu_mem = None
         else:
             if job_params['queue']:
@@ -1223,17 +1224,18 @@ class Job(GUIVariables):
 
         #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
         if job_params['db_preset'] == 'colabfold':
-            if job_params['pipeline'] in ['full', 'only_features', 'batch_features']:
-               if job_params['max_ram'] < 500:
+            if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
+               if job_params['max_ram'] < 300:
                    job_params['min_ram'] = job_params['max_ram']
                else:
-                   job_params['min_ram'] = 500
+                   job_params['min_ram'] = 300
 
         split_mem = None
         if not any([gpu_mem is None,
                     estimated_gpu_mem is None,
                     job_params['force_cpu'],
-                    job_params['pipeline'] in ['only_features', 'batch_features']]):
+                    job_params['pipeline'] in ['only_features', 'batch_msas']]):
+            logger.debug(f"\n\n\n\n\n==============Estimated GPU MEP {estimated_gpu_mem} Max GPU mem {gpu_mem}")
             if estimated_gpu_mem > gpu_mem:
                 if estimated_gpu_mem > job_params['max_ram']:
                     error_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
@@ -1244,6 +1246,12 @@ class Job(GUIVariables):
                     warn_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
                                 f" is larger than the availabe GPU memory ({gpu_mem} GB). Confirm to run the job with "
                                 f"unified memory (slow; job can only be cancelled from command line)?")
+        else:
+            logger.debug(f"Skipping GPU memory check")
+            logger.debug([gpu_mem is None,
+                          estimated_gpu_mem is None,
+                          job_params['force_cpu'],
+                          job_params['pipeline'] in ['only_features', 'batch_msas']])
         if job_params['queue']:
             queue_submit = job_params['queue_submit']
             submit_script, more_msgs = self.prepare_submit_script(job_params, job_args, estimated_gpu_mem, split_mem)
@@ -1256,7 +1264,7 @@ class Job(GUIVariables):
             if not split_mem is None and not job_params['force_cpu']:
                 cmd = [f'export TF_FORCE_UNIFIED_MEMORY=True; export XLA_PYTHON_CLIENT_MEM_FRACTION={split_mem}; ']
             #cmd = [f"/bin/bash -c \'echo test > {job_params['log_file']}\'"]
-            if job_params['pipeline'] in ['only_features', 'batch_features'] or job_params['force_cpu']:
+            if job_params['pipeline'] in ['only_features', 'batch_msas'] or job_params['force_cpu']:
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
             cmd += [f"run_alphafold.py\\\n"] + job_args + [f">> {job_params['log_file']} 2>&1"]
@@ -1668,11 +1676,11 @@ class Settings(GUIVariables):
         self.data_dir = Variable('data_dir', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref90_database_path = Variable('uniref90_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref30_database_path = Variable('uniref30_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.uniref30_mmseqs_database_path = Variable('uniref30_mmseqs_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.colabfold_envdb_database_path = Variable('colabfold_envdb_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.mgnify_database_path = Variable('mgnify_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.bfd_database_path = Variable('bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.small_bfd_database_path = Variable('small_bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
-        self.uniclust30_database_path = Variable('uniclust30_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniprot_database_path = Variable('uniprot_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb70_database_path = Variable('pdb70_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb_seqres_database_path = Variable('pdb_seqres_database_path', 'str', ctrl_type='lei', cmd=True, required=True)

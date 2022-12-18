@@ -41,6 +41,7 @@ from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedParamsD
 from shutil import copyfile
 import argparse
 import configparser
+import re
 
 
 
@@ -122,9 +123,9 @@ def main():
         db.set_session(sess)
     for obj in shared_objects:
         obj.set_db(db)
-    db.update_job_type(sess)
     db.update_queue_jobid_regex(sess)
     db.migrate_to_pipeline_cmb(sess)
+    db.update_job_type(sess)
 
     sys.excepthook = handle_exception
     app = QtWidgets.QApplication(sys.argv)
@@ -590,8 +591,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         if all([job_params['split_job'],
                                 not job_params['pipeline'] in ['continue_from_features',
                                                                'only_features',
-                                                               'continue_from_msas',
-                                                               'batch_features'],
+                                                               'batch_msas'],
                                 not self.jobparams.precomputed_msas_list.list_like_str_not_all_none(),
                                 not self.jobparams.precomputed_msas_path.is_set()]):
                             #Start with cpu step
@@ -604,9 +604,10 @@ class MainFrame(QtWidgets.QMainWindow):
                                 self.jobparams.job_name.set_value(job_params['job_name'])
                             elif split_job_step == 'gpu':
                                 logger.debug(f"queue pid {queue_pid}")
-                                job_params['pipeline'] = 'continue_from_features'
-                                #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
-                                self.jobparams.pipeline.set_value('continue_from_features')
+                                if not job_params['pipeline'] == 'continue_from_msas':
+                                    job_params['pipeline'] = 'continue_from_features'
+                                    #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
+                                    self.jobparams.pipeline.set_value('continue_from_features')
                                 job_params['force_cpu'] = False
                                 job_params['num_cpus'] = 1
                                 job_params['split_job_step'] = 'gpu'
@@ -643,16 +644,19 @@ class MainFrame(QtWidgets.QMainWindow):
                     if os.path.exists(job_params['job_path']):
                         if not split_job_step == 'gpu':
                             if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
-                                message = "Output directory already exists." \
-                                          " Existing MSAs will be overwritten by selected precomputed MSAs." \
-                                          " Confirm to overwrite files."
+                                pc_msa_paths = self.jobparams.precomputed_msas_list.get_value().split(',') + [self.jobparams.precomputed_msas_path.get_value()]
+                                logger.debug(pc_msa_paths)
+                                if any([re.search(job_params['output_dir'], item) for item in pc_msa_paths]):
+                                    message_dlg('error', 'One or more precomputed MSAs are from the current folder.'
+                                                         ' Please select a new Job Name.')
+                                    raise PrecomputedMSAConflict("One or more precomputed MSAs are from the current folder.")
                             else:
                                 message = "Output directory already exists. Confirm to overwrite files." \
                                           " If \"continue_from_msas\" is selected, MSAs will not be overwritten."
-                            ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-                            if ret == QtWidgets.QMessageBox.No:
-                                raise JobSubmissionCancelledByUser
+                                ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+                                if ret == QtWidgets.QMessageBox.No:
+                                    raise JobSubmissionCancelledByUser
                     else:
                         os.mkdir(job_params['job_path'])
                     #Process custom templates
@@ -663,7 +667,7 @@ class MainFrame(QtWidgets.QMainWindow):
                             logger.debug(msg)
                             message_dlg('Error', msg)
                             raise ProcessCustomTemplateError(msg)
-                    #if self.jobparams.batch_features:
+                    #if self.jobparams.batch_msas:
                     #    self.jobparams.only_features.set_value(True)
                     if self.jobparams.precomputed_msas_path.value or self.jobparams.precomputed_msas_list.list_like_str_not_all_none():
                         self.jobparams.pipeline.set_cmb_by_text('continue_from_msas')
@@ -793,15 +797,16 @@ class MainFrame(QtWidgets.QMainWindow):
                         del cmd_dict['uniprot_database_path']
                     if job_params['db_preset'] == 'full_dbs':
                         del cmd_dict['small_bfd_database_path']
-                        del cmd_dict['uniref30_database_path']
+                        del cmd_dict['uniref30_mmseqs_database_path']
                         del cmd_dict['colabfold_envdb_database_path']
                     if job_params['db_preset'] == 'reduced_dbs':
                         del cmd_dict['bfd_database_path']
-                        del cmd_dict['uniclust30_database_path']
                         del cmd_dict['uniref30_database_path']
+                        del cmd_dict['uniref30_mmseqs_database_path']
                         del cmd_dict['colabfold_envdb_database_path']
                     if job_params['db_preset'] == 'colabfold':
                         del cmd_dict['small_bfd_database_path']
+                        del cmd_dict['uniref30_database_path']
 
                     logger.debug(job_params['force_cpu'])
                     logger.debug(cmd_dict)

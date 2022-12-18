@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1210</width>
-    <height>830</height>
+    <height>808</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -125,7 +125,7 @@
                 <item>
                  <widget class="QTableWidget" name="tbl_jobparams_sequence_params">
                   <property name="toolTip">
-                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Custom Template: Load a local file to be used as template. Only this template will be used and search for other templates is disabled. The template model needs to be in CIF format. Use https://mmcif.pdbj.org/converter/ or the maxit tool (https://sw-tools.rcsb.org/apps/MAXIT/) to convert PDB files.&lt;p&gt;&lt;p&gt;No MSA: Skip MSA generation and use empty MSA features for prediction.&lt;p&gt;&lt;p&gt;No Templates: Use empty template features in prediction.&lt;br&gt;&lt;body&gt;&lt;html&gt;</string>
+                   <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Precomputed MSAs: Use calculated MSAs from a previous job that match the sequence of the compenent. The MSA files from monomer and multimer predictions are stored in job_name/job_name/msas/ and job_name/job_name/chain_id/.&lt;/p&gt;&lt;p&gt;Custom Template: Load a local file to be used as template. Only this template will be used and search for other templates is disabled. The template model needs to be in CIF format. Use https://mmcif.pdbj.org/converter/ or the maxit tool (https://sw-tools.rcsb.org/apps/MAXIT/) to convert PDB files.&lt;/p&gt;&lt;p&gt;No MSA: Skip MSA generation and use empty MSA features for prediction.&lt;/p&gt;&lt;p&gt;No Templates: Use empty template features in prediction.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                   </property>
                  </widget>
                 </item>
@@ -163,10 +163,10 @@
                      </sizepolicy>
                     </property>
                     <property name="toolTip">
-                     <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
+                     <string>(Optional) Path to a previous job or project folder. The folder will be searched for matching MSAs.</string>
                     </property>
                     <property name="statusTip">
-                     <string>(Optional) Path to MSAs folder from a previous job (myjob/myjob/msas).</string>
+                     <string>(Optional) Path to a previous job or project folder. The folder will be searched for matching MSAs.</string>
                     </property>
                    </widget>
                   </item>
@@ -311,7 +311,11 @@
                      </widget>
                     </item>
                     <item>
-                     <widget class="QComboBox" name="cmb_jobparams_db_preset"/>
+                     <widget class="QComboBox" name="cmb_jobparams_db_preset">
+                      <property name="toolTip">
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DB preset:&lt;/p&gt;&lt;p&gt;full_dbs: Run HHblits on uniref30 and bfd databses, jackhmmer on uniref90 and mgnify databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;reduced_dbs: Run jackhmmer on smaller bfd, mgnify, and uniref90 databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;colabfold: Run MMseqs on uniref30 and colabfold_envdb, jackhmmer on uniref90 databse.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                      </property>
+                     </widget>
                     </item>
                    </layout>
                   </item>
@@ -325,7 +329,11 @@
                      </widget>
                     </item>
                     <item>
-                     <widget class="QComboBox" name="cmb_jobparams_pipeline"/>
+                     <widget class="QComboBox" name="cmb_jobparams_pipeline">
+                      <property name="toolTip">
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Pipeline:&lt;/p&gt;&lt;p&gt;full: Full pipeline including feature generation and prediction.&lt;/p&gt;&lt;p&gt;only_features: Stop pipeline after feature generation. The job can be continued with &amp;quot;continue_from_features&amp;quot;.&lt;/p&gt;&lt;p&gt;batch_msas: Calculate MSAs for a given set of sequences that can be used as &amp;quot;precomputed MSAs&amp;quot; in subsequent jobs (&amp;quot;continue_from_msas&amp;quot;).&lt;/p&gt;&lt;p&gt;continue_from_msas: Use precomputed MSAs (requires different Job Name) or continue from an existing job (Job Name needs to be left unchanged).&lt;/p&gt;&lt;p&gt;continue_from_features: Continue from a &amp;quot;only_features&amp;quot; job (A features.pkl file must be present and the same &amp;quot;Job name&amp;quot; as for the &amp;quot;only_features&amp;quot; job needs to be used).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                      </property>
+                     </widget>
                     </item>
                    </layout>
                   </item>
@@ -551,7 +559,7 @@
                  </layout>
                 </item>
                 <item>
-                 <widget class="QWebEngineView" name="web_evaluation_results">
+                 <widget class="QWebEngineView" name="web_evaluation_results" native="true">
                   <property name="sizePolicy">
                    <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                     <horstretch>0</horstretch>

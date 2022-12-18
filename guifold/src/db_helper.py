@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 3
+DB_REVISION = 4
 
 def get_type(type):
     types = {'str': String,
@@ -202,13 +202,13 @@ class DBHelper:
         result_job = sess.query(self.Job).all()
         for job in result_job:
             if job.type is None or job.type == "":
-                result_jobparams = sess.query(db.Jobparams).filter_by(job_id=job.id).one()
+                result_jobparams = sess.query(self.Jobparams).filter_by(job_id=job.id).one()
                 #only_features = bool(result_jobparams.only_features)
                 #continue_from_features = bool(result_jobparams.continue_from_features)
                 #use_precomputed_msas = bool(result_jobparams.use_precomputed_msas)
-                #batch_features = bool(result_jobparams.batch_features)
+                #batch_msas = bool(result_jobparams.batch_msas)
                 pipeline = result_jobparams.pipeline
-                if pipeline in ['only_features', 'batch_features']:
+                if pipeline in ['only_features', 'batch_msas']:
                     type = "features"
                 elif pipeline in ['continue_from_features', 'continue_from_msas']:
                     type = "prediction"
@@ -238,14 +238,14 @@ class DBHelper:
                 if row.pipeline is None:
                     if row.only_features:
                         row.pipeline = 'only_features'
-                    elif row.batch_features:
-                        row.pipeline = 'batch_features'
+                    elif row.batch_msas:
+                        row.pipeline = 'batch_msas'
                     elif row.use_precomputed_msas:
                         row.pipeline = 'continue_from_msas'
                     elif row.continue_from_features:
                         row.pipeline = 'continue_from_features'
                     elif not any([row.only_features,
-                                  row.batch_features,
+                                  row.batch_msas,
                                   row.use_precomputed_msas,
                                   row.continue_from_features]):
                         row.pipeline = 'full'
@@ -276,9 +276,11 @@ class DBHelper:
         stmts += ['ALTER TABLE settings ADD COLUMN uniref30_database_path VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD COLUMN colabfold_envdb_database_path VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD COLUMN mmseqs_binary_path VARCHAR DEFAULT NULL']
-        stmts += ['ALTER TABLE jobparams ADD COLUMN batch_features BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN batch_msas BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE jobparams ADD COLUMN precomputed_msas_list VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN pipeline VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings RENAME COLUMN uniref30_database_path TO uniref30_mmseqs_database_path']
+        stmts += ['ALTER TABLE settings RENAME COLUMN uniclust30_database_path TO uniref30_database_path']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

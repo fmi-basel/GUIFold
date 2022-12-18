@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>932</width>
-    <height>834</height>
+    <height>806</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -617,11 +617,11 @@
             <x>10</x>
             <y>30</y>
             <width>371</width>
-            <height>421</height>
+            <height>439</height>
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayout_5">
-           <item row="10" column="0">
+           <item row="11" column="0">
             <widget class="QLabel" name="label_26">
              <property name="font">
               <font>
@@ -634,7 +634,7 @@
              </property>
             </widget>
            </item>
-           <item row="10" column="1">
+           <item row="11" column="1">
             <widget class="QLineEdit" name="lei_settings_pdb_seqres_database_path">
              <property name="placeholderText">
               <string>/path/to/pdb_seqres/pdb_seqres.txt</string>
@@ -642,55 +642,41 @@
             </widget>
            </item>
            <item row="7" column="2">
-            <widget class="QToolButton" name="btn_settings_uniclust30_database_path">
-             <property name="text">
-              <string>...</string>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="2">
             <widget class="QToolButton" name="btn_settings_small_bfd_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="5" column="2">
+           <item row="6" column="2">
             <widget class="QToolButton" name="btn_settings_bfd_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="2">
+           <item row="9" column="2">
             <widget class="QToolButton" name="btn_settings_uniprot_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="4" column="2">
+           <item row="5" column="2">
             <widget class="QToolButton" name="btn_settings_mgnify_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="7" column="1">
-            <widget class="QLineEdit" name="lei_settings_uniclust30_database_path">
-             <property name="placeholderText">
-              <string>/path/to/uniclust30/uniclust30_2018_08/uniclust30_2018_08</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="1">
+           <item row="9" column="1">
             <widget class="QLineEdit" name="lei_settings_uniprot_database_path">
              <property name="placeholderText">
               <string>/path/to/uniprot/uniprot.fasta</string>
              </property>
             </widget>
            </item>
-           <item row="9" column="2">
+           <item row="10" column="2">
             <widget class="QToolButton" name="btn_settings_pdb70_database_path">
              <property name="text">
               <string>...</string>
@@ -710,34 +696,21 @@
              </property>
             </widget>
            </item>
-           <item row="12" column="2">
+           <item row="13" column="2">
             <widget class="QToolButton" name="btn_settings_obsolete_pdbs_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="7" column="0">
-            <widget class="QLabel" name="label_36">
-             <property name="font">
-              <font>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="text">
-              <string>uniclust30</string>
-             </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
+           <item row="5" column="1">
             <widget class="QLineEdit" name="lei_settings_mgnify_database_path">
              <property name="placeholderText">
               <string>/path/to/mgnify/mgy_cluster.fa</string>
              </property>
             </widget>
            </item>
-           <item row="6" column="1">
+           <item row="7" column="1">
             <widget class="QLineEdit" name="lei_settings_small_bfd_database_path">
              <property name="text">
               <string/>
@@ -747,7 +720,7 @@
              </property>
             </widget>
            </item>
-           <item row="9" column="0">
+           <item row="10" column="0">
             <widget class="QLabel" name="label_37">
              <property name="font">
               <font>
@@ -760,7 +733,7 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="0">
+           <item row="6" column="0">
             <widget class="QLabel" name="label_38">
              <property name="font">
               <font>
@@ -787,14 +760,14 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="1">
+           <item row="6" column="1">
             <widget class="QLineEdit" name="lei_settings_bfd_database_path">
              <property name="placeholderText">
               <string>/path/to/bfd/bdf_metaclust_clu_complete_id30_c90_final_seq.sorted_opt</string>
              </property>
             </widget>
            </item>
-           <item row="8" column="0">
+           <item row="9" column="0">
             <widget class="QLabel" name="label_39">
              <property name="font">
               <font>
@@ -807,7 +780,7 @@
              </property>
             </widget>
            </item>
-           <item row="9" column="1">
+           <item row="10" column="1">
             <widget class="QLineEdit" name="lei_settings_pdb70_database_path">
              <property name="text">
               <string/>
@@ -817,7 +790,7 @@
              </property>
             </widget>
            </item>
-           <item row="6" column="0">
+           <item row="7" column="0">
             <widget class="QLabel" name="label_40">
              <property name="font">
               <font>
@@ -857,35 +830,35 @@
              </property>
             </widget>
            </item>
-           <item row="11" column="1">
+           <item row="12" column="1">
             <widget class="QLineEdit" name="lei_settings_template_mmcif_dir">
              <property name="placeholderText">
               <string>/path/to/pdb_mmcif/mmcif_files</string>
              </property>
             </widget>
            </item>
-           <item row="11" column="2">
+           <item row="12" column="2">
             <widget class="QToolButton" name="btn_settings_template_mmcif_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="10" column="2">
+           <item row="11" column="2">
             <widget class="QToolButton" name="btn_settings_pdb_seqres_database_path">
              <property name="text">
               <string>...</string>
              </property>
             </widget>
            </item>
-           <item row="12" column="1">
+           <item row="13" column="1">
             <widget class="QLineEdit" name="lei_settings_obsolete_pdbs_path">
              <property name="placeholderText">
               <string>/path/to/pdb_mmcif/obsolete.dat</string>
              </property>
             </widget>
            </item>
-           <item row="12" column="0">
+           <item row="13" column="0">
             <widget class="QLabel" name="label_42">
              <property name="font">
               <font>
@@ -898,7 +871,7 @@
              </property>
             </widget>
            </item>
-           <item row="11" column="0">
+           <item row="12" column="0">
             <widget class="QLabel" name="label_43">
              <property name="font">
               <font>
@@ -911,7 +884,7 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="label_44">
              <property name="font">
               <font>
@@ -940,11 +913,11 @@
            <item row="2" column="1">
             <widget class="QLineEdit" name="lei_settings_uniref30_database_path">
              <property name="placeholderText">
-              <string>/path/to/uniref30_2202/uniref30_2202_db</string>
+              <string>/path/to/uniref30_2021_03/UniRef30_2021_03</string>
              </property>
             </widget>
            </item>
-           <item row="3" column="0">
+           <item row="4" column="0">
             <widget class="QLabel" name="label_46">
              <property name="font">
               <font>
@@ -957,7 +930,7 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="4" column="1">
             <widget class="QLineEdit" name="lei_settings_colabfold_envdb_database_path">
              <property name="placeholderText">
               <string>/path/to/colabfold_envdb_202108/colabfold_envdb_202108_db</string>
@@ -971,8 +944,35 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="2">
+           <item row="4" column="2">
             <widget class="QToolButton" name="btn_settings_colabfold_envdb_database_path">
+             <property name="text">
+              <string>...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_36">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>uniref30_mmseqs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLineEdit" name="lei_settings_uniref30_mmseqs_database_path">
+             <property name="placeholderText">
+              <string>/path/to/uniref30_2202/uniref30_2202_db</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="2">
+            <widget class="QToolButton" name="btn_settings_uniref30_mmseqs_database_path">
              <property name="text">
               <string>...</string>
              </property>
