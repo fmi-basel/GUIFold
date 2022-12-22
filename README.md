@@ -55,9 +55,13 @@ bash GUIFold/setup_environment.sh
 
 If you encounter any error try to do the installation step by step.
 
+(Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold protocol for MSA generation.
+
 ### Download of genetic databases and params
 
 Follow instructions in the [AlphaFold readme](https://github.com/deepmind/alphafold#genetic-databases).
+
+If you want to use the colabfold protocol you also need to download "uniref30_2202" and "colabfold_envdb_202108" (available at [Link](https://colabfold.mmseqs.com/)). It is recommended to generate database indices for full performance (see [MMseqs2 documentation](https://mmseqs.com/latest/userguide.pdf)).
 
 ### Setup of global configuration file
 

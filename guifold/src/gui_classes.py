@@ -30,7 +30,7 @@ import traceback
 from datetime import date
 from shutil import copyfile, rmtree
 import configparser
-from subprocess import check_output
+from subprocess import Popen
 import nvidia_smi
 import math
 import shutil
@@ -1715,10 +1715,11 @@ class Settings(GUIVariables):
     def get_slurm_account(self):
         account = None
         try:
-            account_raw = check_output("sacctmgr show User $(whoami) -p -n &> /dev/null", shell=True)
-            account_raw = account_raw.decode()
-            logger.debug(f'Output from sacctmgr: {account_raw}')
-            if not account_raw is None:
+            p = Popen("sacctmgr show User $(whoami) -p -n &> /dev/null", shell=True)
+            stdout, _ = p.communicate()
+            if not stdout is None:
+                account_raw = stdout.decode()
+                logger.debug(f'Output from sacctmgr: {account_raw}')
                 account = account_raw.split("|")[1]
         except Exception as e:
             logger.debug("Could not retrieve SLURM account. You can ignore this if you are not using accounts or a different queueing system")

@@ -101,6 +101,9 @@ class ProcessCustomTemplateError(Exception):
 class PrepareCMDError(Exception):
     pass
 
+class NoFeaturesExist(Exception):
+    pass
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
@@ -659,6 +662,12 @@ class MainFrame(QtWidgets.QMainWindow):
                                     raise JobSubmissionCancelledByUser
                     else:
                         os.mkdir(job_params['job_path'])
+                    #Check if features.pkl exists when continue_from_features selected
+                    if job_params['pipeline'] == 'continue_from_features' and not split_job_step == 'gpu':
+                        if not os.path.exists(os.path.join(job_params['results_path'], 'features.pkl')):
+                            message_dlg('error', 'continue_from_features requested but no features.pkl'
+                                                 ' file found in the current job directory. Cannot continue the job.')
+                            raise NoFeaturesExist(f"No features.pkl found in {job_params['results_path']}")
                     #Process custom templates
                     if self.jobparams.custom_template_list.is_set():
                         new_custom_template_list, msgs = self.jobparams.process_custom_template_files(job_params['job_path'])

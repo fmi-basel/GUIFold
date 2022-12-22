@@ -28,7 +28,7 @@ class DefaultValues:
         self.max_template_date = str(date.today())
         self.model_preset = 'automatic'
         self.force_cpu = False
-        self.num_recycle = 3
+        self.num_recycle = 20
         self.num_multimer_predictions_per_model = 1
 
 
