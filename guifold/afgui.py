@@ -607,10 +607,9 @@ class MainFrame(QtWidgets.QMainWindow):
                                 self.jobparams.job_name.set_value(job_params['job_name'])
                             elif split_job_step == 'gpu':
                                 logger.debug(f"queue pid {queue_pid}")
-                                if not job_params['pipeline'] == 'continue_from_msas':
-                                    job_params['pipeline'] = 'continue_from_features'
-                                    #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
-                                    self.jobparams.pipeline.set_value('continue_from_features')
+                                job_params['pipeline'] = 'continue_from_features'
+                                #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
+                                self.jobparams.pipeline.set_value('continue_from_features')
                                 job_params['force_cpu'] = False
                                 job_params['num_cpus'] = 1
                                 job_params['split_job_step'] = 'gpu'
@@ -654,12 +653,16 @@ class MainFrame(QtWidgets.QMainWindow):
                                                          ' Please select a new Job Name.')
                                     raise PrecomputedMSAConflict("One or more precomputed MSAs are from the current folder.")
                             else:
-                                message = "Output directory already exists. Confirm to overwrite files." \
-                                          " If \"continue_from_msas\" is selected, MSAs will not be overwritten."
+                                message = "Output directory already exists. Click \"Yes\" if you want to continue from existing MSAs or \"No\" " \
+                                          "if existing MSAs should be recalculated. Existing model files will be overwritten in any case."
                                 ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-                                if ret == QtWidgets.QMessageBox.No:
+                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
+                                if ret == QtWidgets.QMessageBox.Cancel:
                                     raise JobSubmissionCancelledByUser
+                                elif ret == QtWidgets.QMessageBox.Yes:
+                                    job_params['use_precomputed_msas'] = True
+                                else:
+                                    job_params['use_precomputed_msas'] = False
                     else:
                         os.mkdir(job_params['job_path'])
                     #Check if features.pkl exists when continue_from_features selected
@@ -679,8 +682,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     #if self.jobparams.batch_msas:
                     #    self.jobparams.only_features.set_value(True)
                     if self.jobparams.precomputed_msas_path.value or self.jobparams.precomputed_msas_list.list_like_str_not_all_none():
-                        self.jobparams.pipeline.set_cmb_by_text('continue_from_msas')
-                        self.jobparams.pipeline.set_value('continue_from_msas')
+                        job_params['use_precomputed_msas'] = True
                     self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
                     job_params['fasta_path'] = self.jobparams.fasta_path.get_value()
                     self.jobparams.write_fasta()
@@ -796,6 +798,9 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug("cmd dict settings")
                     logger.debug(cmd_dict_settings)
                     cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings}
+                    if 'use_precomputed_msas' in job_params:
+                        if job_params['use_precomputed_msas']:
+                            cmd_dict['use_precomputed_msas'] = ""
                     logger.debug(cmd_dict)
                     if job_params['force_cpu']:
                        del cmd_dict['use_gpu_relax']
@@ -1060,8 +1065,6 @@ class MainFrame(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
         self.jobparams.precomputed_msas_path.set_value(path)
         self.jobparams.precomputed_msas_path.ctrl.setText(path)
-        self.jobparams.pipeline.set_cmb_by_text('continue_from_msas')
-        self.jobparams.pipeline.set_value('continue_from_msas')
 
     def OnOpenModelViewer(self, model_viewer):
         if 'results_path' in self.gui_params:

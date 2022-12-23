@@ -210,7 +210,7 @@ class DBHelper:
                 pipeline = result_jobparams.pipeline
                 if pipeline in ['only_features', 'batch_msas']:
                     type = "features"
-                elif pipeline in ['continue_from_features', 'continue_from_msas']:
+                elif pipeline in ['continue_from_features']:
                     type = "prediction"
                 else:
                     type = "full"
@@ -240,8 +240,6 @@ class DBHelper:
                         row.pipeline = 'only_features'
                     elif row.batch_msas:
                         row.pipeline = 'batch_msas'
-                    elif row.use_precomputed_msas:
-                        row.pipeline = 'continue_from_msas'
                     elif row.continue_from_features:
                         row.pipeline = 'continue_from_features'
                     elif not any([row.only_features,

@@ -773,8 +773,7 @@ class JobParams(GUIVariables):
         self.pipeline_dict = {0: 'full',
                               1: 'only_features',
                               2: 'batch_msas',
-                              3: 'continue_from_msas',
-                              4: 'continue_from_features'}
+                              3: 'continue_from_features'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
 
 
@@ -1015,7 +1014,7 @@ class Job(GUIVariables):
         return result
 
     def get_type(self, job_params):
-        if job_params['pipeline'] in ['continue_from_msas', 'continue_from_features']:
+        if job_params['pipeline'] == 'continue_from_features':
             type = "prediction"
         elif job_params['pipeline'] in ['only_features', 'batch_msas']:
             type = "features"
