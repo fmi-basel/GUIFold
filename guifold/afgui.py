@@ -323,6 +323,9 @@ class MainFrame(QtWidgets.QMainWindow):
         pipeline_list = self.jobparams.pipeline_dict.values()
         for item in pipeline_list:
             self.jobparams.pipeline.ctrl.addItem(item)
+        prediction_list = self.jobparams.prediction_dict.values()
+        for item in prediction_list:
+            self.jobparams.prediction.ctrl.addItem(item)
         self.jobparams.update_from_default(self.default_values)
         advanced_params_default = AdvancedParamsDefaultValues()
         self.jobparams.update_from_default(advanced_params_default)
@@ -647,6 +650,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         if not split_job_step == 'gpu':
                             if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
                                 pc_msa_paths = self.jobparams.precomputed_msas_list.get_value().split(',') + [self.jobparams.precomputed_msas_path.get_value()]
+                                pc_msa_paths = [x for x in pc_msa_paths if not x is None]
                                 logger.debug(pc_msa_paths)
                                 if any([re.search(job_params['output_dir'], item) for item in pc_msa_paths]):
                                     message_dlg('error', 'One or more precomputed MSAs are from the current folder.'
@@ -798,6 +802,15 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug("cmd dict settings")
                     logger.debug(cmd_dict_settings)
                     cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings}
+                    if job_params['prediction'] == 'alphafold':
+                        if 'num_gpu' in cmd_dict:
+                            del cmd_dict['num_gpu']
+                        if 'chunk_size' in cmd_dict:
+                            del cmd_dict['chunk_size']
+                        if 'inplace' in cmd_dict:
+                            del cmd_dict['inplace']
+                    if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
+                        del cmd_dict['chunk_size']
                     if 'use_precomputed_msas' in job_params:
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""

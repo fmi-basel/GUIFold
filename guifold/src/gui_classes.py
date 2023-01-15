@@ -775,6 +775,13 @@ class JobParams(GUIVariables):
                               2: 'batch_msas',
                               3: 'continue_from_features'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
+        self.prediction_dict = {0: 'alphafold',
+                                1: 'fastfold'}
+        self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict)
+        #FastFold params
+        self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)
+        self.chunk_size = Variable('chunk_size', 'int', ctrl_type="sbo", cmd=True)
+        self.inplace = Variable('inplace', 'bool', ctrl_type="chk", cmd=True)
 
 
     def set_db(self, db):
@@ -1058,7 +1065,10 @@ class Job(GUIVariables):
         msgs = []
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
-        command = ["run_alphafold.py\\\n"] + job_args
+        if job_params['prediction'] == 'alphafold':
+            command = ["run_alphafold.py\\\n"] + job_args
+        elif job_params['prediction'] == 'fastfold':
+            command = ["run_fastfold.py\\\n"] + job_args
         command = ' '.join(command)
         logfile = job_params["log_file"]
         submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
@@ -1078,6 +1088,11 @@ class Job(GUIVariables):
                 to_render['num_cpus'] = 1
             else:
                 to_render['num_cpus'] = job_params['num_cpus']
+        if 'num_gpus' in template_vars:
+            if 'num_gpu' in job_params:
+                to_render['num_gpus'] = job_params['num_gpu']
+            else:
+                to_render['num_gpus'] = 1
         if 'use_gpu' in template_vars:
             if job_params['pipeline'] in ['only_features', 'batch_msas'] or job_params['force_cpu']:
                 to_render['use_gpu'] = False
@@ -1205,7 +1220,10 @@ class Job(GUIVariables):
 
 
         #Switch to unified memory if GPU memory is not enough for given sequence length
-        estimated_gpu_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
+        if job_params['prediction'] == 'fastfold':
+            estimated_gpu_mem = job_params['max_gpu_mem']
+        else:
+            estimated_gpu_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
         #gpu_name = None
         #gpu_mem = None
         if not 'max_ram' in job_params:
@@ -1266,7 +1284,11 @@ class Job(GUIVariables):
             if job_params['pipeline'] in ['only_features', 'batch_msas'] or job_params['force_cpu']:
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
-            cmd += [f"run_alphafold.py\\\n"] + job_args + [f">> {job_params['log_file']} 2>&1"]
+            if job_params['prediction'] == 'alphafold':
+                cmd += [f"run_alphafold.py\\\n"]
+            elif job_params['prediction'] == 'fastfold':
+                cmd += [f"run_fastfold.py\\\n"]
+            cmd += job_args + [f">> {job_params['log_file']} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
         return cmd, error_msgs, warn_msgs, estimated_gpu_mem
 
@@ -1851,6 +1873,7 @@ class DefaultValues:
         self.output_dir = None
         self.db_preset = 'full_dbs'
         self.pipeline = 'full'
+        self.prediction = 'alphafold'
         settings = other.settings.get_from_db(other.sess)
         if settings.queue_default:
             self.queue = True

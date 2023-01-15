@@ -6,12 +6,12 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>409</width>
-    <height>372</height>
+    <width>419</width>
+    <height>631</height>
    </rect>
   </property>
   <property name="sizePolicy">
-   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+   <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
     <horstretch>0</horstretch>
     <verstretch>0</verstretch>
    </sizepolicy>
@@ -21,7 +21,13 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
-    <layout class="QVBoxLayout" name="verticalLayout">
+    <layout class="QVBoxLayout" name="verticalLayout" stretch="3,0,1">
+     <property name="spacing">
+      <number>-1</number>
+     </property>
+     <property name="sizeConstraint">
+      <enum>QLayout::SetDefaultConstraint</enum>
+     </property>
      <item>
       <widget class="QGroupBox" name="groupBox">
        <property name="enabled">
@@ -34,7 +40,7 @@
         </sizepolicy>
        </property>
        <property name="title">
-        <string>Advanced Settings</string>
+        <string>General</string>
        </property>
        <widget class="QWidget" name="gridLayoutWidget_2">
         <property name="geometry">
@@ -42,17 +48,13 @@
           <x>10</x>
           <y>40</y>
           <width>361</width>
-          <height>251</height>
+          <height>329</height>
          </rect>
         </property>
-        <layout class="QGridLayout" name="gridLayout_2">
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_9">
-           <property name="text">
-            <string>Model preset</string>
-           </property>
-          </widget>
-         </item>
+        <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0,0,0,0,0,0,0" rowminimumheight="0,0,0,0,0,0,0,0,0,0,0">
+         <property name="sizeConstraint">
+          <enum>QLayout::SetDefaultConstraint</enum>
+         </property>
          <item row="4" column="0">
           <widget class="QLabel" name="label_10">
            <property name="text">
@@ -60,13 +62,45 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_9">
+           <property name="text">
+            <string>Model preset</string>
+           </property>
+          </widget>
          </item>
-         <item row="4" column="1">
-          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
-           <property name="value">
-            <number>1</number>
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="chk_jobparams_force_cpu">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_13">
+           <property name="text">
+            <string>Random seed</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="label_15">
+           <property name="text">
+            <string>Max template date</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_14">
+           <property name="text">
+            <string>Benchmark</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="chk_jobparams_benchmark">
+           <property name="text">
+            <string/>
            </property>
           </widget>
          </item>
@@ -83,12 +117,15 @@
          <item row="1" column="1">
           <widget class="QComboBox" name="cmb_jobparams_model_preset"/>
          </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="label_12">
-           <property name="text">
-            <string>Max number recycles</string>
+         <item row="4" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
+           <property name="value">
+            <number>1</number>
            </property>
           </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
          </item>
          <item row="6" column="1">
           <widget class="QSpinBox" name="sbo_jobparams_num_recycle">
@@ -97,40 +134,100 @@
            </property>
           </widget>
          </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="label_13">
+         <item row="6" column="0">
+          <widget class="QLabel" name="label_12">
            <property name="text">
-            <string>Random seed</string>
+            <string>Max number recycles</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </widget>
+     </item>
+     <item>
+      <spacer name="verticalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>40</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="groupBox_2">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="title">
+        <string>FastFold</string>
+       </property>
+       <widget class="QWidget" name="gridLayoutWidget">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>30</y>
+          <width>361</width>
+          <height>89</height>
+         </rect>
+        </property>
+        <layout class="QGridLayout" name="gridLayout" columnstretch="3,0,2">
+         <property name="sizeConstraint">
+          <enum>QLayout::SetDefaultConstraint</enum>
+         </property>
+         <item row="1" column="2">
+          <widget class="QSpinBox" name="sbo_jobparams_chunk_size"/>
+         </item>
+         <item row="0" column="2">
+          <widget class="QSpinBox" name="sbo_jobparams_num_gpu"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>Inplace</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>Num. GPU</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="QCheckBox" name="chk_jobparams_inplace">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+            <string>Chunk size</string>
            </property>
           </widget>
          </item>
          <item row="0" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_force_cpu">
-           <property name="text">
-            <string/>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
            </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_benchmark">
-           <property name="text">
-            <string/>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
            </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="label_14">
-           <property name="text">
-            <string>Benchmark</string>
-           </property>
-          </widget>
-         </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="label_15">
-           <property name="text">
-            <string>Max template date</string>
-           </property>
-          </widget>
+          </spacer>
          </item>
         </layout>
        </widget>

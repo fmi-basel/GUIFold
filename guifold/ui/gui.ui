@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1210</width>
-    <height>808</height>
+    <height>787</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -279,28 +279,6 @@
                     </property>
                    </widget>
                   </item>
-                  <item row="0" column="4">
-                   <widget class="QPushButton" name="btn_jobparams_advanced_settings">
-                    <property name="toolTip">
-                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;More settings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-                    </property>
-                    <property name="statusTip">
-                     <string>More settings.</string>
-                    </property>
-                    <property name="text">
-                     <string>Advanced Settings</string>
-                    </property>
-                    <property name="checkable">
-                     <bool>false</bool>
-                    </property>
-                    <property name="default">
-                     <bool>false</bool>
-                    </property>
-                    <property name="flat">
-                     <bool>false</bool>
-                    </property>
-                   </widget>
-                  </item>
                   <item row="0" column="1">
                    <layout class="QHBoxLayout" name="horizontalLayout_2">
                     <item>
@@ -331,14 +309,63 @@
                     <item>
                      <widget class="QComboBox" name="cmb_jobparams_pipeline">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Pipeline:&lt;/p&gt;&lt;p&gt;full: Full pipeline including feature generation and prediction.&lt;/p&gt;&lt;p&gt;only_features: Stop pipeline after feature generation. The job can be continued with &amp;quot;continue_from_features&amp;quot;.&lt;/p&gt;&lt;p&gt;batch_msas: Calculate MSAs for a given set of sequences that can be used as &amp;quot;precomputed MSAs&amp;quot; in subsequent jobs.&lt;/p&gt;&lt;p&gt;&lt;/p&gt;&lt;p&gt;continue_from_features: Continue from a &amp;quot;only_features&amp;quot; job (A features.pkl file must be present and the same &amp;quot;Job name&amp;quot; as for the &amp;quot;only_features&amp;quot; job needs to be used).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Pipeline:&lt;/p&gt;&lt;p&gt;full: Full pipeline including feature generation and prediction.&lt;/p&gt;&lt;p&gt;only_features: Stop pipeline after feature generation. The job can be continued with &amp;quot;continue_from_features&amp;quot;.&lt;/p&gt;&lt;p&gt;batch_msas: Calculate MSAs for a given set of sequences that can be used as &amp;quot;precomputed MSAs&amp;quot; in subsequent jobs (&amp;quot;continue_from_msas&amp;quot;).&lt;/p&gt;&lt;p&gt;continue_from_features: Continue from a &amp;quot;only_features&amp;quot; job (A features.pkl file must be present and the same &amp;quot;Job name&amp;quot; as for the &amp;quot;only_features&amp;quot; job needs to be used).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                      </widget>
                     </item>
                    </layout>
                   </item>
-                  <item row="0" column="5">
+                  <item row="0" column="2">
+                   <layout class="QHBoxLayout" name="horizontalLayout_6">
+                    <item>
+                     <widget class="QLabel" name="label_5">
+                      <property name="text">
+                       <string>Prediction</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QComboBox" name="cmb_jobparams_prediction"/>
+                    </item>
+                   </layout>
+                  </item>
+                  <item row="1" column="2">
+                   <widget class="QPushButton" name="btn_jobparams_advanced_settings">
+                    <property name="toolTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;More settings.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>More settings.</string>
+                    </property>
+                    <property name="text">
+                     <string>Advanced Settings</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>false</bool>
+                    </property>
+                    <property name="default">
+                     <bool>false</bool>
+                    </property>
+                    <property name="flat">
+                     <bool>false</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="0" column="3">
                    <spacer name="horizontalSpacer_2">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item row="1" column="3">
+                   <spacer name="horizontalSpacer_4">
                     <property name="orientation">
                      <enum>Qt::Horizontal</enum>
                     </property>

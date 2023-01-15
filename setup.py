@@ -7,5 +7,5 @@ setuptools.setup(
      zip_safe=False,
      packages=setuptools.find_packages(),
      include_package_data=True,
-     scripts=['guifold/afgui.py', 'guifold/afeval.py'],)
+     scripts=['guifold/afgui.py', 'guifold/afeval.py', 'guifold/run_fastfold.py'],)
 print(setuptools.find_packages())

@@ -69,8 +69,8 @@ class EvaluationPipeline:
                     logging.debug(mdl)
                     with open(mdl, 'rb') as f:
                         pkl_data = pickle.load(f)
-                        #for k, v in pkl_data.items():
-                        #print(k)
+                        for k, v in pkl_data.items():
+                            logging.debug(k)
                         if 'predicted_aligned_error' in pkl_data:
                             pae = pkl_data['predicted_aligned_error']
                         else:
@@ -83,8 +83,14 @@ class EvaluationPipeline:
                         mdl_name = os.path.splitext(os.path.basename(mdl))[0]
                         pae_list.append((pae, mdl_name))
                         plddt_list.append((plddt, mdl_name))
+            logging.debug(pae_list)
+            logging.debug("Check none:")
+            logging.debug(self.check_none(pae_list))
             if multimer:
-                pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
+                if not self.check_none(pae_list):
+                    pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
+                else:
+                    no_pae = True
                 plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
             logging.debug(pae_list)
             if not self.check_none(pae_list):
@@ -171,10 +177,14 @@ class EvaluationPipeline:
     def check_none(self, nested_list):
         if isinstance(nested_list, list):
             for x in nested_list:
-                self.check_none(x)
+                if self.check_none(x):
+                    return True
+            return False
         else:
             if nested_list is None:
                 return True
+            else:
+                return False
 
     def parse_input_sequence(self, input_seq):
         input_sequences = []

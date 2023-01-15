@@ -20,7 +20,7 @@
 
 # Settings when GPU required
 {% if use_gpu %}
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:{num_gpus}
 # Select appropriate GPU model based on estimated memory
    {% if gpu_mem | int <= 31 %}
 #SBATCH --constraint=
