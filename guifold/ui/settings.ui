@@ -194,7 +194,7 @@
             </widget>
            </item>
            <item row="3" column="1">
-            <widget class="QSpinBox" name="sbo_settings_num_cpus">
+            <widget class="QSpinBox" name="sbo_settings_num_cpu">
              <property name="toolTip">
               <string>Number of CPUs is relevant for MSA generation. </string>
              </property>

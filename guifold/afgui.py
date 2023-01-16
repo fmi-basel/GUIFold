@@ -578,7 +578,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     job_params['host'] = self.job.host.get_value()
                     self.job.set_status("starting")
                     job_params['job_name'] = self.jobparams.job_name.get_value()
-                    job_params['num_cpus'] = settings.num_cpus
+                    job_params['num_cpu'] = settings.num_cpu
                     job_params['split_job'] = settings.split_job
                     job_params['split_job_step'] = None
                     job_params['queue_jobid_regex'] = settings.queue_jobid_regex
@@ -597,9 +597,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         if all([job_params['split_job'],
                                 not job_params['pipeline'] in ['continue_from_features',
                                                                'only_features',
-                                                               'batch_msas'],
-                                not self.jobparams.precomputed_msas_list.list_like_str_not_all_none(),
-                                not self.jobparams.precomputed_msas_path.is_set()]):
+                                                               'batch_msas']]):
                             #Start with cpu step
                             if split_job_step is None:
                                 split_job_step = job_params['split_job_step'] = 'cpu'
@@ -614,7 +612,7 @@ class MainFrame(QtWidgets.QMainWindow):
                                 #self.jobparams.pipeline.set_cmb_by_text('continue_from_features')
                                 self.jobparams.pipeline.set_value('continue_from_features')
                                 job_params['force_cpu'] = False
-                                job_params['num_cpus'] = 1
+                                job_params['num_cpu'] = 1
                                 job_params['split_job_step'] = 'gpu'
                                 job_params['job_name'] = f"{job_params['job_name']}"
                                 self.jobparams.job_name.set_value(job_params['job_name'])
@@ -754,11 +752,11 @@ class MainFrame(QtWidgets.QMainWindow):
                             raise QueueSubmitError("Minimum RAM not specified")
                         else:
                             job_params['min_ram'] = settings.min_ram
-                        if settings.num_cpus is None or settings.num_cpus == '':
+                        if settings.num_cpu is None or settings.num_cpu == '':
                             message_dlg("error", "Requested to submit to queue but found no CPU number in settings.")
                             raise QueueSubmitError("CPU number not specified")
                         else:
-                            job_params['num_cpus'] = settings.num_cpus
+                            job_params['num_cpu'] = settings.num_cpu
                         if settings.queue_account is None or settings.queue_account == '':
                             job_params['queue_account'] = None
                         else:

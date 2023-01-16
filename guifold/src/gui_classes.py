@@ -25,6 +25,7 @@ import socket
 from Bio import SeqIO
 from PyQt5 import QtWidgets, QtGui, QtCore, QtWebEngineWidgets
 from jinja2 import Template, Environment, meta, PackageLoader
+from guifold.src.gui_dialogs import message_dlg
 from sqlalchemy.orm.exc import NoResultFound
 import traceback
 from datetime import date
@@ -372,8 +373,10 @@ class TblCtrlSequenceParams(Variable):
             logger.debug(path)
             lei.setText(path)
 
-    def OnBtnSelectFolder(self, lei, widget):
+    def OnBtnSelectFolder(self, lei, widget, check=None):
         path = QtWidgets.QFileDialog.getExistingDirectory(widget, 'Select Folder')
+        if check == 'precomputed_msas':
+            self.check_precomputed_msas_folder(path)
         lei.setText(path)
 
     def create_widgets(self, seq_names):
@@ -394,7 +397,7 @@ class TblCtrlSequenceParams(Variable):
 
             precomputed_msas_widget = SelectPrecomputedMsasWidget()
             precomputed_msas_widget.btn_precomputed_msas.clicked.connect(
-                lambda checked, a=precomputed_msas_widget.lei_precomputed_msas, b=precomputed_msas_widget: self.OnBtnSelectFolder(a, b))
+                lambda checked, a=precomputed_msas_widget.lei_precomputed_msas, b=precomputed_msas_widget, c='precomputed_msas': self.OnBtnSelectFolder(a, b, c))
             self.sequence_params_widgets["precomputed_msas_list"].append(precomputed_msas_widget)
         logger.debug(self.sequence_params_widgets)
 
@@ -443,15 +446,11 @@ class TblCtrlSequenceParams(Variable):
                 else:
                     self.sequence_params_values[key].append(str(self.sequence_params_widgets[key][i].isChecked()))
 
-
-
         return (','.join(['None' if x == "" else x for x in self.sequence_params_values['custom_template_list']]),
                 ','.join(['None' if x == "" else x for x in self.sequence_params_values['precomputed_msas_list']]),
                 ','.join(self.sequence_params_values['no_msa_list']),
                 ','.join(self.sequence_params_values['no_template_list']),
                 ','.join(seq_names))
-
-
 
     def set_values(self, seq_names):
         logger.debug("Set values")
@@ -470,10 +469,7 @@ class TblCtrlSequenceParams(Variable):
                         val = False
                     self.sequence_params_widgets[key][i].setChecked(val)
 
-
-
     def update_from_db(self, db_result, other=None):
-
         if not db_result.job_name is None:
             self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
             self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
@@ -497,7 +493,13 @@ class TblCtrlSequenceParams(Variable):
             self.set_values(seq_names)
             self.add_widgets_to_cells(seq_names)
 
-
+    def check_precomputed_msas_folder(self, path):
+        found = False
+        for f in os.listdir(path):
+            if re.search("uniref90_hits", f):
+                found = True
+        if not found:
+            message_dlg('error', f'No suitable MSAs files found in {path}. Expected to find at least uniref90_hits.')
 
 class GUIVariables:
     """ Functions shared by GUI associated variables. Inherited by """
@@ -1083,11 +1085,11 @@ class Job(GUIVariables):
         logger.debug(template_vars)
         to_render = {}
 
-        if 'num_cpus' in template_vars:
+        if 'num_cpu' in template_vars:
             if job_params['pipeline'] == 'continue_from_features':
-                to_render['num_cpus'] = 1
+                to_render['num_cpu'] = 1
             else:
-                to_render['num_cpus'] = job_params['num_cpus']
+                to_render['num_cpu'] = job_params['num_cpu']
         if 'num_gpus' in template_vars:
             if 'num_gpu' in job_params:
                 to_render['num_gpus'] = job_params['num_gpu']
@@ -1111,8 +1113,8 @@ class Job(GUIVariables):
             #         to_render['use_gpu'] = True
             #         if job_params['gpu_lane_list']:
             #             to_render['gpu_lanes'] = job_params['gpu_lane_list']
-            #         if 'num_cpus' in template_vars:
-            #             to_render['num_cpus'] = 1
+            #         if 'num_cpu' in template_vars:
+            #             to_render['num_cpu'] = 1
         else:
             if job_params['split_job']:
                 msgs.append("Job splitting selected in the GUI"
@@ -1219,9 +1221,12 @@ class Job(GUIVariables):
         #job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse$', x)]
 
 
-        #Switch to unified memory if GPU memory is not enough for given sequence length
+        #In case of FastFold estimation of GPU memory is more complicated. For now use maximum available GPU mem.
         if job_params['prediction'] == 'fastfold':
-            estimated_gpu_mem = job_params['max_gpu_mem']
+            if job_params['queue']:
+                estimated_gpu_mem = job_params['max_gpu_mem']
+            else:
+                estimated_gpu_mem = self.get_gpu_mem()
         else:
             estimated_gpu_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
         #gpu_name = None
@@ -1678,7 +1683,7 @@ class Settings(GUIVariables):
         self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
-        self.num_cpus = Variable('num_cpus', 'int', ctrl_type='sbo', cmd=True)
+        self.num_cpu = Variable('num_cpu', 'int', ctrl_type='sbo', cmd=True)
         self.max_gpu_mem = Variable('max_gpu_mem', 'int', ctrl_type='sbo')
         self.split_job = Variable('split_job', 'bool', ctrl_type='chk')
         self.min_ram = Variable('min_ram', 'int', ctrl_type='sbo')

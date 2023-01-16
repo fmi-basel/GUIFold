@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 4
+DB_REVISION = 5
 
 def get_type(type):
     types = {'str': String,
@@ -256,7 +256,6 @@ class DBHelper:
         self.backup_db(self.db_path)
         #stmts = ['ALTER TABLE settings ADD queue_submit_dialog BOOLEAN DEFAULT FALSE']
         stmts = ['ALTER TABLE settings ADD split_job BOOLEAN DEFAULT FALSE']
-        stmts += ['ALTER TABLE settings ADD num_cpus INTEGER DEFAULT(20)']
         stmts += ['ALTER TABLE settings ADD max_ram INTEGER DEFAULT(100)']
         stmts += ['ALTER TABLE settings ADD max_gpu_mem INTEGER DEFAULT(80)']
         #Change VARCHAR to INTEGER
@@ -284,6 +283,8 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN num_gpu INTEGER DEFAULT(1)']
         stmts += ['ALTER TABLE jobparams ADD COLUMN chunk_size INTEGER DEFAULT(1)']
         stmts += ['ALTER TABLE jobparams ADD COLUMN inplace BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE settings RENAME COLUMN num_cpus TO num_cpu']
+        stmts += ['ALTER TABLE settings ADD num_cpu INTEGER DEFAULT(20)']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

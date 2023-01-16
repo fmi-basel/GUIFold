@@ -39,9 +39,9 @@ If you have a separate initialization script for conda (if the initialization is
 ```
 source path/to/conda_init.sh
 ```
-to the beginning of `guifold/setup_environment.sh`.
+to the beginning of `guifold/install.sh`.
 
-Running the setup_environment file will<br/>
+Running the install.sh file will<br/>
 * create a conda environment in the same folder<br/>
 * install required packages (the packages are listed in the `conda_pkgs.yml` file) <br/>
 * install the modified alphafold package<br/>
@@ -49,7 +49,7 @@ Running the setup_environment file will<br/>
 
 To start the setup run:
 ```
-bash GUIFold/setup_environment.sh
+bash GUIFold/install.sh
 ```
 `conda_env` will be the default name of the conda repository. The conda env will be installed with an absolute path (which is also needed for activation).
 
@@ -104,7 +104,7 @@ GUIFold supports the following variables that can be used in the submission temp
 `{{account}}` (optional) When a specific account is needed to run jobs on the cluster<br/>
 `{{use_gpu}}` (optional) This can be used to build a conditional (example below) to select CPU or GPU nodes/queues<br/>
 `{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory for unified memory.<br/>
-`{{num_cpus}}` (optional) Number of CPUs to request
+`{{num_cpu}}` (optional) Number of CPUs to request
 `{{total_sequence_length}}` (optional) Total sequence length (not accounting for identical sequences)<br/>
 `{{gpu_mem}}` (optional) Useful when the queuing system supports selection of GPU by memory requirement. Value in GB.<br/>
 `{{split_mem}}` (optional) If the required memory exceeds the available GPU memory, the job can be run with unified memory. The split_mem variable holds None or the memory split fraction and can be used for a conditional to set the FLAGS required to enable unified memory use (see SLURM example below).<br/>
@@ -130,7 +130,7 @@ to build conditionals for choosing the appropriate GPU.
 #!/bin/bash
 #SBATCH --account={{account}}
 #SBATCH --job-name=alphafold
-#SBATCH --cpus-per-task={{num_cpus}}
+#SBATCH --cpus-per-task={{num_cpu}}
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
