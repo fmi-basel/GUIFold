@@ -840,10 +840,8 @@ class JobParams(GUIVariables):
         logger.debug(self.custom_template_list.value)
         logger.debug(self.precomputed_msas_list.value)
         logger.debug(self.job_name.ctrl.text())
-        job_name = self.job_name.ctrl.text()
-        if self.job_name.ctrl.text() == "":
-            job_name = self.seq_names.value.replace(',','_')
-            self.job_name.ctrl.setText(job_name)
+        job_name = self.seq_names.value.replace(',','_')
+        self.job_name.ctrl.setText(job_name)
         self.job_name.set_value(job_name)
         return error_msgs
 
