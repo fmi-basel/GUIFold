@@ -11,17 +11,10 @@ Main Features:
 * Disabling MSA and/or template search
 * Splitting into feature generation (CPU) and prediction (GPU) steps
 * Support of MMseqs2/colabfold MSA pipeline (in addition to original MSA pipeline)
+* Interface to FastFold
 * Evaluation pipeline (PAE/pLDDT tables, PAE plots)
 
 ![Demo-Image](guifold/images/screenshots.png)
-
-
-## Recent updates (v0.2)
-
-* Split job setting
-* GPU and queue/partition selection moved to submission template
-* Addition of variables (total_sequence_length, split_job) that can be used in the submission template logic
-* Addition of MMseqs2/colabfold MSA pipeline (Job tab -> "Advanced Settings" -> "DB presets" -> "colabfold")
 
 ## Installation
 
@@ -105,6 +98,7 @@ GUIFold supports the following variables that can be used in the submission temp
 `{{use_gpu}}` (optional) This can be used to build a conditional (example below) to select CPU or GPU nodes/queues<br/>
 `{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory for unified memory.<br/>
 `{{num_cpu}}` (optional) Number of CPUs to request
+`{{num_cpu}}` (optional) Number of GPUs to request (only relevant for FastFold)
 `{{total_sequence_length}}` (optional) Total sequence length (not accounting for identical sequences)<br/>
 `{{gpu_mem}}` (optional) Useful when the queuing system supports selection of GPU by memory requirement. Value in GB.<br/>
 `{{split_mem}}` (optional) If the required memory exceeds the available GPU memory, the job can be run with unified memory. The split_mem variable holds None or the memory split fraction and can be used for a conditional to set the FLAGS required to enable unified memory use (see SLURM example below).<br/>
@@ -201,7 +195,7 @@ prepend-path PYTHONPATH                 $env(ALPHAFOLD_CONDA)/lib/python3.8
 
 ## Usage
 
-When the conda env is activated (conda activate /path/to/af-conda) or added to PATH/LD_LIBRARY_PATH/PYTHONPATH (see [Setup of a module file](#setup-of-a-module-file) you can start GUIFold by typing:<br/>
+When the conda env is activated (conda activate /path/to/af-conda) or added to PATH, LD_LIBRARY_PATH and PYTHONPATH (see [Setup of a module file](#setup-of-a-module-file) you can start GUIFold by typing:<br/>
 `afgui.py`
 
 To re-run an evaluation go to the job folder (where the FASTA sequence is stored) and type<br/>

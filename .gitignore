@@ -9,7 +9,6 @@
 /guifold/templates/submit_script.j2
 /pae_examples.ai
 /guifold.egg-info/
-/install.sh
 /screenshots.ai
 /run_tests.py
 /testing/
