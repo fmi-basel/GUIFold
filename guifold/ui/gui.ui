@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1210</width>
-    <height>815</height>
+    <height>787</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -47,7 +47,7 @@
             </font>
            </property>
            <property name="currentIndex">
-            <number>0</number>
+            <number>1</number>
            </property>
            <property name="tabBarAutoHide">
             <bool>false</bool>
@@ -421,7 +421,7 @@
                 <item>
                  <layout class="QGridLayout" name="gridLayout_3">
                   <item row="3" column="0">
-                   <widget class="QLabel" name="lbl_status_model_3">
+                   <widget class="QLabel" name="lbl_status_4">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
@@ -431,7 +431,7 @@
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="lbl_status_model_1">
+                   <widget class="QLabel" name="lbl_status_2">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
@@ -441,7 +441,7 @@
                    </widget>
                   </item>
                   <item row="4" column="0">
-                   <widget class="QLabel" name="lbl_status_model_4">
+                   <widget class="QLabel" name="lbl_status_5">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
@@ -451,7 +451,7 @@
                    </widget>
                   </item>
                   <item row="2" column="0">
-                   <widget class="QLabel" name="lbl_status_model_2">
+                   <widget class="QLabel" name="lbl_status_3">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
@@ -461,17 +461,17 @@
                    </widget>
                   </item>
                   <item row="0" column="0">
-                   <widget class="QLabel" name="lbl_status_db_search">
+                   <widget class="QLabel" name="lbl_status_1">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
                     <property name="text">
-                     <string>Sequence database search</string>
+                     <string>Feature generation</string>
                     </property>
                    </widget>
                   </item>
                   <item row="5" column="0">
-                   <widget class="QLabel" name="lbl_status_model_5">
+                   <widget class="QLabel" name="lbl_status_6">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>
@@ -481,7 +481,7 @@
                    </widget>
                   </item>
                   <item row="6" column="0">
-                   <widget class="QLabel" name="lbl_status_evaluation">
+                   <widget class="QLabel" name="lbl_status_7">
                     <property name="styleSheet">
                      <string notr="true">color: gray;</string>
                     </property>

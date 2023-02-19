@@ -775,7 +775,9 @@ class JobParams(GUIVariables):
         self.pipeline_dict = {0: 'full',
                               1: 'only_features',
                               2: 'batch_msas',
-                              3: 'continue_from_features'}
+                              3: 'continue_from_features',
+                              4: 'all_vs_all',
+                              5: 'first_vs_all'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
         self.prediction_dict = {0: 'alphafold',
                                 1: 'fastfold'}
@@ -1328,7 +1330,8 @@ class Job(GUIVariables):
                        "model_4_started": False,
                        "model_5_started": False,
                        "evaluation_started": False,
-                        "finished": False}
+                        "finished": False,
+                        "num_tasks_finished": 0}
         try:
             with open(log_file, 'r') as f:
                 lines = f.readlines()
@@ -1341,7 +1344,10 @@ class Job(GUIVariables):
                 pattern_model_3 =  re.compile(r"Running\smodel\s\w+3")
                 pattern_model_4 =  re.compile(r"Running\smodel\s\w+4")
                 pattern_model_5 =  re.compile(r"Running\smodel\s\w+5")
+                pattern_task_finished = re.compile(r'Task finished')
                 pattern_finished =  re.compile(r"Alphafold pipeline completed")
+                if re.search(pattern_task_finished, line):
+                    status_dict['num_tasks_finished'] += 1
                 if re.search(pattern_exit_code, line):
                     exit_code = int(re.search(pattern_exit_code, line).group(1))
                 if re.search(cancelled_pattern, line):
