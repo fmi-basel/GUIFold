@@ -14,8 +14,7 @@ dependencies:
       - einops
       - pyarrow
       - pandas
-      - --find-links https://release.colossalai.org
-      - colossalai==0.1.10+torch1.12cu11.3
+      - colossalai
       - absl-py==1.0.0
       - chex==0.0.7
       - contextlib2==21.6.0
@@ -32,7 +31,7 @@ dependencies:
       - tensorflow-cpu==2.9.0
       - --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
       - jaxlib==0.3.25+cuda11.cudnn805
-      - triton==2.0.0.dev20221005
+      - --pre triton
   - pytorch::pytorch=1.12
   - pytorch::torchvision
   - pytorch::torchaudio
