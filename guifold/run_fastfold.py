@@ -59,6 +59,7 @@ from fastfold.config import model_config as ff_model_config
 from fastfold.common import protein as ff_protein
 from fastfold.data import feature_pipeline
 from fastfold.model.fastnn import set_chunk_size
+from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
 from fastfold.utils.inject_fastnn import inject_fastnn
 from fastfold.utils.import_weights import import_jax_weights_
 from fastfold.utils.tensor_utils import tensor_tree_map
@@ -221,6 +222,7 @@ def inference_model(rank, world_size, result_q, batch, model_name, chunk_size, i
         config.globals.chunk_size = chunk_size
     config.globals.inplace = inplace
     config.globals.is_multimer = model_preset == 'multimer'
+    set_fused_triangle_multiplication()
     model = AlphaFold(config)
     import_jax_weights_(model, data_dir, version=model_name)
 
@@ -350,8 +352,11 @@ def predict_structure(
         num_gpu = FLAGS.num_gpu
 
 
-        params_path = os.path.join(FLAGS.data_dir, "params", f"params_{model_name}.npz")
-        print(model_name)
+        if is_multimer:
+          params_file = f"params_{model_name}_v3.npz"
+        else:
+          params_file = f"params_{model_name}.npz"
+        params_path = os.path.join(FLAGS.data_dir, "params", params_file)
         model_preset = FLAGS.model_preset
         torch.multiprocessing.spawn(inference_model, nprocs=num_gpu, args=(num_gpu, result_q, batch, model_name, chunk_size, inplace, model_preset, params_path))
 
