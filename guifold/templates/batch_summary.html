@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+
+   <head>
+       <meta charset = "utf-8">
+       <title>Alphafold results</title>
+       <!--<link href = "https://code.jquery.com/ui/1.10.4/themes/ui-lightness/jquery-ui.css" rel = "stylesheet">-->
+       <script src = "https://code.jquery.com/jquery-1.10.2.js"></script>
+       <script src = "https://code.jquery.com/ui/1.10.4/jquery-ui.js"></script>
+       {% if use_model_viewer %}
+       <script src="https://3Dmol.org/build/3Dmol-min.js"></script>     
+       <script src="https://3Dmol.org/build/3Dmol.ui-min.js"></script>
+       {% endif %}
+       <script>{% include 'scripts.js' %}</script>
+
+       <style>{% include 'style.css' %}</style>
+
+
+   </head>
+
+   <body>
+
+        <div class="page">
+            <h2>pTM</h2>
+
+            <table border = "1">
+                {% for protein_names, ptm, model_name in min_ptm_list %}
+                {% if loop.index == 1 %}
+                <tr>
+                    <th>Combination</th>
+                    <th>Model number</th>
+                    <th>pTM</th>
+                </tr>
+                {% endif %}
+
+                <tr id="ptm-table-{{loop.index}}">
+                    <td>{{protein_names}}</td>
+                    <td>{{model_name}}</td>
+                    <td>{{ptm}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <h2>ipTM</h2>
+
+            <table border = "1">
+                {% for protein_names, iptm, model_name in min_iptm_list %}
+                {% if loop.index == 1 %}
+                <tr>
+                    <th>Combination</th>
+                    <th>Model number</th>
+                    <th>ipTM</th>
+                </tr>
+                {% endif %}
+
+                <tr id="iptm-table-{{loop.index}}">
+                    <td>{{protein_names}}</td>
+                    <td>{{model_name}}</td>
+                    <td>{{iptm}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <h2>Best inter-PAE</h2>
+
+            <table border = "1">
+                {% for protein_names, model_name, pae in min_inter_pae_list %}
+                {% if loop.index == 1 %}
+                <tr>
+                    <th>Combination</th>
+                    <th>Model number</th>
+                    <th>Inter-subunit PAE</th>
+                </tr>
+                {% endif %}
+
+                <tr id="pae-table-{{loop.index}}">
+                    <td>{{protein_names}}</td>
+                    <td>{{model_name}}</td>
+                    <td>{{pae}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+        </div>
+    </body>
+</html>

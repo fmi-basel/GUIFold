@@ -37,8 +37,16 @@
                     {% include 'plddt.html' %}
                 <br />
                 {% endif %}
-                {% if pae_results is not none %}
+                {% if not pae_results is none %}
                 {% include 'pae.html' %}
+                {% endif %}
+                <br />
+                {% if not ptm is none %}
+                {% include 'ptm.html' %}
+                {% endif %}
+                <br />
+                {% if not iptm is none %}
+                {% include 'iptm.html' %}
                 {% endif %}
                 <br />
                 <!--Lack of WebGL support on some platforms causes too many complications. Locally installed model viewers should be used in the meantime-->

@@ -28,7 +28,8 @@ import sys
 import time
 import traceback
 from typing import Dict, Union, Optional
-
+from pympler import asizeof
+from contextlib import closing
 from absl import app
 from absl import flags
 from absl import logging
@@ -46,8 +47,9 @@ from alphafold.model import model
 from alphafold.relax import relax
 from alphafold.data import parsers
 import numpy as np
-import inspect
 import gzip
+from pympler import asizeof
+import re
 
 from alphafold.model import data
 
@@ -225,7 +227,6 @@ def inference_model(rank, world_size, result_q, batch, model_name, chunk_size, i
     config.globals.is_multimer = model_preset == 'multimer'
     set_fused_triangle_multiplication()
     model = AlphaFold(config)
-    print(f"data dir {data_dir} version {model_name}")
     import_jax_weights_(model, data_dir, version=model_name)
 
     model = inject_fastnn(model)
@@ -263,7 +264,7 @@ def predict_structure(
     custom_template_list: Optional[str] = None,
     precomputed_msas_list: Optional[str] = None,
     batch_prediction: Optional[bool] = False,
-    best_inter_pae_list: Optional[list] = None):
+    scores: Optional[tuple] = None):
   """Predicts structure using AlphaFold for the given sequence."""
   logging.info('Predicting %s', fasta_name)
   timings = {}
@@ -331,7 +332,7 @@ def predict_structure(
         #processed_feature_dict = model_runner.process_features(
         #      feature_dict, random_seed=model_random_seed)
 
-        import re
+        
         model_name = re.match('(model_\d{1}(_ptm|_multimer){0,1}).*', model_name).group(1)
         model_num = re.match('model_(\d{1}).*', model_name).group(1)
         ff_config = ff_model_config(model_name)
@@ -352,54 +353,57 @@ def predict_structure(
           t_0 = time.time()
           batch = processed_feature_dict
 
-          manager = mp.Manager()
-          result_q = manager.Queue()
-          chunk_size = FLAGS.chunk_size
-          inplace = FLAGS.inplace
-          num_gpu = FLAGS.num_gpu
+          with mp.Manager() as manager:
+            result_q = manager.Queue()
+            chunk_size = FLAGS.chunk_size
+            inplace = FLAGS.inplace
+            num_gpu = FLAGS.num_gpu
 
-          if is_multimer:
-            params_file = f"params_{model_name}_v3.npz"
-          else:
-            params_file = f"params_{model_name}.npz"
-          params_path = os.path.join(FLAGS.data_dir, "params", params_file)
-          print(params_path)
-          model_preset = FLAGS.model_preset
-          torch.multiprocessing.spawn(inference_model, nprocs=num_gpu, args=(num_gpu, result_q, batch, model_name, chunk_size, inplace, model_preset, params_path))
+            if is_multimer:
+              params_file = f"params_{model_name}_v3.npz"
+            else:
+              params_file = f"params_{model_name}.npz"
+            params_path = os.path.join(FLAGS.data_dir, "params", params_file)
+            print(params_path)
+            model_preset = FLAGS.model_preset
+            torch.multiprocessing.spawn(inference_model, nprocs=num_gpu, args=(num_gpu, result_q, batch, model_name, chunk_size, inplace, model_preset, params_path))
 
-          prediction_result = result_q.get()
+            prediction_result = result_q.get()
 
-          batch = tensor_tree_map(lambda x: np.array(x[..., -1].cpu()), batch)
+            batch = tensor_tree_map(lambda x: np.array(x[..., -1].cpu()), batch)
 
-          t_diff = time.time() - t_0
-          timings[f'predict_and_compile_{model_name}'] = t_diff
-          logging.info(
-              'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
-              model_name, fasta_name, t_diff)
+            t_diff = time.time() - t_0
+            timings[f'predict_and_compile_{model_name}'] = t_diff
+            logging.info(
+                'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
+                model_name, fasta_name, t_diff)
 
-          if benchmark:
-            pass
+            if benchmark:
+              pass
 
-          plddt = prediction_result['plddt']
-          #ranking_confidences[model_name] = prediction_result['ranking_confidence']
+            plddt = prediction_result['plddt']
+            #ranking_confidences[model_name] = prediction_result['ranking_confidence']
 
-          # Save the model outputs.
-          result_output_path = os.path.join(output_dir, f'result_{model_name}.pkl')
-          with open(result_output_path, 'wb') as f:
-            pickle.dump(prediction_result, f, protocol=4)
+            # Save the model outputs.
+            result_output_path = os.path.join(output_dir, f'result_{model_name}.pkl')
+            with open(result_output_path, 'wb') as f:
+              pickle.dump(prediction_result, f, protocol=4)
 
-          # Add the predicted LDDT in the b-factor column.
-          # Note that higher predicted LDDT value means higher model confidence.
-          plddt_b_factors = np.repeat(
-              plddt[:, None], residue_constants.atom_type_num, axis=-1)
-          unrelaxed_protein = ff_protein.from_prediction(features=batch,
-                                                      result=prediction_result,
-                                                      b_factors=plddt_b_factors)
+            # Add the predicted LDDT in the b-factor column.
+            # Note that higher predicted LDDT value means higher model confidence.
+            plddt_b_factors = np.repeat(
+                plddt[:, None], residue_constants.atom_type_num, axis=-1)
+            unrelaxed_protein = ff_protein.from_prediction(features=batch,
+                                                        result=prediction_result,
+                                                        b_factors=plddt_b_factors)
 
-          unrelaxed_pdbs[model_name] = ff_protein.to_pdb(unrelaxed_protein)
-          
-          with open(unrelaxed_pdb_path, 'w') as f:
-            f.write(unrelaxed_pdbs[model_name])
+            unrelaxed_pdbs[model_name] = ff_protein.to_pdb(unrelaxed_protein)
+            
+            with open(unrelaxed_pdb_path, 'w') as f:
+              f.write(unrelaxed_pdbs[model_name])
+            size_result_q = asizeof.asizeof(result_q) / 1024**3
+            size_manager = asizeof.asizeof(manager) / 1024**3
+            print(f"result_q {size_result_q} size_manager {size_manager}")
         else:
           logging.info(f"Skipping prediction because {unrelaxed_pdb_path} already exists.")
           with open(unrelaxed_pdb_path, 'r') as f:
@@ -456,11 +460,23 @@ def predict_structure(
         with open(relax_metrics_path, 'w') as f:
           f.write(json.dumps(relax_metrics, indent=4))
 
-      evaluation = EvaluationPipeline(fasta_path, batch_prediction)
+      evaluation: EvaluationPipeline = EvaluationPipeline(fasta_path, batch_prediction)
       evaluation.run_pipeline()
+
+      print("Size of objects in predict")
+      
+      for name, obj in locals().items():
+        if name != 'asizeof':
+          size = asizeof.asizeof(obj) / 1024**3
+          if size > 1:
+            print(name)
+            print(size)
       if batch_prediction:
         logging.info("Task finished")
-        best_inter_pae_list.append(evaluation.get_best_inter_pae(evaluation.get_pae_results_unsorted(), fasta_name))
+        min_inter_pae_list, min_iptm_list, min_ptm_list = scores
+        min_inter_pae_list.append(evaluation.get_min_inter_pae(evaluation.get_pae_results_unsorted(), fasta_name))
+        min_iptm_list.append(evaluation.get_min_iptm())
+        min_ptm_list.append(evaluation.get_min_ptm())
       else:
         logging.info("Alphafold pipeline completed. Exit code 0")
   else:
@@ -705,7 +721,7 @@ def main(argv):
 
   if FLAGS.pipeline == 'all_vs_all':
     combinations = []
-    best_inter_pae_list = []
+    min_inter_pae_list, min_iptm_list, min_ptm_list = [], [], []
     for i, (desc_1, seq_1) in enumerate(description_sequence_dict.items()):
       for o, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
         #Check if sequence names are identical
@@ -740,13 +756,15 @@ def main(argv):
             custom_template_list=[custom_template_list[i], custom_template_list[o]],
             precomputed_msas_list=[precomputed_msas_list[i], precomputed_msas_list[o]],
             batch_prediction=True,
-            best_inter_pae_list=best_inter_pae_list)
+            scores=(min_inter_pae_list, min_iptm_list, min_ptm_list))
+          print("Size min inter pae list GB")
+          print(asizeof.asizeof(min_inter_pae_list) / 1024**3)
 
           #reset
           desc_1 = prev_desc_1
           desc_2 = prev_desc_2
 
-    evaluation_batch = EvaluationPipelineBatch(best_inter_pae_list)
+    evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, min_inter_pae_list, min_iptm_list, min_ptm_list)
     evaluation_batch.run()
 
 
@@ -782,9 +800,9 @@ def main(argv):
         custom_template_list=[custom_template_list[0], custom_template_list[i]],
         precomputed_msas_list=[precomputed_msas_list[0], precomputed_msas_list[i]],
         batch_prediction=True,
-        best_inter_pae_list=best_inter_pae_list)
+        scores=(min_inter_pae_list, min_iptm_list, min_ptm_list))
 
-      evaluation_batch = EvaluationPipelineBatch(best_inter_pae_list)
+      evaluation_batch = EvaluationPipelineBatch(min_inter_pae_list, min_iptm_list, min_ptm_list)
       evaluation_batch.run()
       
       

@@ -197,7 +197,8 @@ class MainFrame(QtWidgets.QMainWindow):
                            'queue_account': None,
                            'job_project_id': None,
                            'project_id': None,
-                           'queue': None}
+                           'queue': None,
+                           'selected_combination_name': None}
         self.gui_params['settings_locked'] = check_settings_locked()
         self.gui_params['force_settings_update'] = check_force_settings_update()
         self.files_selected_item = None
@@ -404,6 +405,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.prj.list.ctrl.activated.connect(self.OnCmbProjects)
         self.job.list.ctrl.setContextMenuPolicy(Qt.CustomContextMenu)
         self.job.list.ctrl.customContextMenuRequested.connect(self.OnJobContextMenu)
+        self.evaluation.pairwise_combinations_list.ctrl.activated.connect(self.OnCmbCombinations)
 
     def ToolbarSelected(self, s):
         selected = s.text()
@@ -597,6 +599,13 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug(job_params['pipeline'])
                     logger.debug(split_job_step)
 
+                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                        self.jobparams.pairwise_batch_prediction.set_value(True)
+                        job_params['pairwise_batch_prediction'] = True
+                    else:
+                        self.jobparams.pairwise_batch_prediction.set_value(False)
+                        job_params['pairwise_batch_prediction'] = False
+
                     #Prepare split job
                     if job_params['queue']:
                         if all([job_params['split_job'],
@@ -648,7 +657,10 @@ class MainFrame(QtWidgets.QMainWindow):
                     job_params['log_file'] = self.job.build_log_file_path(self.gui_params['project_path'],
                                                                    job_params['job_name'], job_params['type'])
                     #Full path to results folder created by AF inside job folder
-                    job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_name'])
+                    if job_params['pairwise_batch_prediction']:
+                        job_params['results_path'] = job_params['job_path']
+                    else:
+                        job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_name'])
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 
@@ -727,7 +739,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
                         if job_params['pipeline'] == 'all_vs_all':
                             len_seqs = len(sequences)
-                            num_jobs = (len_seqs * (len_seqs -1)) / 2
+                            num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
                         elif job_params['pipeline'] == 'first_vs_all':
                             num_jobs = len_seqs
                         num_jobs = int(num_jobs)
@@ -1012,6 +1024,12 @@ class MainFrame(QtWidgets.QMainWindow):
             self.gui_params['other_settings_changed'] = False
             self.gui_params = self.job.init_gui(self.gui_params, self.sess)
 
+    def OnCmbCombinations(self):
+        combination_name = str(self.evaluation.pairwise_combinations_list.ctrl.currentText())
+        self.gui_params['selected_combination_name'] = combination_name
+        logger.debug(f"Combination name: {self.gui_params['selected_combination_name']}")
+        self.gui_params = self.evaluation.init_gui(self.gui_params, self.sess)
+
     def OnLstJobSelected(self):
         self.btn_jobparams_advanced_settings.setEnabled(True)
         self.tb_run.setEnabled(True)
@@ -1031,7 +1049,11 @@ class MainFrame(QtWidgets.QMainWindow):
                                                             self.gui_params['job_dir'])
         self.gui_params['log_file'] = self.job.get_log_file(self.gui_params['job_id'],
                                                             self.sess)
-        self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
+        self.gui_params['pairwise_batch_prediction'] = self.jobparams.get_pairwise_batch_prediction(self.gui_params['job_id'], self.sess)
+        if self.gui_params['pairwise_batch_prediction']:
+            self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'])
+        else:
+            self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
         self.gui_params['other_settings_changed'] = True
         result = self.jobparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
         self.jobparams.update_from_db(result)
@@ -1044,7 +1066,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.OnJobStatus(self.gui_params)
         self.job.update_log(self.gui_params)
         self.job.insert_evaluation(self.evaluation, self.gui_params, self.sess)
-        if self.evaluation.check_exists(self.gui_params['job_id'], self.sess):
+        logger.debug(self.gui_params['pairwise_batch_prediction'])
+        if self.evaluation.check_exists(self.gui_params['job_id'], self.sess) or self.gui_params['pairwise_batch_prediction']:
             self.notebook.setTabEnabled(2, True)
             self.evaluation.init_gui(self.gui_params, self.sess)
         else:

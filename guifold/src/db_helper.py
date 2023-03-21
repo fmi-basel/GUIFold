@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 5
+DB_REVISION = 6
 
 def get_type(type):
     types = {'str': String,
@@ -285,6 +285,7 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN inplace BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE settings RENAME COLUMN num_cpus TO num_cpu']
         stmts += ['ALTER TABLE settings ADD num_cpu INTEGER DEFAULT(20)']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN pairwise_batch_prediction BOOLEAN DEFAULT FALSE']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:
