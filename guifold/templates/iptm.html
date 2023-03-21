@@ -1,0 +1,19 @@
+<a name="iptm">
+    <h2>ipTM score</h2>
+
+    <table border = "1">
+        {% for iptm, name in iptm_list %}
+        {% if loop.index == 1 %}
+        <tr>
+            <th>Model number</th>
+            <th>Overall</th>
+        </tr>
+        {% endif %}
+
+        <tr id="plddt-table-{{loop.index}}">
+            <td>{{name}}</td>
+            <td>{{iptm}}</td>
+        </tr>
+        {% endfor %}
+    </table>
+

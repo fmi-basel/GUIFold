@@ -12,3 +12,5 @@
 /screenshots.ai
 /run_tests.py
 /testing/
+guifold/collate_msas.py
+guifold/images/GUIFold.gif

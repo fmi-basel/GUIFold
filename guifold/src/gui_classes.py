@@ -61,7 +61,8 @@ ctrl_type_dict = {'dsb': QtWidgets.QDoubleSpinBox,
                   'chk': QtWidgets.QCheckBox,
                   'web': QtWebEngineWidgets.QWebEngineView,
                   'pro': QtWidgets.QProgressBar,
-                  'tre': QtWidgets.QTreeWidget}
+                  'tre': QtWidgets.QTreeWidget,
+                  'lbl': QtWidgets.QLabel}
 
 install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 
@@ -657,6 +658,8 @@ class Evaluation(GUIVariables):
         self.results_path = Variable('results_path', 'str')
         self.results = Variable("results", db=False, ctrl_type='web')
         self.pbar = Variable("pbar", db=False, ctrl_type='pro')
+        self.pairwise_combinations_label = Variable("pairwise_combinations_label", db=False, ctrl_type='lbl')
+        self.pairwise_combinations_list = Variable("pairwise_combinations_list", db=False, ctrl_type='cmb')
 
     def set_db(self, db):
         self.db = db
@@ -707,11 +710,48 @@ class Evaluation(GUIVariables):
         if percent == 100:
             self.pbar.ctrl.hide()
 
+    def get_combination_names(self, results_folder):
+        combination_names = []
+        print(results_folder)
+        folders = [f for f in os.listdir(results_folder) if os.path.isdir(os.path.join(results_folder, f))]
+        print(folders)
+        if os.path.exists(os.path.join(results_folder, "batch_summary.html")) and not "summary" in combination_names:
+            combination_names.append("summary")
+        for f in folders:
+            if 'results.html' in os.listdir(os.path.join(results_folder, f)):
+                combination_names.append(f)
+        return combination_names
+
+    def get_combination_results_path(self, results_folder, combination_name):
+        results_file_path = None
+        if combination_name == "summary":
+            results_file_path = os.path.join(results_folder, 'batch_summary.html')
+        else:
+            folders = [f for f in os.listdir(results_folder) if os.path.isdir(os.path.join(results_folder, f))]
+            for f in folders:
+                if f == combination_name:
+                    results_file_path = os.path.join(results_folder, f, 'results.html')
+            
+        return results_file_path
 
     def init_gui(self, gui_params, sess):
         if not gui_params['job_id'] is None:
             results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
             if not results_path is None:
+                if not gui_params['pairwise_batch_prediction']:
+                    self.pairwise_combinations_list.ctrl.setHidden(True)
+                    self.pairwise_combinations_label.ctrl.setHidden(True)
+                else:
+                    self.pairwise_combinations_list.ctrl.setHidden(False)
+                    self.pairwise_combinations_label.ctrl.setHidden(False)
+                    combinations_list = self.get_combination_names(results_path)
+                    self.pairwise_combinations_list.ctrl.clear()
+                    for item in combinations_list:
+                        self.pairwise_combinations_list.ctrl.addItem(item)
+                    if gui_params['selected_combination_name'] is None:
+                        results_path = self.get_combination_results_path(results_path, combinations_list[0])
+                    else:
+                        results_path = self.get_combination_results_path(results_path, gui_params['selected_combination_name'])
                 logger.debug(results_path)
                 self.results.ctrl.settings().setAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled, False)
                 logger.debug(f"WebGL enabled: {self.results.ctrl.settings().testAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled)}")
@@ -775,7 +815,9 @@ class JobParams(GUIVariables):
         self.pipeline_dict = {0: 'full',
                               1: 'only_features',
                               2: 'batch_msas',
-                              3: 'continue_from_features'}
+                              3: 'continue_from_features',
+                              4: 'all_vs_all',
+                              5: 'first_vs_all'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
         self.prediction_dict = {0: 'alphafold',
                                 1: 'fastfold'}
@@ -784,6 +826,7 @@ class JobParams(GUIVariables):
         self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)
         self.chunk_size = Variable('chunk_size', 'int', ctrl_type="sbo", cmd=True)
         self.inplace = Variable('inplace', 'bool', ctrl_type="chk", cmd=True)
+        self.pairwise_batch_prediction = Variable('pairwise_batch_prediction', 'bool')
 
 
     def set_db(self, db):
@@ -915,6 +958,10 @@ class JobParams(GUIVariables):
         result = sess.query(self.db.Jobparams.job_name).filter_by(job_id=job_id).one()
         logger.debug(result[0])
         logger.debug(result)
+        return result[0]
+    
+    def get_pairwise_batch_prediction(self, job_id, sess):
+        result = sess.query(self.db.Jobparams.pairwise_batch_prediction).filter_by(job_id=job_id).one()
         return result[0]
 
     def set_db_preset(self):
@@ -1299,10 +1346,12 @@ class Job(GUIVariables):
         if not _evaluation.check_exists(job_params['job_id'], sess):
             job_obj = self.get_job_by_id(job_params['job_id'], sess)
             
-            
-            results_path = os.path.join(job_params['job_path'],
-                                                  job_params["job_name"],
-                                                  "results.html")
+            if job_params['pairwise_batch_prediction']:
+                results_path = job_params['job_path']
+            else:
+                results_path = os.path.join(job_params['job_path'],
+                                                    job_params["job_name"],
+                                                    "results.html")
             if os.path.exists(results_path):
                 _evaluation.results_path.set_value(results_path)
                 _evaluation.job_id.set_value(job_params['job_id'])
@@ -1328,7 +1377,8 @@ class Job(GUIVariables):
                        "model_4_started": False,
                        "model_5_started": False,
                        "evaluation_started": False,
-                        "finished": False}
+                        "finished": False,
+                        "num_tasks_finished": 0}
         try:
             with open(log_file, 'r') as f:
                 lines = f.readlines()
@@ -1341,7 +1391,10 @@ class Job(GUIVariables):
                 pattern_model_3 =  re.compile(r"Running\smodel\s\w+3")
                 pattern_model_4 =  re.compile(r"Running\smodel\s\w+4")
                 pattern_model_5 =  re.compile(r"Running\smodel\s\w+5")
+                pattern_task_finished = re.compile(r'Task finished')
                 pattern_finished =  re.compile(r"Alphafold pipeline completed")
+                if re.search(pattern_task_finished, line):
+                    status_dict['num_tasks_finished'] += 1
                 if re.search(pattern_exit_code, line):
                     exit_code = int(re.search(pattern_exit_code, line).group(1))
                 if re.search(cancelled_pattern, line):

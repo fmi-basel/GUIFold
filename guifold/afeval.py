@@ -37,7 +37,7 @@ import typing
 
 class EvaluationPipeline:
     def __init__(self, sequence_file: str, continue_from_existing_results: bool = False, custom_spacing: bool = False,
-                 custom_start_residue_list: str = None, custom_axis_label_list: str = None):
+                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch: str = False):
         self.sequence_file = sequence_file
         self.continue_from_existing_results = continue_from_existing_results
         self.output_dir = os.path.split(os.path.realpath(self.sequence_file))[0]
@@ -45,16 +45,18 @@ class EvaluationPipeline:
         self.custom_spacing = custom_spacing
         self.custom_start_residue_list = custom_start_residue_list
         self.custom_axis_label_list = custom_axis_label_list
+        self.pae_results_unsorted = None
         if not os.path.exists(self.results_dir):
             raise SystemExit(f"Output directory {self.results_dir} not found")
 
     def run_pipeline(self):
         logging.info("Running evaluation pipeline.")
-        pae_list, plddt_list = [], []
+        pae_list, plddt_list, iptm_list, ptm_list = [], [], [], []
         multimer = False
         no_pae = False
 
         input_sequences, seq_titles = self.parse_input_sequence(self.sequence_file)
+        self.seq_titles = seq_titles
         seq_len_dict = self.get_sequence_len(input_sequences)
         indices = self.get_indices(seq_len_dict)
         pickle_path = os.path.join(self.results_dir, 'results.pickle')
@@ -79,13 +81,28 @@ class EvaluationPipeline:
                             plddt = np.mean(pkl_data['plddt'])
                         else:
                             plddt = None
+                        if 'iptm' in pkl_data:
+                            iptm = pkl_data['iptm']
+                        else:
+                            iptm = None
+                        if 'ptm' in pkl_data:
+                            ptm = pkl_data['ptm']
+                        elif 'predicted_tm_score' in pkl_data:
+                            ptm = pkl_data['predicted_tm_score']
+                        else:
+                            ptm = None
                         #print(plddt)
                         mdl_name = os.path.splitext(os.path.basename(mdl))[0]
                         pae_list.append((pae, mdl_name))
                         plddt_list.append((plddt, mdl_name))
+                        iptm_list.append((iptm, mdl_name))
+                        ptm_list.append((ptm, mdl_name))
             logging.debug(pae_list)
             logging.debug("Check none:")
             logging.debug(self.check_none(pae_list))
+            print("IPTM")
+            print(iptm_list)
+            print(ptm_list)
             if multimer:
                 if not self.check_none(pae_list):
                     pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
@@ -94,34 +111,52 @@ class EvaluationPipeline:
                 plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
             logging.debug(pae_list)
             if not self.check_none(pae_list):
-                pae_results = self.extract_and_plot_pae(pae_list,
-                                                        indices,
-                                                        seq_titles,
-                                                        self.custom_spacing,
-                                                        self.custom_start_residue_list,
-                                                        self.custom_axis_label_list)
+                average_pae = self.analyse_pae(pae_list,
+                                                indices,
+                                                seq_titles)
+                self.plot_pae(pae_list,
+                               indices,
+                                 seq_titles)
             else:
                 no_pae = True
-                pae_results = [(model_name, None) for pae, model_name in pae_list]
+                average_pae = [(model_name, None) for pae, model_name in pae_list]
             plddt_list = sorted(plddt_list, key=lambda x: x[0], reverse=True)
+            if not iptm_list is None:
+                if not self.check_none(iptm_list):
+                    iptm_list = sorted(iptm_list, key=lambda x: x[0], reverse=True)
+                else:
+                    iptm_list = None
+            if not ptm_list is None:
+                if not self.check_none(ptm_list):
+                    ptm_list = sorted(ptm_list, key=lambda x: x[0], reverse=True)
+                else:
+                    ptm_list = None
             with open(pickle_path, 'wb') as handle:
-                pickle.dump((plddt_list, pae_results), handle, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump((plddt_list, average_pae, iptm_list, ptm_list), handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(pickle_path, 'rb') as handle:
-                plddt_list, pae_results = pickle.load(handle)
-            if self.check_none(pae_results):
+            try:
+                with open(pickle_path, 'rb') as handle:
+                    plddt_list, average_pae, iptm_list, ptm_list = pickle.load(handle)
+            except ValueError:
+                with open(pickle_path, 'rb') as handle:
+                    plddt_list, average_pae = pickle.load(handle)
+                    iptm_list, ptm_list = None, None
+            if self.check_none(average_pae):
                 no_pae = True
+        self.iptm_list, self.ptm_list = iptm_list, ptm_list
 
-        logging.debug(pae_results)
+        logging.info("Before sort")
+        logging.info(average_pae)
+        self.pae_results_unsorted = average_pae
         if not no_pae:
-            pae_results = self.sort_results(pae_results)
-            logging.debug(pae_results)
-            images = self.get_image_path_list(pae_results)
-            pae_messages = self.get_pae_messages(pae_results)
+            average_pae = self.sort_results(average_pae)
+            logging.debug(average_pae)
+            images = self.get_image_path_list(average_pae)
+            pae_messages = self.get_pae_messages(average_pae)
         else:
             images = None
             pae_messages = None
-        pdb_path_list = self.align_models(pae_results)
+        pdb_path_list = self.align_models(average_pae)
         chain_color = self.get_chain_color()
 
 
@@ -141,11 +176,14 @@ class EvaluationPipeline:
 
         logging.debug(plddt_list)
         if no_pae:
-            pae_results = None
-
-        logging.debug(pae_results)
-        rendered = template.render(pae_results=pae_results,
+            average_pae = None
+        print("PTM IPTM")
+        print(iptm_list)
+        print(ptm_list)
+        rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
+                                   iptm_list=iptm_list,
+                                   ptm_list =ptm_list,
                                    images=images,
                                    pae_messages=pae_messages,
                                    pdb_path_list=pdb_path_list,
@@ -158,8 +196,10 @@ class EvaluationPipeline:
         html_path = os.path.join(self.results_dir, "results.html")
         with open(html_path, "w") as fout:
             fout.write(rendered)
-        rendered = template.render(pae_results=pae_results,
+        rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
+                                   iptm_list=iptm_list,
+                                   ptm_list=ptm_list,
                                    images=images,
                                    pae_messages=pae_messages,
                                    pdb_path_list=pdb_path_list,
@@ -249,8 +289,34 @@ class EvaluationPipeline:
             return 100
         elif num_elements >= 4 or len_seq >= 2000:
             return 200
+        
+    def analyse_pae(self, pae_list, indices, seq_titles):
+        num_seqs = len(indices)
+        matrix_len = num_seqs * num_seqs
+        u = 0
+        y_labels = []
+        for i, _ in enumerate(range(matrix_len)):
+            y_labels.append(seq_titles[u])
+            if (i + 1) % num_seqs == 0:
+                u += 1
+        x_labels = []
+        for i, _ in enumerate(range(num_seqs)):
+            x_labels.append(seq_titles[i])
+        x_labels = x_labels*num_seqs
+        average_pae_dict = {}
+        for i,(pae, model_name) in enumerate(pae_list):
+            average_pae_dict[model_name] = {"Overall": np.mean(pae)}
+            count = 0
+            for u in range(len(indices)):
+                for v in range(len(indices)):
+                    data = pae[indices[u][0]:indices[u][1],indices[v][0]:indices[v][1]]
+                    average_pae = np.mean(data)
+                    average_pae_dict[model_name][f"{x_labels[count]} vs {y_labels[count]}"] = average_pae
+                    count += 1
 
-    def extract_and_plot_pae(self, pae_list, indices, seq_titles, custom_spacing=None, custom_aa_start=None, custom_labels=None):
+        return average_pae_dict
+
+    def plot_pae(self, pae_list, indices, seq_titles, custom_spacing=None, custom_aa_start=None, custom_labels=None):
         """Plots PAE. Adapted from https://github.com/sokrypton/ColabFold/blob/main/AlphaFold2.ipynb"""
         num_models = len(pae_list)
         num_seqs = len(indices)
@@ -265,8 +331,6 @@ class EvaluationPipeline:
             if len(custom_aa_start_list) != num_seqs*num_seqs:
                 raise ValueError(f"Number of given starting residue values ({len(custom_aa_start_list)})"
                                  f" does not match the number of protein subunits ({num_seqs*num_seqs}).")
-
-
 
         if custom_labels:
             custom_labels_list = custom_labels.split(',')
@@ -295,11 +359,11 @@ class EvaluationPipeline:
         plt.rc('ytick',labelsize=6)
         plt.rc('font',**{'family':'sans-serif', 'size': 8})
 
-        average_paes = {}
+        #average_paes = {}
         for i,(pae, model_name) in enumerate(pae_list):
             heights, widths = [], []
-            average_paes[model_name] = {"Overall": np.mean(pae)}
-            logging.debug(average_paes)
+            #average_paes[model_name] = {"Overall": np.mean(pae)}
+            #logging.debug(average_paes)
             logging.debug(f"Number of inidices {len(indices)}")
             for u in range(len(indices)):
                 for v in range(len(indices)):
@@ -325,8 +389,8 @@ class EvaluationPipeline:
             for u in range(len(indices)):
                 for v in range(len(indices)):
                     data = pae[indices[u][0]:indices[u][1],indices[v][0]:indices[v][1]]
-                    average_pae = np.mean(data)
-                    average_paes[model_name][f"{x_labels[count]} vs {y_labels[count]}"] = average_pae
+                    #average_pae = np.mean(data)
+                    #average_paes[model_name][f"{x_labels[count]} vs {y_labels[count]}"] = average_pae
                     num_rows = data.shape[0]
                     num_cols = data.shape[1]
                     num_rows_cols_list.append((num_rows, num_cols))
@@ -402,8 +466,8 @@ class EvaluationPipeline:
             #plt.tight_layout()
             plt.savefig(os.path.join(self.results_dir, f'pae_{model_name}.png'), dpi=300)
             plt.savefig(os.path.join(self.results_dir, f'pae_{model_name}.svg'), dpi=300)
-        logging.debug(average_paes)
-        return average_paes
+        #logging.debug(average_paes)
+        #return average_paes
         #plt.show()
         #plt.savefig(os.path.join(output_dir, f'pae_{model_name}.png'))#, bbox_inches = 'tight')
         #plt.clf()
@@ -444,24 +508,14 @@ class EvaluationPipeline:
         for ref_res in ref_model[ref_chain]:
             ref_atoms.append(ref_res['CA'])
 
-
-
-
         for mobile_res in mobile_model[mobile_chain]:
             mobile_atoms.append(mobile_res['CA'])
-
-
 
         super_imposer = Superimposer()
         super_imposer.set_atoms(ref_atoms, mobile_atoms)
         super_imposer.apply(mobile_model.get_atoms())
-
-
-
         name = os.path.splitext(os.path.basename(mobile))[0]
         name_aligned = f"{name}_aligned.pdb"
-
-
         io = PDBIO()
         io.set_structure(mobile_structure)
         out_path = os.path.join(self.results_dir, name_aligned)
@@ -500,11 +554,31 @@ class EvaluationPipeline:
         logging.debug(files_unrelaxed)
         return pdbs
 
-    def sort_results(self, results):
+    def sort_results(self, results: dict):
         return sorted(results.items(),
                       key = lambda x: x[1]['Overall'],
                       reverse=False)
 
+    def get_pae_results_unsorted(self):
+        return self.pae_results_unsorted
+
+    def get_min_inter_pae(self, results, name) -> tuple:
+        logging.info(results)
+        results = sorted(results.items(),
+                      key = lambda x: x[1][list(x[1].keys())[2]],
+                      reverse=False)
+        logging.info(results)
+        protein_name = list(results[0][1].keys())[2]
+        model_name = results[0][0]
+        min_pae = results[0][1][protein_name]
+        return (protein_name.replace(" vs ", "_"), model_name, min_pae)
+    
+    def get_min_iptm(self) -> tuple:
+        #return model_name, value
+        return ('_'.join(self.seq_titles), self.iptm_list[0][0], self.iptm_list[0][1])
+    
+    def get_min_ptm(self):
+        return('_'.join(self.seq_titles), self.ptm_list[0][0], self.ptm_list[0][1])
 
     def get_pae_messages(self, results):
         best_result = float(results[0][1]['Overall'])
@@ -532,7 +606,44 @@ class EvaluationPipeline:
         return list(zip(chains,
             ["lime","cyan","magenta","yellow","salmon","white","blue","orange"]))
 
+class EvaluationPipelineBatch:
+    def __init__(self, results_dir, min_inter_pae_list, min_iptm_list, min_ptm_list):
+        self.results_dir = results_dir
+        self.min_inter_pae_list = min_inter_pae_list
+        self.min_iptm_list = min_iptm_list
+        self.min_ptm_list = min_ptm_list
+        
+    def run(self):
+        with open('best_inter_pae.txt', 'w') as f:
+            f.write("protein_names,model_name,best_pae\n")
+            print("MIN INTER PAE LIST")
+            print(self.min_inter_pae_list)
+            for protein_names, model_name, pae in self.min_inter_pae_list:
+                protein_names = protein_names.replace(" vs ", "_")
+                f.write(f"{protein_names},{model_name},{pae}\n")
+        with open('best_iptm.csv','w') as f:
+            f.write("model_name,iptm\n")
+            for protein_names, model_name, iptm in self.min_iptm_list:
+                f.write(f"{model_name},{iptm}")
+        with open('best_ptm.csv','w') as f:
+            f.write("model_name,ptm\n")
+            for protein_names, model_name, ptm in self.min_ptm_list:
+                f.write(f"{model_name},{ptm}")
+        self.write_html()
 
+    def write_html(self):
+        templates_path = pkg_resources.resource_filename("guifold", "templates")
+        logging.debug(templates_path)
+        env = Environment(loader=FileSystemLoader(templates_path))
+        template = env.get_template('batch_summary.html')
+
+        rendered = template.render(min_inter_pae_list=self.min_inter_pae_list,
+                                   min_iptm_list=self.min_iptm_list,
+                                   min_ptm_list=self.min_ptm_list)
+        
+        html_path = os.path.join(self.results_dir, "batch_summary.html")
+        with open(html_path, "w") as fout:
+            fout.write(rendered)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=".")
