@@ -741,7 +741,8 @@ class MainFrame(QtWidgets.QMainWindow):
                             len_seqs = len(sequences)
                             num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
                         elif job_params['pipeline'] == 'first_vs_all':
-                            num_jobs = len_seqs
+                            len_seqs = len(sequences)
+                            num_jobs = len_seqs - 1
                         num_jobs = int(num_jobs)
                         job_params['num_jobs'] = num_jobs
                         message = f"This will start a batch prediction job with {num_jobs} tasks. Continue?"
