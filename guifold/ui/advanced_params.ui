@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>419</width>
-    <height>603</height>
+    <height>575</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -183,7 +183,11 @@
           <enum>QLayout::SetDefaultConstraint</enum>
          </property>
          <item row="1" column="2">
-          <widget class="QSpinBox" name="sbo_jobparams_chunk_size"/>
+          <widget class="QSpinBox" name="sbo_jobparams_chunk_size">
+           <property name="maximum">
+            <number>1000000000</number>
+           </property>
+          </widget>
          </item>
          <item row="0" column="2">
           <widget class="QSpinBox" name="sbo_jobparams_num_gpu"/>
@@ -212,7 +216,7 @@
          <item row="1" column="0">
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>Chunk size</string>
+            <string>Chunk size (0 = auto)</string>
            </property>
           </widget>
          </item>

@@ -144,7 +144,7 @@ class MonitorJob(QObject):
                     self.job_params['status'] = self.job_status
                 else:
                     if self.job_params['queue']:
-                        logger.debug("Getting pid for queue job.")
+                        logger.debug("Getting pid for queue job from log file.")
                         while pid is None:
                             pid = self._parent.job.get_queue_pid(self.job_params['log_file'], self.current_job_id, self.sess)
                             time.sleep(5)
@@ -198,6 +198,7 @@ class RunProcessThread(QObject):
     finished = pyqtSignal()
     job_status = pyqtSignal(dict)
     change_tab = pyqtSignal()
+    error = pyqtSignal(list)
 
     def __init__(self, parent, job_params, cmd):
         super(RunProcessThread, self).__init__()
@@ -211,7 +212,7 @@ class RunProcessThread(QObject):
     def run(self):
         #self._parent.validation_panel.Enable(False)
         #self._parent.validation_panel.Hide()
-
+        error_msgs = []
         try:
             #basedir = os.getcwd()
             os.chdir(self.job_params['job_path'])
@@ -234,39 +235,64 @@ class RunProcessThread(QObject):
         logger.debug("job params")
         logger.debug(cmd)
 
-        with Popen(cmd, preexec_fn=os.setsid, shell=True, stdout=PIPE) as p, open(self.job_params['log_file'], 'w') as f:
-            cpid = p.pid
-            logger.debug("PID of child is {}".format(cpid))
-            if self.job_params['queue']:
-                try:
-                    output = p.communicate()[0].decode()
+        error_found = False
+        with Popen(cmd, preexec_fn=os.setsid, shell=True, stdout=PIPE, stderr=PIPE) as p, open(self.job_params['log_file'], 'w') as f:
+            try:
+                output, error = p.communicate()
+                if not output is None:
+                    output = output.decode()
+                if not error is None:
+                    error = error.decode()
+                    if len(error) > 0:
+                        error_msgs.append(f"Failed to launch job because of the following error:\n{error}")
+                        error_found = True
+                elif re.search('error', output):
+                    error_msgs.append(f"Failed to launch job because of the following error:\n{output}")
+                    error_found = True
+                cpid = p.pid
+                logger.debug("PID of child is {}".format(cpid))
+                if self.job_params['queue']:
                     logger.debug(output)
                     regex = self.job_params["queue_jobid_regex"].replace('\\\\', '\\')
                     regex = rf'{regex}'
                     if re.match(regex, output):
                         queue_job_id = re.match(regex, output).group(1)
                         logger.debug(f"pid from queue {queue_job_id}")
+                        self.job_params['status'] = "running"
                     else:
-                        logger.debug("Could not match queue_job_id pattern to queue submit output.")
+                        #Only add this error message if no other upstream error was found.
+                        if not error_found:
+                            msg = f"Could not match queue_job_id pattern to queue submit output. The output was {output} and the pattern is {regex}. Check the pattern defined in Settings."
+                        logger.error(msg)
+                        error_msgs.append(msg)
                         queue_job_id = None
-                except:
-                    logger.debug("Could not get queue_id from queue submit output.")
-                    queue_job_id = None
-                    traceback.print_exc()
-                self.job_params['pid'] = queue_job_id
-            else:
-                self.job_params['pid'] = cpid
-            self.job_params['status'] = "running"
-            if not self.job_params['pid'] is None:
-                self._parent.job.update_pid(self.job_params['pid'], self.job_params['job_id'], self.sess)
-                self._parent.gui_params['pid'] = self.job_params['pid']
-            logger.debug(f"Job started. emitting signals from run process thread. pid is {self.job_params['pid']}")
+                        self.job_params['status'] = "error"
+                    self.job_params['pid'] = queue_job_id
+                else:
+                    self.job_params['pid'] = cpid
+                    self.job_params['status'] = "running"
+                if not self.job_params['pid'] is None:
+                    self._parent.job.update_pid(self.job_params['pid'], self.job_params['job_id'], self.sess)
+                    self._parent.gui_params['pid'] = self.job_params['pid']
+                logger.debug(f"Job started. emitting signals from run process thread. pid is {self.job_params['pid']}")
+            except:
+                logger.debug("Could not start the job.")
+                queue_job_id = None
+                self.job_params['status'] = "error"
+                traceback.print_exc()
             self.job_status.emit(self.job_params)
             self.change_tab.emit()
+            self.error.emit(error_msgs)
             f.write("############################################################\n\n")
             f.write(f"Job command:\n\n{cmd}\n\n")
-            f.write(f"Estimated GPU memory: {self.job_params['calculated_mem']} GB\n")
-            if not self.job_params['queue']:
-                f.write(f"Job PID: {self.job_params['pid']}\n")
-                f.write(f"Host: {self.job_params['host']}\n\n")
+            f.write(f"Estimated GPU memory: {self.job_params['calculated_mem']} GB\n\n")
+            if self.job_params['status'] == "running":
+                if not self.job_params['queue']:
+                    f.write(f"Job PID: {self.job_params['pid']}\n")
+                    f.write(f"Host: {self.job_params['host']}\n\n")
+                else:
+                    f.write(f"Job submitted to the queue and waiting to start. This can take an indefinite amount of time depending on the load.\n")
+            else:
+                for msg in error_msgs:
+                    f.write(f"{msg}\n\n")
             f.write("############################################################\n\n")

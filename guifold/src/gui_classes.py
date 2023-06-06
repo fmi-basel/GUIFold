@@ -768,8 +768,16 @@ class Evaluation(GUIVariables):
 
     def get_results_path_by_id(self, job_id: int, sess: sqlalchemy.orm.Session) -> str:
         logger.debug(f"get result for job id {job_id}")
-        result = sess.query(self.db.Evaluation).filter_by(job_id=job_id).one()
-        return result.results_path
+        result_evaluation = sess.query(self.db.Evaluation).filter_by(job_id=job_id).one()
+        result_job = sess.query(self.db.Job).filter_by(id=job_id).one()
+        results_path = result_evaluation.results_path
+        job_name = result_job.name
+        project_id = result_job.project_id
+        project_path = sess.query(self.db.Project.path).filter_by(id=project_id).one()
+        #Path inside the project dir
+        project_results_path = os.path.join(job_name, job_name)
+        absolute_results_path = os.path.join(project_path, project_log_path)
+        return absolute_results_path
 
     def print_page_info(self, ok) -> None:
         self.pbar.ctrl.hide()
@@ -810,11 +818,14 @@ class Evaluation(GUIVariables):
 
     def init_gui(self, gui_params: dict, sess: sqlalchemy.orm.Session) -> dict:
         if not gui_params['job_id'] is None:
-            results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
+            #results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
+            results_path = os.path.join(gui_params['project_path'], gui_params['job_dir'])
+
             if not results_path is None:
                 if not gui_params['pairwise_batch_prediction']:
                     self.pairwise_combinations_list.ctrl.setHidden(True)
                     self.pairwise_combinations_label.ctrl.setHidden(True)
+                    results_path = os.path.join(results_path, gui_params['job_dir'], "results.html")
                 else:
                     self.pairwise_combinations_list.ctrl.setHidden(False)
                     self.pairwise_combinations_label.ctrl.setHidden(False)
@@ -1177,7 +1188,7 @@ class Job(GUIVariables):
             type = "full"
         return type
 
-    def get_type_by_job_id(self, job_id):
+    def get_type_by_job_id(self, job_id, sess):
         result = sess.query(self.db.Job).get(job_id)
         return result.type
 
@@ -1324,12 +1335,39 @@ class Job(GUIVariables):
             f.write(rendered)
         return submit_script, msgs
 
-    #Calculate required gpu memory in GB by sequence length
-    def calculate_gpu_mem(self, total_seq_length):
+    #Calculate required gpu memory in GB by sequence length for alphafold
+    def calculate_gpu_mem_alphafold(self, total_seq_length: int) -> int:
         logger.debug(total_seq_length)
         mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
+    
+    #Calculate required gpu memory in GB by sequence length for fastfold
+    def calculate_gpu_mem_fastfold(self, total_seq_length):
+        chunks = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        logger.debug(total_seq_length)
+        logger.debug(f"Total sequence length: {total_seq_length}")
+        mem = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
+        chunk_size = int(361672*math.exp(-0.00295023*total_seq_length))
+        for i, chunk in enumerate(chunks):
+            if chunk_size < chunks[0]:
+                selected_chunk_size = chunks[0]
+                break
+            elif chunk_size > chunks[-1]:
+                selected_chunk_size = chunks[-1]
+                break
+            elif chunk < chunk_size:
+                continue
+            else:
+                if i > 0:
+                    selected_chunk_size = chunks[i-1]
+                else:
+                    selected_chunk_size = chunks[0]
+                break
+            
+        logger.debug(f"Calculated memory: {mem}")
+        logger.debug(f"Estimated chunk size: {chunk_size}, Selected chunk_size: {selected_chunk_size}")
+        return mem, selected_chunk_size
 
     #Try to get GPU memory from host. Not available when submitted to queue.
     def get_gpu_mem(self):
@@ -1346,10 +1384,32 @@ class Job(GUIVariables):
     def prepare_cmd(self, job_params, cmd_dict, split_job_step=None):
         #cmd_dict = job_params.copy()
         error_msgs, warn_msgs = [], []
+        estimated_gpu_mem, estimated_chunk_size = None, None
         logger.debug(cmd_dict)
         #self.convert_protocol(cmd_dict)
         logger.debug(cmd_dict)
         job_args = []
+
+        #Estimate memory
+        #In case of FastFold also chunk_size needs to be adjusted
+        if job_params['prediction'] == 'fastfold':
+            estimated_gpu_mem, estimated_chunk_size = self.calculate_gpu_mem_fastfold(job_params['total_seqlen'])
+            if job_params['chunk_size'] == 0:
+                job_params['chunk_size'] = int(estimated_chunk_size)
+                if 'chunk_size' in cmd_dict:
+                    cmd_dict['chunk_size'] = job_params['chunk_size']
+                logger.debug(f"Set chunk_size to {estimated_chunk_size}")
+            elif abs((int(job_params['chunk_size']) - estimated_chunk_size) / estimated_chunk_size) > 0.1:
+                warn_msgs.append(f"The user defined chunk size {job_params['chunk_size']} deviates more than 10% from the estimated chunk_size {estimated_chunk_size}. This might cause longer runtimes or out-of-memory errors. The chunk_size can be set to auto or adjusted in the Advanced Settings dialog. Run anyways?") 
+            
+            #if job_params['queue']:
+            #    estimated_gpu_mem = job_params['max_gpu_mem']
+            #else:
+            #    estimated_gpu_mem = self.get_gpu_mem()
+        else:
+            estimated_gpu_mem = self.calculate_gpu_mem_alphafold(job_params['total_seqlen'])
+
+        #Generate job argument list
         if 'model_preset' in cmd_dict:
             if any([cmd_dict['model_preset'] is None, cmd_dict['model_preset'] == 'automatic']):
                 if job_params['multimer']:
@@ -1369,14 +1429,6 @@ class Job(GUIVariables):
         #job_args = [re.sub(r'\sTrue', '', x) for x in job_args if not x is None if not re.search(r'\sFalse$', x)]
 
 
-        #In case of FastFold estimation of GPU memory is more complicated. For now use maximum available GPU mem.
-        if job_params['prediction'] == 'fastfold':
-            if job_params['queue']:
-                estimated_gpu_mem = job_params['max_gpu_mem']
-            else:
-                estimated_gpu_mem = self.get_gpu_mem()
-        else:
-            estimated_gpu_mem = self.calculate_gpu_mem(job_params['total_seqlen'])
         #gpu_name = None
         #gpu_mem = None
         if not 'max_ram' in job_params:
@@ -1443,19 +1495,19 @@ class Job(GUIVariables):
                 cmd += [f"run_fastfold.py\\\n"]
             cmd += job_args + [f">> {job_params['log_file']} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
-        return cmd, error_msgs, warn_msgs, estimated_gpu_mem
+        return cmd, error_msgs, warn_msgs, estimated_gpu_mem, estimated_chunk_size
 
     def insert_evaluation(self, _evaluation, job_params, sess):
         if not _evaluation.check_exists(job_params['job_id'], sess):
             job_obj = self.get_job_by_id(job_params['job_id'], sess)
             
             if job_params['pairwise_batch_prediction']:
-                results_path = job_params['job_path']
+                results_path = job_params['job_name']
             else:
-                results_path = os.path.join(job_params['job_path'],
+                results_path = os.path.join(job_params['job_name'],
                                                     job_params["job_name"],
                                                     "results.html")
-            if os.path.exists(results_path):
+            if os.path.exists(os.path.join(job_params['project_path'], results_path)):
                 _evaluation.results_path.set_value(results_path)
                 _evaluation.job_id.set_value(job_params['job_id'])
                 evaluation_dict_db = _evaluation.get_dict_db_insert()
@@ -1593,15 +1645,24 @@ class Job(GUIVariables):
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
-    def build_log_file_path(self, project_path, job_name, type):
-        job_dir = self.get_job_dir(job_name)
-        job_path = self.get_job_path(project_path, job_dir)
-        log_file = os.path.join(job_path, f"{job_name}_{type}.log")
+    def build_log_file_path(self, job_name, type):
+        #job_dir = self.get_job_dir(job_name)
+        #job_path = self.get_job_path(project_path, job_dir)
+        log_file = os.path.join(f"{job_name}_{type}.log")
         return log_file
 
     def get_log_file(self, job_id, sess):
-        result = sess.query(self.db.Job.log_file).filter_by(id=job_id).first()
-        return result[0]
+        """Reconstruct the log path in case the project path was changed."""
+        result_job = sess.query(self.db.Job).filter_by(id=job_id).first()
+        result_jobparams = sess.query(self.db.Jobparams).filter_by(job_id=job_id).first()
+        job_name = result_jobparams.job_name
+        project_id = result_job.project_id
+        type = result_job.type
+        project_path = self.get_path_by_project_id(project_id, sess)
+        #Path inside the project dir
+        project_log_path = os.path.join(job_name, f"{job_name}_{type}.log")
+        absolute_log_path = os.path.join(project_path, project_log_path)
+        return absolute_log_path
 
     def get_queue_pid(self, log_file, job_id, sess):
         pid = None
@@ -1685,6 +1746,44 @@ class Job(GUIVariables):
             self.list.ctrl.scrollToItem(self.list.ctrl.item(self.list.ctrl.currentRow(), 0), QtWidgets.QAbstractItemView.PositionAtCenter)
             #self.list.ctrl.scrollToBottom()
         return gui_params
+    
+    #TreeView Implementation
+    # def init_gui(self, gui_params, sess=None):
+    #     logger.debug("=== Init Job list ===")
+    #     # Clear Lists
+    #     self.list.reset_ctrl()
+    #     self.log.reset_ctrl()
+    #     logger.debug("reset end")
+    #     # Fill job list
+    #     self.list.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+    #     self.list.ctrl.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
+    #     self.list.ctrl.setColumnCount(4)
+    #     self.list.ctrl.verticalHeader().setVisible(False)
+    #     self.list.ctrl.setHorizontalHeaderLabels(('ID', 'Name', 'Type', 'Status'))
+    #     self.list.ctrl.setColumnWidth(0, 50)
+    #     self.list.ctrl.setColumnWidth(1, 100)
+    #     self.list.ctrl.setColumnWidth(2, 70)
+    #     self.list.ctrl.setColumnWidth(3, 70)
+    #     project_id = gui_params['project_id']
+    #     if not project_id is None:
+    #         gui_params['project_path'] = self.get_path_by_project_id(project_id, sess)
+    #         jobs = self.get_jobs_by_project_id(project_id, sess)
+    #         for job in jobs:
+    #             status = self.get_status(job.id, sess)
+    #             if status is None:
+    #                 status = "unknown"
+
+
+    #             rows = self.list.ctrl.rowCount()
+    #             self.list.ctrl.insertRow(rows)
+    #             self.list.ctrl.setItem(rows, 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
+    #             self.list.ctrl.setItem(rows, 1, QtWidgets.QTableWidgetItem(job.name))
+    #             self.list.ctrl.setItem(rows, 2, QtWidgets.QTableWidgetItem(job.type.capitalize()))
+    #             self.list.ctrl.setItem(rows, 3, QtWidgets.QTableWidgetItem(status))
+    #         self.list.ctrl.scrollToItem(self.list.ctrl.item(self.list.ctrl.currentRow(), 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+    #         #self.list.ctrl.scrollToBottom()
+    #     return gui_params
+
 
 
 class Project(GUIVariables):

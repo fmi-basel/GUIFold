@@ -29,7 +29,6 @@ import sys
 import time
 import traceback
 from typing import Dict, Union, Optional
-from memory_profiler import profile
 from contextlib import closing
 from absl import app
 from absl import flags

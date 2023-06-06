@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 6
+DB_REVISION = 7
 
 def get_type(type):
     types = {'str': String,

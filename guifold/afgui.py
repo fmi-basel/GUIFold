@@ -17,11 +17,13 @@
 from __future__ import absolute_import
 from guifold.src import gui_threads
 from guifold.src.gui_dialogs import message_dlg
+from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 from guifold.src.gui_dlg_settings import SettingsDlg
 from guifold.src.gui_dlg_about import AboutDlg
 from guifold.src.gui_dlg_project import ProjectDlg
 from guifold.src.gui_dlg_queue_submit import QueueSubmitDlg
 from guifold.src.gui_dlg_advanced_params import AdvancedParamsDlg
+from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 import signal
 import socket
 from subprocess import Popen
@@ -537,11 +539,18 @@ class MainFrame(QtWidgets.QMainWindow):
         self.process_thread.finished.connect(self.process_thread.deleteLater)
         self.process_worker.job_status.connect(self.OnJobStatus)
         self.process_worker.change_tab.connect(self.OnChangeTab)
+        self.process_worker.error.connect(self.OnError)
         self.process_thread.start()
         self.threads.append(self.process_thread)
         self.create_monitor_thread(self.job_params)
 
-    def OnBtnRun(self):
+    def OnError(self, msgs):
+        if len(msgs) > 0:
+            for msg in msgs:
+                message_dlg('Error', msg)
+
+    #Add type hinting to below function
+    def OnBtnRun(self) -> None:
         jobs_started = 0
         self.prepare_and_start_job(jobs_started, split_job_step=None, queue_pid=None)
 
@@ -654,8 +663,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Full path to job folder
                     job_params['output_dir'] = job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
                                                                    job_params['job_dir'])
-                    job_params['log_file'] = self.job.build_log_file_path(self.gui_params['project_path'],
-                                                                   job_params['job_name'], job_params['type'])
+                    job_params['log_file'] = self.job.build_log_file_path(job_params['job_name'], job_params['type'])
                     #Full path to results folder created by AF inside job folder
                     if job_params['pairwise_batch_prediction']:
                         job_params['results_path'] = job_params['job_path']
@@ -876,8 +884,8 @@ class MainFrame(QtWidgets.QMainWindow):
                             del cmd_dict['chunk_size']
                         if 'inplace' in cmd_dict:
                             del cmd_dict['inplace']
-                    if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
-                        del cmd_dict['chunk_size']
+                    #if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
+                    #    del cmd_dict['chunk_size']
                     if 'use_precomputed_msas' in job_params:
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""
@@ -910,14 +918,15 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Prepare command to run alphafold
                     self.job_params = job_params
                     if job_params['split_job'] and job_params['queue']:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
                     else:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict)
 
                     for msg in error_msgs:
                         logger.debug(msg)
                         message_dlg('Error', msg)
                         raise PrepareCMDError(msg)
+                    
                     for msg in warn_msgs:
                         ret = QtWidgets.QMessageBox.question(self, 'Warning',
                                                              msg,

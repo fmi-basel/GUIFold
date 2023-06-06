@@ -48,6 +48,42 @@ class EvaluationPipeline:
         self.pae_results_unsorted = None
         if not os.path.exists(self.results_dir):
             raise SystemExit(f"Output directory {self.results_dir} not found")
+        
+    def msa_coverage(self):
+        """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py and """
+        try:
+            feature_dict = pickle.load(open(os.path.join(self.output_dir, "features.pkl"), 'br'))
+        except OSError:
+            raise SystemExit(f"Feature file {self.output_dir}/features.pkl not found")
+
+        #Get subunit boundaries
+        subunits, num_residues = np.unique(feature_dict['asym_id'], return_counts=True)
+        cumulative_num_residues = []
+        cumulative_num = 0
+        for num_res in num_residues:
+            cumulative_num += num_res
+            cumulative_num_residues.append(cumulative_num)
+        msa = feature_dict['msa']
+        seq_identity = np.mean(msa[0] == msa, axis=-1)
+        seq_identity_full = (msa[0] == msa)
+        seq_identity_indices = np.argsort(seq_identity)
+        msa_by_identity = np.where(msa == 21, np.nan, 1.0) * seq_identity[:, np.newaxis]
+        msa_by_identity = msa_by_identity[seq_identity_indices]
+        #print(msa_by_identity)
+
+        fig, ax = plt.subplots(figsize=(14, 4), dpi=100)
+        ax.set_title(f"Sequence coverage ()")
+        im = ax.imshow(msa_by_identity, interpolation='nearest', aspect='auto',
+                    cmap="rainbow", vmin=0, vmax=1, origin='lower')
+        ax.plot(np.sum(msa != 21, axis=0), color='black')
+        #Plot vertical lines after each subunit
+        ax.vlines(cumulative_num_residues, 0, msa.shape[0], color='black', linewidth=2)
+        ax.set_xlim(-0.5, msa.shape[1] - 0.5)
+        ax.set_ylim(-0.5, msa.shape[0] - 0.5)
+        fig.colorbar(im, label="Sequence identity to query")
+        ax.set_xlabel("Positions")
+        ax.set_ylabel("Sequences")
+        fig.savefig('msa_coverage.png')
 
     def run_pipeline(self):
         logging.info("Running evaluation pipeline.")
@@ -59,12 +95,13 @@ class EvaluationPipeline:
         self.seq_titles = seq_titles
         seq_len_dict = self.get_sequence_len(input_sequences)
         indices = self.get_indices(seq_len_dict)
-        pickle_path = os.path.join(self.results_dir, 'results.pickle')
+        results_pickle_path = os.path.join(self.results_dir, 'results.pickle')
+        features_pickle_path = os.path.join(self.output_dir, 'features.pkl')
 
         if len(input_sequences) > 1:
             multimer = True
 
-        if not os.path.exists(pickle_path) or not self.continue_from_existing_results:
+        if not os.path.exists(results_pickle_path) or not self.continue_from_existing_results:
             for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
                                      if x.startswith("result_model") and x.endswith(".pkl")]):
                 if not i > 6:
@@ -131,14 +168,14 @@ class EvaluationPipeline:
                     ptm_list = sorted(ptm_list, key=lambda x: x[0], reverse=True)
                 else:
                     ptm_list = None
-            with open(pickle_path, 'wb') as handle:
+            with open(results_pickle_path, 'wb') as handle:
                 pickle.dump((plddt_list, average_pae, iptm_list, ptm_list), handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             try:
-                with open(pickle_path, 'rb') as handle:
+                with open(results_pickle_path, 'rb') as handle:
                     plddt_list, average_pae, iptm_list, ptm_list = pickle.load(handle)
             except ValueError:
-                with open(pickle_path, 'rb') as handle:
+                with open(results_pickle_path, 'rb') as handle:
                     plddt_list, average_pae = pickle.load(handle)
                     iptm_list, ptm_list = None, None
             if self.check_none(average_pae):
