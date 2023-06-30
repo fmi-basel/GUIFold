@@ -27,6 +27,7 @@ import socket
 from Bio import SeqIO
 from PyQt5 import QtWidgets, QtGui, QtCore, QtWebEngineWidgets
 from jinja2 import Template, Environment, meta, PackageLoader
+from guifold.src.db_helper import DBHelper
 from guifold.src.gui_dialogs import message_dlg, open_files_and_dirs_dlg
 from sqlalchemy.orm.exc import NoResultFound
 import traceback
@@ -39,7 +40,8 @@ import math
 import shutil
 from Bio.PDB import MMCIFParser
 from Bio.PDB.mmcifio import MMCIFIO
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Optional, Tuple, Union, List
+from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedSettingsDefaults
 import sqlalchemy.orm
 logger = logging.getLogger('guifold')
 #logger.setLevel(logging.DEBUG)
@@ -55,6 +57,16 @@ class WebViewer(QtWebEngineWidgets.QWebEngineView):
         qclose_event.accept()
         # Schedules this object for deletion, QObject
         self.page().deleteLater()
+
+class NonSelectableGroupItem(QtWidgets.QTreeWidgetItem):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def flags(self):
+        return super().flags() & QtCore.Qt.QNoItemFlags
+
+    def mousePressEvent(self, event):
+        pass  # Ignore mouse press events
 
 ctrl_type_dict = {'dsb': QtWidgets.QDoubleSpinBox,
                   'sbo': QtWidgets.QSpinBox,
@@ -119,18 +131,22 @@ class Variable:
         self.required = required
 
     def get_value(self) -> Union[list, str, int, float, bool, None]:
+        """Get the value of the variable."""
         return self.value
 
     def set_ctrl_type(self) -> None:
+        """Set the control type."""
         try:
             self.ctrl_type = self.ctrl.__class__.__name__
         except Exception:
             logger.warning("Cannot set control {}".format(self.ctrl.__class__.__name__), exc_info=True)
 
     def set_value(self, value: Union[list, str, int, float, bool, None]) -> None:
+        """ Set the value of the variable."""
         self.value = value
 
     def set_cmb_by_text(self, value: str) -> None:
+        """Set combo box value by text."""
         if self.ctrl_type == 'cmb':
             for k, v in self.cmb_dict.items():
                 logger.debug(f"Setting cmb, {value} in dict {v}")
@@ -144,7 +160,7 @@ class Variable:
             logger.debug("Not a cmb box.")
 
     def set_control(self, result_val: Union[str, float, int, bool], result_var: str) -> None:
-        """ Set control value based on control type."""
+        """Set control value based on control type."""
         if result_val == 'None' or result_val is None:
             result_val = ''
         if self.ctrl_type == 'dsb':
@@ -178,10 +194,12 @@ class Variable:
         logger.debug(f"Setting {result_var} to {result_val}")
 
     def unset_control(self) -> None:
+        """Unset control value."""
         if hasattr(self, 'ctrl_type') and not self.ctrl_type is None:
             self.ctrl = None
 
     def is_set(self) -> bool:
+        """Check if a variable is set."""
         if isinstance(self.value, list):
             if not self.value == []:
                 return True
@@ -194,6 +212,7 @@ class Variable:
                 return False
 
     def list_like_str_not_all_none(self) -> bool:
+        """Check if a string, that is list-like, contains at least one non-None value."""
         if self.value:
             lst = self.value.split(',')
             for e in lst:
@@ -202,12 +221,13 @@ class Variable:
         return False
 
     def update_from_self(self) -> None:
+        """Set control value from variable value."""
         if not self.value is None and not self.ctrl is None:
             logger.debug(f"Set value of control {self.var_name} to {self.value}")
             self.set_control(self.value, self.var_name)
 
     def update_from_db(self, db_result: Union[str, float, int, bool]) -> None:
-        """ Set/update variable values from DB """
+        """Set/update variable values from DB """
         logger.debug("Update from DB")
         if not db_result is None and not db_result == []:
             for result_var in vars(db_result):
@@ -217,13 +237,18 @@ class Variable:
                     self.value = result_val
                     logger.debug("Variable name: {}\nValue: {}".format(result_var, result_val))
                     if not self.ctrl is None:
-                        if not result_val in ['tbl', None]:
+                        if not result_val in ['tbl', 'tre']:
+                            if result_val in [None, "None", "none"]:
+                                if self.ctrl_type == 'chk':
+                                    result_val = False
+                                else:
+                                    result_val = ""
                             self.set_control(result_val, result_var)
         else:
             logger.warning("DB result empty. Nothing to update.")
 
     def update_from_gui(self) -> None:
-        """ Set/update attribute values (self.value) from GUI controls """
+        """Set/update attribute values (self.value) from GUI controls"""
         if not self.ctrl is None:
             if self.ctrl_type in ['sbo', 'dsb']:
                     self.value = self.ctrl.value()
@@ -243,11 +268,11 @@ class Variable:
 
 
     def reset_ctrl(self) -> None:
-        """ Clear variable values and GUI controls """
+        """Clear variable values and GUI controls """
         logger.debug("Resetting GUI controls ")
         if not self.ctrl is None:
             logger.debug(f"resetting {self.var_name}")
-            if not self.ctrl_type in ['chk', 'tbl']:
+            if not self.ctrl_type in ['chk', 'tbl', 'tre']:
                 self.ctrl.clear()
                 self.value = None
 
@@ -257,7 +282,13 @@ class Variable:
 
             elif self.ctrl_type == 'tbl':
                 while self.ctrl.rowCount() > 0:
-                    self.ctrl.removeRow(0);
+                    self.ctrl.removeRow(0)
+            elif self.ctrl_type == 'tre':
+                # Get the model associated with the tree view
+                model = self.ctrl.model()
+
+                # Clear the model by removing all rows
+                model.removeRows(0, model.rowCount())
         else:
             logger.debug(f"ctrl of {self.var_name} is not bound.")
 
@@ -329,7 +360,7 @@ class SelectPrecomputedMsasWidget(QtWidgets.QWidget):
 
 
 class TblCtrlSequenceParams(Variable):
-    """Table view for managing enetered sequences"""
+    """Table view for managing enetered sequences. Inherits `Variable` class."""
     def __init__(self,
                 var_name: str = None,
                 type: str = None,
@@ -345,11 +376,12 @@ class TblCtrlSequenceParams(Variable):
         self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
         self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
 
-
     def register(self, parameter: str) -> None:
+        """Register a parameter in the sequence parameter table"""
         self.sequence_dict[parameter.var_name] = parameter
 
     def get_seq_names(self, sequence_str: str) -> list:
+        """Get sequence names from a sequence string"""
         seq_names = []
         logger.debug(sequence_str)
         lines = sequence_str.split('\n')
@@ -364,7 +396,8 @@ class TblCtrlSequenceParams(Variable):
         return seq_names
 
     def sanitize_sequence_str(self, sequence_str: str) -> Tuple[str, list]:
-        new_lines, error_msgs = [], []
+        """Sanitize sequence string and return a list of error messages"""
+        sanitized_sequence, error_msgs = [], []
         seq_name_line = False
         num_seq_names = 0
         num_seqs = 0
@@ -379,7 +412,7 @@ class TblCtrlSequenceParams(Variable):
                     logger.debug("Found a non standard char in the sequence name")
                     logger.debug(line)
                     error_msgs.append("Non standard characters found in the sequence name!")
-                new_lines.append(line)
+                sanitized_sequence.append(line)
             else:
                 if seq_name_line:
                     num_seqs += 1
@@ -390,15 +423,16 @@ class TblCtrlSequenceParams(Variable):
                     logger.debug("Found a non standard char in the sequence")
                     logger.debug(line)
                     error_msgs.append("Non standard characters found in the sequence!")
-                new_lines.append(line)
+                sanitized_sequence.append(line)
         if num_seq_names == 0:
             error_msgs.append("No lines starting with > found. Add a >SomeProteinName line above each sequence.")
         if num_seq_names != num_seqs:
             error_msgs.append("Number of sequence names not matching sequences. Add a >SomeProteinName line above each sequence.")
-        new_lines = '\n'.join(new_lines)
-        return new_lines, error_msgs
+        sanitized_sequence = '\n'.join(sanitized_sequence)
+        return sanitized_sequence, error_msgs
 
     def init_gui(self) -> None:
+        """Initialize the GUI"""
         self.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.ctrl.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.ctrl.setColumnCount(5)
@@ -415,6 +449,7 @@ class TblCtrlSequenceParams(Variable):
         self.ctrl.setStyleSheet("item { align: center; padding: 0px; margin: 0px;}")
 
     def OnBtnSelectFile(self, lei: QtWidgets.QLineEdit) -> None:
+        """Select a file and write the path to the line edit"""
         dlg = QtWidgets.QFileDialog()
         if dlg.exec_():
             path = dlg.selectedFiles()[0]
@@ -428,6 +463,7 @@ class TblCtrlSequenceParams(Variable):
                         lei: QtWidgets.QLineEdit,
                         widget: QtWidgets.QWidget,
                         check: Union[str, None] = None) -> None:
+        """Select a folder and write the path to the line edit"""
         path = QtWidgets.QFileDialog.getExistingDirectory(widget, 'Select Folder')
         if check == 'precomputed_msas':
             self.check_precomputed_msas_folder(path)
@@ -436,6 +472,7 @@ class TblCtrlSequenceParams(Variable):
     def OnBtnSelectFolderOrFiles(self,
                                 lei: QtWidgets.QLineEdit,
                                 widget: QtWidgets.QWidget) -> None:
+        """Select a folder or files and write the path to the line edit"""
         path = open_files_and_dirs_dlg(widget, 'Select File or Folder')
         if len(path) == 0:
             message_dlg('error', 'No files or folders selected.')
@@ -445,6 +482,7 @@ class TblCtrlSequenceParams(Variable):
             lei.setText(path[0])
 
     def create_widgets(self, seq_names: list) -> None:
+        """Create widgets for the sequence parameter table"""
         self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
         for i, _ in enumerate(seq_names):
             custom_template_widget = SelectCustomTemplateWidget()
@@ -467,6 +505,7 @@ class TblCtrlSequenceParams(Variable):
         logger.debug(self.sequence_params_widgets)
 
     def add_widgets_to_cells(self, seq_names: list):
+        """Add widgets to the cells of the sequence parameter table"""
         logger.debug(self.sequence_params_widgets['custom_template_list'])
         for i, seq_name in enumerate(seq_names):
             self.ctrl.setItem(i, 0, QtWidgets.QTableWidgetItem(seq_name))
@@ -479,6 +518,7 @@ class TblCtrlSequenceParams(Variable):
     def read_sequences(self,
                     sequence_ctrl: QtWidgets.QPlainTextEdit,
                     sess: sqlalchemy.orm.Session = None) -> Tuple[list, list]:
+        """Read the sequences from the sequence parameter table"""
         self.reset_ctrl()
         self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
         self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
@@ -502,6 +542,7 @@ class TblCtrlSequenceParams(Variable):
 
     def get_from_table(self,
                     seq_names: list) -> Tuple[str, str, str, str, str]:
+        """Get the values from the sequence parameter table"""
         self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
         for i, _ in enumerate(seq_names):
             for key in self.sequence_params_widgets.keys():
@@ -521,6 +562,7 @@ class TblCtrlSequenceParams(Variable):
                 ','.join(seq_names))
 
     def set_values(self, seq_names: list) -> None:
+        """Set the values of the sequence parameter table"""
         logger.debug("Set values")
         for i, _ in enumerate(seq_names):
             for key in self.sequence_params_values.keys():
@@ -539,7 +581,8 @@ class TblCtrlSequenceParams(Variable):
 
     def update_from_db(self,
                     db_result: list,
-                    other=None) -> None:
+                    other: Union[None, object] = None) -> None:
+        """Update the sequence parameter table from the database"""
         if not db_result.job_name is None:
             self.sequence_params_values = {k: [] for k in self.sequence_params_template.keys()}
             self.sequence_params_widgets = {k: [] for k in self.sequence_params_template.keys()}
@@ -564,6 +607,7 @@ class TblCtrlSequenceParams(Variable):
             self.add_widgets_to_cells(seq_names)
 
     def check_precomputed_msas_folder(self, path: str) -> None:
+        """Check that the precomputed MSAs folder contains the expected files"""
         found = False
         for f in os.listdir(path):
             if re.search("uniref90_hits", f):
@@ -572,8 +616,9 @@ class TblCtrlSequenceParams(Variable):
             message_dlg('error', f'No suitable MSAs files found in {path}. Expected to find at least uniref90_hits.')
 
 class GUIVariables:
-    """ Functions shared by GUI associated variables. Inherited by """
-    def set_controls(self, ui, db_table: str) -> None:
+    """This class contains common functions shared by GUI associated variables."""
+    def set_controls(self, ui: QtWidgets.QMainWindow, db_table: str) -> None:
+        """ Set QtWidget references for all `Variable` objects in the given scope."""
         logger.debug("Setting controls")
         for var in vars(self):
             logger.debug(var)
@@ -592,8 +637,8 @@ class GUIVariables:
                 else:
                     logger.debug("ctrl not found in res")
 
-    def unset_controls(self, ui, db_table: str) -> None:
-        """ Remove QtWidget references from all `Variable` objects in the given scope. """
+    def unset_controls(self, ui: QtWidgets.QMainWindow, db_table: str) -> None:
+        """Remove QtWidget references from all `Variable` objects in the given scope."""
         logger.debug("Unsetting controls")
         for var in vars(self):
             logger.debug(var)
@@ -603,7 +648,7 @@ class GUIVariables:
                 obj.ctrl = None
 
     def delete_controls(self, var_obj: Variable) -> None:
-        """ Remove QtWidget references from a given `Variable` object in case it exists in the given scope. """
+        """Remove QtWidget references from a given `Variable` object in case it exists in the given scope."""
         logger.debug("Deleting controls")
         for var in vars(self):
             logger.debug(var)
@@ -618,14 +663,14 @@ class GUIVariables:
                         obj.ctrl = None
 
     def update_from_self(self) -> None:
-        """ Update QtWidget value from `value` paramter of `Variable` objects in the given scope. """
+        """Update QtWidget value from `value` paramter of `Variable` objects in the given scope."""
         for var in vars(self):
             obj = getattr(self, var)
             if hasattr(obj, 'ctrl') and hasattr(obj, 'value'):
                 obj.update_from_self()
 
     def update_from_gui(self) -> None:
-        """ Get QtWidget value and update `value` paramter of `Variable` objects in the given scope. """
+        """Get QtWidget value and update `value` paramter of `Variable` objects in the given scope."""
         logger.debug("Update from GUI")
         for var in vars(self):
             logger.debug(f"Update {var}")
@@ -635,15 +680,15 @@ class GUIVariables:
                 obj.update_from_gui()
 
     def reset_ctrls(self) -> None:
-        """ Reset all QtWidget controls in the given scope. """
+        """Reset all QtWidget controls in the given scope."""
         logger.debug("Reset ctrls")
         for var in vars(self):
             obj = getattr(self, var)
             if hasattr(obj, 'ctrl'):
                 obj.reset_ctrl()
 
-    def update_from_db(self, db_result: list, other=None):
-        """ Get values from DB and update QtWidgets. """
+    def update_from_db(self, db_result: list, other=None) -> None:
+        """Get values from DB and update QtWidgets."""
         logger.debug("Update from DB")
         if not db_result is None and not db_result == []:
             for var in vars(self):
@@ -662,7 +707,7 @@ class GUIVariables:
             logger.warning("DB result empty. Nothing to update.")
 
     def update_from_default(self, default_values: object) -> None:
-        """ Update `value` paramter of `Variable` objects in the given scope to default values. """
+        """Update `value` paramter of `Variable` objects in the given scope to default values."""
         logger.debug("Update from Default")
         if not default_values is None and not default_values == []:
             for var in vars(self):
@@ -673,7 +718,7 @@ class GUIVariables:
             logger.warning("Default values empty. Nothing to update.")
 
     def get_dict_run_job(self) -> dict:
-        """ Get dict with values from GUI controls and variables in the given scope. """
+        """Get dict with values from GUI controls and variables in the given scope."""
         job_dict = {}
         for var in vars(self):
             obj = getattr(self, var)
@@ -684,7 +729,7 @@ class GUIVariables:
         return job_dict
 
     def get_dict_cmd(self, foreign_obj: object = None) -> dict:
-        """ Get dict with values that are required for running a command."""
+        """Get dict with values that are required for running a command."""
         cmd_dict = {}
         for var in vars(self):
             obj = getattr(self, var)
@@ -724,7 +769,19 @@ class GUIVariables:
 
 
 class Evaluation(GUIVariables):
-    """ Class for managing job evaluation results. """
+    """ Class for managing job evaluation results. Inherits functions from GUIVariables.
+    
+    Attributes:
+        db (str): Database name.
+        db_table (str): Database table name.
+        id (Variable): Evaluation ID.
+        job_id (Variable): Job ID.
+        results_path (Variable): Path to results.
+        results (Variable): Webview widget.
+        pbar (Variable): Progress bar.
+        pairwise_combinations_label (Variable): Label for pairwise combinations.
+        pairwise_combinations_list (Variable): List of pairwise combinations.
+        """
     def __init__(self) -> None:
         self.db = None
         self.db_table = 'evaluation'
@@ -736,10 +793,12 @@ class Evaluation(GUIVariables):
         self.pairwise_combinations_label = Variable("pairwise_combinations_label", db=False, ctrl_type='lbl')
         self.pairwise_combinations_list = Variable("pairwise_combinations_list", db=False, ctrl_type='cmb')
 
-    def set_db(self, db: str) -> None:
+    def set_db(self, db: DBHelper) -> None:
+        """Set database helper object."""
         self.db = db
 
     def check_exists(self, job_id: int, sess: sqlalchemy.orm.Session) -> bool:
+        """Check if evaluation for given job exists in DB."""
         result = sess.query(self.db.Evaluation).filter_by(job_id=job_id).all()
         if result == [] or result == None:
             return False
@@ -747,6 +806,7 @@ class Evaluation(GUIVariables):
             return True
 
     def get_dict_db_insert(self, foreign_obj: object = None) -> List[dict]:
+        """Gather names and values from Variable objects and construct a mapping for DB insertion."""
         insert_dict = {}
         for var in vars(self):
             obj = getattr(self, var)
@@ -761,12 +821,14 @@ class Evaluation(GUIVariables):
         return [insert_dict]
 
     def generate_db_object(self, data: list) -> list:
+        """Generate DB object from data."""
         if isinstance(data, list):
             return [self.db.Evaluation(**row) for row in data]
         else:
             return [self.db.Evaluation(**data)]
 
     def get_results_path_by_id(self, job_id: int, sess: sqlalchemy.orm.Session) -> str:
+        """Get results path by job ID."""
         logger.debug(f"get result for job id {job_id}")
         result_evaluation = sess.query(self.db.Evaluation).filter_by(job_id=job_id).one()
         result_job = sess.query(self.db.Job).filter_by(id=job_id).one()
@@ -780,19 +842,23 @@ class Evaluation(GUIVariables):
         return absolute_results_path
 
     def print_page_info(self, ok) -> None:
+        """Print page info."""
         self.pbar.ctrl.hide()
 
     def print_load_started(self) -> None:
+        """Print load started."""
         logger.debug('Started loading')
         self.pbar.ctrl.show()
 
     def print_load_percent(self, percent: Union[str, int]) -> None:
+        """Print load percent."""
         self.pbar.ctrl.setValue(int(percent))
         logger.debug(percent)
         if percent == 100:
             self.pbar.ctrl.hide()
 
     def get_combination_names(self, results_folder: str) -> List[str]:
+        """Get pairwise target combination names from results folder."""
         combination_names = []
         print(results_folder)
         folders = [f for f in os.listdir(results_folder) if os.path.isdir(os.path.join(results_folder, f))]
@@ -805,6 +871,7 @@ class Evaluation(GUIVariables):
         return combination_names
 
     def get_combination_results_path(self, results_folder: str, combination_name: str) -> str:
+        """Get results path for given combination name."""
         results_file_path = None
         if combination_name == "summary":
             results_file_path = os.path.join(results_folder, 'batch_summary.html')
@@ -817,6 +884,7 @@ class Evaluation(GUIVariables):
         return results_file_path
 
     def init_gui(self, gui_params: dict, sess: sqlalchemy.orm.Session) -> dict:
+        """Update GUI with evaluation results."""
         if not gui_params['job_id'] is None:
             #results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
             results_path = os.path.join(gui_params['project_path'], gui_params['job_dir'])
@@ -834,7 +902,8 @@ class Evaluation(GUIVariables):
                     for item in combinations_list:
                         self.pairwise_combinations_list.ctrl.addItem(item)
                     if gui_params['selected_combination_name'] is None:
-                        results_path = self.get_combination_results_path(results_path, combinations_list[0])
+                        if len(combinations_list) > 0:
+                            results_path = self.get_combination_results_path(results_path, combinations_list[0])
                     else:
                         results_path = self.get_combination_results_path(results_path, gui_params['selected_combination_name'])
                 logger.debug(results_path)
@@ -851,7 +920,46 @@ class Evaluation(GUIVariables):
         return gui_params
 
 class JobParams(GUIVariables):
-    """ Class for managing job specific parameters. """
+    """ Class for managing job specific parameters. 
+    
+    Attributes:
+        db (Database): Database object 
+        db_table (str): Name of the database table
+        id (Variable): ID of the jobparams entry
+        job_id (Variable): ID of the job
+        job_name (Variable): Name of the job
+        output_dir (Variable): Output directory
+        sequences (Variable): Sequences
+        seq_names (Variable): Sequence names
+        fasta_path (Variable): Path to fasta file (reflects AF argument)
+        sequence_params (TblCtrlSequenceParams): Sequence parameters TableView widget
+        custom_template_list (Variable): List-like comma-separated string with path to custom templates (reflects AF argument)
+        precomputed_msas_list (Variable): List-like comma-separated string with path to precomputed MSAs (reflects AF argument)
+        no_msas_list (Variable): List-like comma-separated string with True/False values (reflects AF argument)
+        no_templates_list (Variable): List-like comma-separated string with True/False values (reflects AF argument)
+        run_relax (Variable): Toggle alphafold relax step (reflects AF argument)
+        num_multimer_predictions_per_model (Variable): Number of multimer predictions per model (reflects AF argument)
+        queue (Variable): Whether to use queue submission
+        db_preset_dict (dict): Dictionary with database presets
+        db_preset (Variable): Database preset (reflects AF argument)
+        model_preset_dict (dict): Dictionary with model presets
+        model_preset (Variable): Model preset (reflects AF argument)
+        benchmark (Variable): Toggle benchmarking (reflects AF argument)
+        random_seed (Variable): Random seed (reflects AF argument)
+        max_template_date (Variable): Maximum template date (reflects AF argument)
+        precomputed_msas_path (Variable): Path to precomputed MSAs (reflects AF argument)
+        force_cpu (Variable): Toggle CPU usage
+        num_recycle (Variable): Number of recycling steps (reflects AF argument)
+        pipeline_dict (dict): Dictionary with pipeline presets
+        pipeline (Variable): Pipeline preset (reflects AF argument)
+        prediction_dict (dict): Dictionary with prediction presets
+        prediction (Variable): Prediction protocol preset
+        num_gpu (Variable): Number of GPUs (only for FastFold protocol)
+        chunk_size (Variable): Chunk size (only for FastFold protocol)
+        inplace (Variable): Toggle inplace prediction (only for FastFold protocol)
+        pairwise_batch_prediction (Variable): Toggle pairwise batch prediction of a set of sequences
+        
+        """
     def __init__(self):
         self.db = None
         self.db_table = 'jobparams'
@@ -879,7 +987,8 @@ class JobParams(GUIVariables):
         self.queue = Variable('queue', 'bool', ctrl_type='chk')
         self.db_preset_dict = {0: 'full_dbs',
                                1: 'reduced_dbs',
-                               2: 'colabfold'}
+                               2: 'colabfold_local',
+                               3: 'colabfold_web'}
         self.db_preset = Variable('db_preset', 'str', ctrl_type='cmb', cmb_dict=self.db_preset_dict, cmd=True)
         self.model_preset_dict = {0: 'automatic',
                                   1: 'monomer',
@@ -904,7 +1013,7 @@ class JobParams(GUIVariables):
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
         self.prediction_dict = {0: 'alphafold',
                                 1: 'fastfold'}
-        self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict)
+        self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict, cmd=True)
         #FastFold params
         self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)
         self.chunk_size = Variable('chunk_size', 'int', ctrl_type="sbo", cmd=True)
@@ -912,19 +1021,23 @@ class JobParams(GUIVariables):
         self.pairwise_batch_prediction = Variable('pairwise_batch_prediction', 'bool')
 
 
-    def set_db(self, db) -> None:
+    def set_db(self, db: DBHelper) -> None:
+        """Set database helper object."""
         self.db = db
 
     def set_fasta_paths(self, job_path: str, job_name: str) -> None:
+        """Set fasta path."""
         self.fasta_path.set_value(os.path.join(job_path, f"{job_name}.fasta"))
 
     def write_fasta(self):
+        """Write fasta file."""
         with open(self.fasta_path.get_value(), 'w') as f:
             sequence_str = self.sequences.get_value()
             sequence_str = sequence_str.replace(" ", "")
             f.write(sequence_str)
 
     def db_insert_params(self, sess: sqlalchemy.orm.Session, data: list = None) -> None:
+        """Insert params into database."""
         assert isinstance(data, list)
         rows = [self.db.Jobparams(**row) for row in data]
         for row in rows:
@@ -932,15 +1045,18 @@ class JobParams(GUIVariables):
         sess.commit()
 
     def generate_db_object(self, data: list = None) -> List[sqlalchemy.orm.Query]:
+        """Generate database object."""
         assert isinstance(data, list)
         return [self.db.Jobparams(**row) for row in data]
 
     def get_params_by_job_id(self, job_id, sess) -> sqlalchemy.orm.Query:
+        """Get params by job id."""
         logger.debug(f"get result for job id {job_id}")
         result = sess.query(self.db.Jobparams).filter_by(job_id=job_id).one()
         return result
 
     def parse_fasta(self, fasta_file: str) -> List[str]:
+        """Parse fasta file."""
         sequences = []
         if fasta_file is None:
             raise ValueError("No fasta file defined!")
@@ -953,6 +1069,7 @@ class JobParams(GUIVariables):
         return sequences
 
     def read_sequences(self) -> list:
+        """Read sequences from fasta file."""
         logger.debug(self.sequences.__dict__)
         logger.debug(self.sequence_params.__dict__)
         seq_names, error_msgs = self.sequence_params.read_sequences(self.sequences.ctrl)
@@ -971,9 +1088,10 @@ class JobParams(GUIVariables):
         self.job_name.set_value(job_name)
         return error_msgs
 
-    #Make sure that the input file only contains one model and one chain and if the chain doesn't have id 'A' rename it.
-    #Save the cif with a new 4 letter filename.
     def process_single_template(self, template: str, msgs: list, output_folder: str, index: int) -> bool:
+        """Process single template.
+          Make sure that the input file only contains one model and one chain and if the chain doesn't have id 'A' rename it.
+            Save the cif with a new 4 letter filename."""
         template_name = os.path.basename(template)
         if not template.endswith('.cif'):
             msgs.append(f"Custom template {template_name} needs to be in cif format. Use https://mmcif.pdbj.org/converter to convert.")
@@ -1030,6 +1148,7 @@ class JobParams(GUIVariables):
             return True
             
     def process_custom_template_files(self, job_dir: str) -> Tuple[str, list]:
+        """Process custom template files."""
         msgs = []
         new_custom_template_list = []
         for i, item in enumerate(self.custom_template_list.get_value().split(',')):
@@ -1059,6 +1178,7 @@ class JobParams(GUIVariables):
 
 
     def update_from_sequence_table(self) -> None:
+        """Update sequence params from sequence table."""
         self.custom_template_list.value, \
         self.precomputed_msas_list.value, \
         self.no_msa_list.value, \
@@ -1067,32 +1187,38 @@ class JobParams(GUIVariables):
 
 
     def get_name_by_job_id(self, job_id: int, sess: sqlalchemy.orm.Session) -> str:
+        """Get job name by job id."""
         result = sess.query(self.db.Jobparams.job_name).filter_by(job_id=job_id).one()
         logger.debug(result[0])
         logger.debug(result)
         return result[0]
     
     def get_pairwise_batch_prediction(self, job_id: id, sess: sqlalchemy.orm.Session) -> bool:
+        """Get pairwise batch prediction."""
         result = sess.query(self.db.Jobparams.pairwise_batch_prediction).filter_by(job_id=job_id).one()
         return result[0]
 
     def set_db_preset(self) -> None:
+        """Set db preset."""
         if not self.db_preset.is_set():
             self.db_preset.set_value('full_dbs')
 
     def set_max_template_date(self) -> None:
+        """Set max template date."""
         #format 2021-11-02
         cur_date = date.today()
         if not self.max_template_date.is_set():
             self.max_template_date.set_value(cur_date)
 
     def init_gui(self, gui_params: dict, sess: sqlalchemy.orm.Session) -> dict:
+        """Update GUI with sequence params."""
         self.sequence_params.init_gui()
         return gui_params
 
 
 class Job(GUIVariables):
-    def __init__(self):
+    """This class contains variables and functions for for handling jobs. It inherits from GUIVariables."""
+    def __init__(self) -> None:
         self.db = None
         self.db_table = 'job'
         self.id = Variable('id', 'int', db_primary_key=True)
@@ -1103,7 +1229,7 @@ class Job(GUIVariables):
         self.name = Variable('name', 'str')
         # self.params = Variable('params', 'int', db_relationship='Params')
         # self.name = Variable('name', 'str')
-        self.list = TblCtrlJobs('list', None, db=False, ctrl_type='tbl')
+        self.list = TblCtrlJobs('list', None, db=False, ctrl_type='tre')
         self.timestamp = Variable('timestamp', 'str')
         self.log = Variable('log', 'str', db=False, ctrl_type='pte')
         self.log_file = Variable('log_file', 'str', db=True)
@@ -1113,41 +1239,45 @@ class Job(GUIVariables):
         self.path = Variable('path', 'str', db=True)
         self.type = Variable('type', 'str', db=True)
 
-    def set_db(self, db):
+    def set_db(self, db) -> None:
+        # Set the database to use for this connection.
         self.db = db
 
-    def get_status(self, job_id, sess):
+    def get_status(self, job_id: str, sess: sqlalchemy.orm.Session) -> str:
         result = sess.query(self.db.Job).get(job_id)
         return result.status
 
-    def update_status(self, status, job_id, sess):
+    def update_status(self, status: str, job_id: int, sess: sqlalchemy.orm.Session) -> None:
         result = sess.query(self.db.Job).get(job_id)
         result.status = status
         sess.commit()
 
-    def get_job_project_id(self, job_id, project_id, sess):
+    def get_job_project_id(self, job_id: int, project_id: int, sess: sqlalchemy.orm.Session) -> Optional[int]:
         result = sess.query(self.db.Job).filter_by(id=job_id, project_id=project_id).first()
         if result is None:
             return None
         else:
             return result.job_project_id
+        
+    def get_project_id_by_job_id(self, job_id, sess):
+        result = sess.query(self.db.Job).filter_by(id=job_id).first()
+        return result.project_id
 
-    def get_max_job_project_id(self, project_id, sess):
+    def get_max_job_project_id(self, project_id: int, sess: sqlalchemy.orm.Session) -> Optional[int]:
         result = sess.query(self.db.Job).filter_by(project_id=project_id).order_by(self.db.Job.job_project_id.desc()).first()
         if result is None:
             return None
         else:
             return result.job_project_id
 
-
-    def get_next_job_project_id(self, project_id, sess):
+    def get_next_job_project_id(self, project_id: int, sess: sqlalchemy.orm.Session) -> int:
         max_id = self.get_max_job_project_id(project_id, sess)
         if max_id is None:
             logger.debug("No job_project_id found.")
             max_id = 0
         return max_id + 1
 
-    def set_next_job_project_id(self, project_id, sess):
+    def set_next_job_project_id(self, project_id: str, sess: sqlalchemy.orm.Session) -> None:
         job_project_id = self.get_next_job_project_id(project_id, sess)
         self.job_project_id.value = job_project_id
         logger.debug(f"job_project_id is {job_project_id}")
@@ -1225,9 +1355,9 @@ class Job(GUIVariables):
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
         if job_params['prediction'] == 'alphafold':
-            command = ["run_alphafold.py\\\n"] + job_args
+            command = ["run_prediction.py\\\n"] + job_args
         elif job_params['prediction'] == 'fastfold':
-            fastfold_exec = shutil.which('run_fastfold.py')
+            fastfold_exec = shutil.which('run_prediction.py')
             #-rdzv_backend c10d --rdzv_endpoint localhost:0 allows running multiple instances on the same machine -> https://github.com/pytorch/pytorch/issues/73320
             command = [f"torchrun --rdzv_backend c10d --rdzv_endpoint localhost:0 {fastfold_exec}\\\n"] + job_args
         command = ' '.join(command)
@@ -1335,32 +1465,32 @@ class Job(GUIVariables):
             f.write(rendered)
         return submit_script, msgs
 
-    #Calculate required gpu memory in GB by sequence length for alphafold
     def calculate_gpu_mem_alphafold(self, total_seq_length: int) -> int:
+        """Calculate required gpu memory in GB by sequence length for alphafold"""
         logger.debug(total_seq_length)
         mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
     
     #Calculate required gpu memory in GB by sequence length for fastfold
-    def calculate_gpu_mem_fastfold(self, total_seq_length):
-        chunks = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    def calculate_gpu_mem_fastfold(self, total_seq_length: int) -> Tuple[int, int]:
+        chunks: List[int] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         logger.debug(total_seq_length)
         logger.debug(f"Total sequence length: {total_seq_length}")
-        mem = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
-        chunk_size = int(361672*math.exp(-0.00295023*total_seq_length))
+        mem: int = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
+        chunk_size: int = int(361672*math.exp(-0.00295023*total_seq_length))
         for i, chunk in enumerate(chunks):
             if chunk_size < chunks[0]:
-                selected_chunk_size = chunks[0]
+                selected_chunk_size: int = chunks[0]
                 break
             elif chunk_size > chunks[-1]:
-                selected_chunk_size = chunks[-1]
+                selected_chunk_size: int = chunks[-1]
                 break
             elif chunk < chunk_size:
                 continue
             else:
                 if i > 0:
-                    selected_chunk_size = chunks[i-1]
+                    selected_chunk_size: int = chunks[i-1]
                 else:
                     selected_chunk_size = chunks[0]
                 break
@@ -1445,7 +1575,7 @@ class Job(GUIVariables):
                 gpu_mem = self.get_gpu_mem()
 
         #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
-        if job_params['db_preset'] == 'colabfold':
+        if job_params['db_preset'] == 'colabfold_local':
             if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
                if job_params['max_ram'] < 300:
                    job_params['min_ram'] = job_params['max_ram']
@@ -1490,17 +1620,16 @@ class Job(GUIVariables):
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
             if job_params['prediction'] == 'alphafold':
-                cmd += [f"run_alphafold.py\\\n"]
+                cmd += [f"run_prediction.py\\\n"]
             elif job_params['prediction'] == 'fastfold':
-                cmd += [f"run_fastfold.py\\\n"]
+                cmd += [f"run_prediction.py\\\n"]
             cmd += job_args + [f">> {job_params['log_file']} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
         return cmd, error_msgs, warn_msgs, estimated_gpu_mem, estimated_chunk_size
 
-    def insert_evaluation(self, _evaluation, job_params, sess):
+    def insert_evaluation(self, _evaluation: object, job_params: dict, sess: sqlalchemy.orm.session.Session) -> bool:
         if not _evaluation.check_exists(job_params['job_id'], sess):
             job_obj = self.get_job_by_id(job_params['job_id'], sess)
-            
             if job_params['pairwise_batch_prediction']:
                 results_path = job_params['job_name']
             else:
@@ -1522,106 +1651,141 @@ class Job(GUIVariables):
                 return False
         else:
             return True
+        
+    def get_status_dict(self) -> dict:
+        task_status_dict = {
+                "num_tasks_finished": 0,
+                "db_search_started": False,
+                "model_1_started": False,
+                "model_2_started": False,
+                "model_3_started": False,
+                "model_4_started": False,
+                "model_5_started": False,
+                "evaluation_started": False,
+                }
+        return task_status_dict
 
-    def get_job_status(self, log_file):
+    def update_job_status_params(self, params: dict) -> None:
         exit_code = None
-        status_dict = {"db_search_started": False,
-                       "model_1_started": False,
-                       "model_2_started": False,
-                       "model_3_started": False,
-                       "model_4_started": False,
-                       "model_5_started": False,
-                       "evaluation_started": False,
-                        "finished": False,
-                        "num_tasks_finished": 0}
+        task_status_dict = self.get_status_dict()
+        job_status = None
+        exit_code_script = None
+        exit_code_queue = None
         try:
-            with open(log_file, 'r') as f:
+            with open(params['log_file'], 'r') as f:
                 lines = f.readlines()
             for line in lines:
-                pattern_exit_code = re.compile(r'Exit\scode\s(\d+)')
+                pattern_exit_code_script = re.compile(r'Exit\scode\s(\d+)')
+                pattern_exit_code_queue = re.compile(r'code\s(\d+)')
+                pattern_started = re.compile(r'Alphafold pipeline starting...')
                 cancelled_pattern = re.compile(r'CANCELLED')
                 pattern_db_search =  re.compile(r"Predicting\s\w+")
-                pattern_model_1 =  re.compile(r"Running\smodel\s\w+1")
-                pattern_model_2 =  re.compile(r"Running\smodel\s\w+2")
-                pattern_model_3 =  re.compile(r"Running\smodel\s\w+3")
-                pattern_model_4 =  re.compile(r"Running\smodel\s\w+4")
-                pattern_model_5 =  re.compile(r"Running\smodel\s\w+5")
+                pattern_model_1 =  re.compile(r"Running\smodel\smodel_1")
+                pattern_model_2 =  re.compile(r"Running\smodel\smodel_2")
+                pattern_model_3 =  re.compile(r"Running\smodel\smodel_3")
+                pattern_model_4 =  re.compile(r"Running\smodel\smodel_4")
+                pattern_model_5 =  re.compile(r"Running\smodel\smodel_5")
                 pattern_task_finished = re.compile(r'Task finished')
                 pattern_finished =  re.compile(r"Alphafold pipeline completed")
                 if re.search(pattern_task_finished, line):
-                    status_dict['num_tasks_finished'] += 1
-                if re.search(pattern_exit_code, line):
-                    exit_code = int(re.search(pattern_exit_code, line).group(1))
+                    task_status_dict['num_tasks_finished'] += 1
+                if re.search(pattern_exit_code_script, line):
+                    exit_code_script = int(re.search(pattern_exit_code_script, line).group(1))
+                if re.search(pattern_exit_code_queue, line):
+                    exit_code_queue = int(re.search(pattern_exit_code_queue, line).group(1))
                 if re.search(cancelled_pattern, line):
                     exit_code = 2
+                if re.search(pattern_started, line):
+                    job_status = 'running'
                 if re.search(pattern_db_search, line):
-                    status_dict['db_search_started'] = True
+                    task_status_dict['db_search_started'] = True
                 if re.search(pattern_model_1, line):
-                    status_dict['model_1_started'] = True
+                    task_status_dict['model_1_started'] = True
                 if re.search(pattern_model_2, line):
-                    status_dict['model_2_started'] = True
+                    task_status_dict['model_2_started'] = True
                 if re.search(pattern_model_3, line):
-                    status_dict['model_3_started'] = True
+                    task_status_dict['model_3_started'] = True
                 if re.search(pattern_model_4, line):
-                    status_dict['model_4_started'] = True
+                    task_status_dict['model_4_started'] = True
                 if re.search(pattern_model_5, line):
-                    status_dict['model_5_started'] = True
+                    task_status_dict['model_5_started'] = True
                 if re.search(pattern_model_5, line):
-                    status_dict['evaluation_started'] = True
+                    task_status_dict['evaluation_started'] = True
                 if re.search(pattern_finished, line):
-                    status_dict['finished'] = True
+                    job_status = 'finished'
+            
+            if exit_code_script == 1 or exit_code_queue == 1:
+                exit_code = 1
+            elif exit_code_script == 2:
+                exit_code = 2
+            elif exit_code_script == 0 and exit_code_queue == 0:
+                exit_code = 0
+            elif exit_code_queue:
+                if exit_code_queue > 2:
+                    exit_code = 1
+            else:
+                exit_code = None
         except Exception:
             logger.debug(traceback.print_exc())
             pass
+        
+        if not 'task_status' in params:
+            params['task_status'] = {}
+        params['task_status'] = task_status_dict
+        if not 'status' in params:
+            params['status'] = "unknown"
+        if not job_status is None:
+            params['status'] = job_status
+        if not 'exit_code' in params:
+            params['exit_code'] = None
+        params['exit_code'] = exit_code
 
-        return exit_code, status_dict
-
-    def db_insert_job(self, sess=None, data=None):
+    def db_insert_job(self, sess: sqlalchemy.orm.session.Session = None, data: list = None) -> None:
         assert isinstance(data, list)
         rows = [self.db.Job(**row) for row in data]
         for row in rows:
             sess.merge(row)
         sess.commit()
 
-    def delete_job(self, job_id, sess):
+    def delete_job(self, job_id: int, sess: sqlalchemy.orm.session.Session) -> None:
         sess.query(self.db.Job).filter_by(id=job_id).delete()
         #Cascading delete not yet working
         sess.query(self.db.Jobparams).filter_by(job_id=job_id).delete()
         sess.query(self.db.Evaluation).filter_by(job_id=job_id).delete()
         sess.commit()
 
-    def delete_job_files(self, job_id, path, sess):
+    def delete_job_files(self, job_id: str, path: str, sess: sqlalchemy.orm.session.Session) -> None:
         self.delete_job(job_id, sess)
         rmtree(path)
 
-    def set_timestamp(self):
+    def set_timestamp(self) -> None:
         self.timestamp.value = datetime.datetime.now()
 
-    def set_host(self):
+    def set_host(self) -> None:
         self.host.value = socket.gethostname()
 
-    def hostname(self):
+    def hostname(self) -> str:
         return socket.gethostname()
 
-    def generate_db_object(self, data=None):
+    def generate_db_object(self, data: list = None) -> list:
         assert isinstance(data, list)
         return [self.db.Job(**row) for row in data]
 
-    def get_job_by_id(self, job_id, sess):
+    def get_job_by_id(self, job_id: int, sess: sqlalchemy.orm.session.Session) -> list:
         result = sess.query(self.db.Job).filter_by(id=job_id).one()
         return result
 
-    def get_jobs(self, sess):
+    def get_jobs(self, sess: sqlalchemy.orm.session.Session) -> sqlalchemy.orm.Query:
         result = sess.query(self.db.Job)
         return result
 
-    def read_log(self, log_file):
+    def read_log(self, log_file: str) -> List[str]:
         lines = []
         with open(log_file, 'r') as log:
             lines = log.readlines()
         return lines
 
-    def update_log(self, gui_params):
+    def update_log(self, gui_params: dict) -> None:
         if 'log_file' in gui_params:
             logger.debug(f"Log file: {gui_params['log_file']}")
             if os.path.exists(gui_params['log_file']):
@@ -1631,27 +1795,28 @@ class Job(GUIVariables):
                     self.log.ctrl.appendPlainText(line.strip('\n'))
 
 
-    def get_path_by_project_id(self, project_id, sess):
-        result = sess.query(self.db.Project.path).filter_by(id=project_id).first()
+    def get_path_by_project_id(self, project_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
+        result = sess.query(self.db.Project.path).filter_by(id=project_id).one()
         return result[0]
 
+
     #Name of jobdir in project folder
-    def get_job_dir(self, job_name):
+    def get_job_dir(self, job_name: str) -> str:
         job_dir = job_name
         return job_dir
 
     #Full path to job dir
-    def get_job_path(self, project_path, job_dir):
+    def get_job_path(self, project_path: str, job_dir: str) -> str:
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
-    def build_log_file_path(self, job_name, type):
+    def build_log_file_path(self, job_name: str, type: str) -> str:
         #job_dir = self.get_job_dir(job_name)
         #job_path = self.get_job_path(project_path, job_dir)
         log_file = os.path.join(f"{job_name}_{type}.log")
         return log_file
 
-    def get_log_file(self, job_id, sess):
+    def get_log_file(self, job_id: int, sess: sqlalchemy.orm.session.Session) -> str:
         """Reconstruct the log path in case the project path was changed."""
         result_job = sess.query(self.db.Job).filter_by(id=job_id).first()
         result_jobparams = sess.query(self.db.Jobparams).filter_by(job_id=job_id).first()
@@ -1664,7 +1829,7 @@ class Job(GUIVariables):
         absolute_log_path = os.path.join(project_path, project_log_path)
         return absolute_log_path
 
-    def get_queue_pid(self, log_file, job_id, sess):
+    def get_queue_pid(self, log_file: str, job_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
         pid = None
         regex = re.compile(r'QUEUE_JOB_ID=(\d+)')
         with open(log_file, 'r') as f:
@@ -1675,19 +1840,18 @@ class Job(GUIVariables):
             self.update_pid(pid, job_id, sess)
         logger.debug(f"pid from log file is {pid}.")
         return pid
-
-
-    def get_log_file_by_id(self, job_id, sess):
+    
+    def get_log_file_by_id(self, job_id: int, sess: sqlalchemy.orm.session.Session):
         result = sess.query(self.db.Job).filter_by(id=job_id).one()
         return result.log_file
 
-    def set_log_file(self, log_file):
+    def set_log_file(self, log_file: str) -> None:
         self.log_file.value = log_file
 
-    def set_status(self, status):
+    def set_status(self, status: str) -> None:
         self.status.value = status
 
-    def check_pid(self, pid):
+    def check_pid(self, pid: int) -> bool:
         try:
             os.kill(int(pid), 0)
             logger.debug("PID exists")
@@ -1696,59 +1860,25 @@ class Job(GUIVariables):
             logger.debug("PID not found")
             return False
 
-    def reconnect_jobs(self, sess):
+    def reconnect_jobs(self, sess: sqlalchemy.orm.session.Session) -> list:
         jobs_running = []
-        result = sess.query(self.db.Job).filter((self.db.Job.status=="running") | (self.db.Job.status=="started")).all()
+        result = sess.query(self.db.Job).filter((self.db.Job.status=="running") | (self.db.Job.status=="started") | (self.db.Job.status=="waiting")).all()
 
         for job in result:
             jobparams = sess.query(self.db.Jobparams).filter(self.db.Jobparams.id == job.id).one()
             jobs_running.append({'job_id': job.id,
+                                 'job_project_id': job.job_project_id,
                                  'queue': jobparams.queue,
                                  'status': job.status,
                                  'job_path': job.path,
-                                 'log_file': job.log_file,
+                                 'job_name': jobparams.job_name,
+                                 'log_file': self.get_log_file(job.id, sess),
                                  'pid': job.pid,
                                  'time_started': job.timestamp})
         return jobs_running
 
-    def init_gui(self, gui_params, sess=None):
-        logger.debug("=== Init Job list ===")
-        # Clear Lists
-        self.list.reset_ctrl()
-        self.log.reset_ctrl()
-        logger.debug("reset end")
-        # Fill job list
-        self.list.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.list.ctrl.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
-        self.list.ctrl.setColumnCount(4)
-        self.list.ctrl.verticalHeader().setVisible(False)
-        self.list.ctrl.setHorizontalHeaderLabels(('ID', 'Name', 'Type', 'Status'))
-        self.list.ctrl.setColumnWidth(0, 50)
-        self.list.ctrl.setColumnWidth(1, 100)
-        self.list.ctrl.setColumnWidth(2, 70)
-        self.list.ctrl.setColumnWidth(3, 70)
-        project_id = gui_params['project_id']
-        if not project_id is None:
-            gui_params['project_path'] = self.get_path_by_project_id(project_id, sess)
-            jobs = self.get_jobs_by_project_id(project_id, sess)
-            for job in jobs:
-                status = self.get_status(job.id, sess)
-                if status is None:
-                    status = "unknown"
-
-
-                rows = self.list.ctrl.rowCount()
-                self.list.ctrl.insertRow(rows)
-                self.list.ctrl.setItem(rows, 0, QtWidgets.QTableWidgetItem(str(job.job_project_id)))
-                self.list.ctrl.setItem(rows, 1, QtWidgets.QTableWidgetItem(job.name))
-                self.list.ctrl.setItem(rows, 2, QtWidgets.QTableWidgetItem(job.type.capitalize()))
-                self.list.ctrl.setItem(rows, 3, QtWidgets.QTableWidgetItem(status))
-            self.list.ctrl.scrollToItem(self.list.ctrl.item(self.list.ctrl.currentRow(), 0), QtWidgets.QAbstractItemView.PositionAtCenter)
-            #self.list.ctrl.scrollToBottom()
-        return gui_params
-    
-    #TreeView Implementation
-    # def init_gui(self, gui_params, sess=None):
+    # def init_gui(self, gui_params: dict, sess=None) -> dict:
+    #     """Init or update the GUI with the current job list."""
     #     logger.debug("=== Init Job list ===")
     #     # Clear Lists
     #     self.list.reset_ctrl()
@@ -1783,11 +1913,77 @@ class Job(GUIVariables):
     #         self.list.ctrl.scrollToItem(self.list.ctrl.item(self.list.ctrl.currentRow(), 0), QtWidgets.QAbstractItemView.PositionAtCenter)
     #         #self.list.ctrl.scrollToBottom()
     #     return gui_params
+    
+    #TreeView Implementation
+    def init_gui(self, gui_params: dict, sess=None) -> dict:
+        from PyQt5 import QtWidgets
 
+        logger.debug("=== Init Job list ===")
+        # Clear Lists
+        self.list.reset_ctrl()
+        self.log.reset_ctrl()
+        logger.debug("reset end")
+
+        # Fill job list
+        self.list.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        header_labels = ["Name", "Status", "ID"]
+        self.list.ctrl.setHeaderLabels(header_labels)
+        #self.list.ctrl.setHeaderHidden(True)
+        self.list.ctrl.setColumnWidth(0, 120)
+        self.list.ctrl.setColumnWidth(1, 120)
+        self.list.ctrl.setColumnWidth(2, 20)
+        project_id = gui_params['project_id']
+
+        if project_id is not None:
+            gui_params['project_path'] = self.get_path_by_project_id(project_id, sess)
+            jobs = self.get_jobs_by_project_id(project_id, sess)
+            job_groups = {}
+
+            for i, job in enumerate(jobs):
+                job_name = job.name
+                if job_name not in job_groups:
+                    group_item = QtWidgets.QTreeWidgetItem(self.list.ctrl)
+                    group_item.setFlags(group_item.flags() & ~QtCore.Qt.ItemIsSelectable)
+
+
+                    group_item.setText(0, job_name)
+                    self.list.ctrl.addTopLevelItem(group_item)
+                    #group_item.setExpanded(True)
+                    job_groups[job_name] = group_item
+
+                group_item = job_groups[job_name]
+                sub_item = QtWidgets.QTreeWidgetItem(group_item, [job.type.capitalize(), "", str(job.job_project_id)])
+
+                status = self.get_status(job.id, sess)
+                if status is None:
+                    status = "unknown"
+                sub_item.setText(1, status)
+                if i == jobs.count() - 1:
+                    group_item.setExpanded(True)
+
+            # Automatically scroll to the bottom
+            last_item = self.list.ctrl.topLevelItem(self.list.ctrl.topLevelItemCount() - 1)
+            self.list.ctrl.scrollToItem(last_item, QtWidgets.QAbstractItemView.PositionAtBottom)
+
+            #self.list.ctrl.expandAll()
+            self.list.ctrl.setColumnCount(3)
+            #self.list.ctrl.resizeColumnToContents(0)
+
+        return gui_params
 
 
 class Project(GUIVariables):
-    """ Class for managing projects. """
+    """ Class for managing projects. 
+    
+    Attributes:
+        db (object): Database object.
+        db_table (str): Name of the database table.
+        id (object): Variable object for the project id.
+        jobs (object): Variable object for the jobs.
+        name (object): Variable object for the project name.
+        path (object): Variable object for the project path.
+        list (object): Variable object for the project list.
+        active (object): Variable object for the project active state."""
     def __init__(self):
         self.db = None
         self.db_table = 'project'
@@ -1798,17 +1994,19 @@ class Project(GUIVariables):
         self.list = Variable('list', None, db=False, ctrl_type='cmb')
         self.active = Variable('active', 'bool', ctrl_type=None)
 
-    def set_db(self, db):
+    def set_db(self, db: DBHelper) -> None:
         self.db = db
 
-    def insert_project(self, data, sess):
+    def insert_project(self, data: list, sess: sqlalchemy.orm.session.Session) -> None:
+        """Inserts a new project into the database."""
         assert isinstance(data, list)
         rows = [self.db.Project(**row) for row in data]
         for row in rows:
             sess.merge(row)
         sess.commit()
 
-    def check_if_exists(self, project_name, sess):
+    def check_if_exists(self, project_name: str, sess: sqlalchemy.orm.session.Session) -> bool:
+        """Checks if a project already exists in the database."""
         exists = False
         result = self.get_projects(sess)
         for row in result:
@@ -1816,7 +2014,8 @@ class Project(GUIVariables):
                 exists = True
         return exists
 
-    def delete_project(self, project_id, sess):
+    def delete_project(self, project_id: int, sess: sqlalchemy.orm.session.Session) -> None:
+        """Deletes a project from the database."""
         sess.query(self.db.Project).filter(self.db.Project.id == project_id).delete()
         #Cascading delete not yet working
         job_ids = sess.query(self.db.Job.id).filter_by(project_id=project_id).all()
@@ -1829,16 +2028,18 @@ class Project(GUIVariables):
             sess.query(self.db.Evaluation).filter_by(job_id=job_id).delete()
         sess.commit()
 
-    def is_empty(self, sess):
+    def is_empty(self, sess: sqlalchemy.orm.session.Session) -> bool:
+        """Checks if the project table is empty."""
         if sess.query(self.db.Project).all() == []:
             return True
         else:
             return False
 
-    def get_project_by_id(self, project_id, sess):
+    def get_project_by_id(self, project_id: int, sess: sqlalchemy.orm.session.Session) -> object:
         return sess.query(self.db.Project).get(project_id)
 
-    def get_active_project(self, sess):
+    def get_active_project(self, sess: sqlalchemy.orm.session.Session) -> Tuple[Union[str, None], Union[int, None]]:
+        """Returns the name and id of the active project."""
         try:
             project_name, project_id = sess.query(self.db.Project.name, self.db.Project.id).filter_by(
                 active=True).one()
@@ -1846,24 +2047,22 @@ class Project(GUIVariables):
             project_name, project_id = None, None
         return project_name, project_id
 
-    def get_projects(self, sess):
+    def get_projects(self, sess: sqlalchemy.orm.session.Session) -> List[object]:
         result = sess.query(self.db.Project).all()
         return result
 
-    def update_project(self, project_id, data, sess,):
+    def update_project(self, project_id: int, data: dict, sess: sqlalchemy.orm.session.Session) -> None:
+        """Updates a project in the database."""
         assert isinstance(data, list)
         result = sess.query(self.db.Project).get(project_id)
         for k, v in data[0].items():
             setattr(result, k, v)
         sess.commit()
 
-    def change_active_project(self, new_project, sess, new_active_id=None):
+    def change_active_project(self, new_project: str, sess: sqlalchemy.orm.session.Session, new_active_id: int = None) -> int:
         """
         Change ative project in DB
-        :param new_project:
-        :return:
         """
-
         try:
             last_active = sess.query(self.db.Project).filter_by(active=True).one()
             last_active_id = int(last_active.id)
@@ -1888,11 +2087,12 @@ class Project(GUIVariables):
 
         return new_active_id
 
-    def get_path_by_project_id(self, project_id, sess):
+    def get_path_by_project_id(self, project_id: int, sess: sqlalchemy.orm.session.Session) -> str:
+        """Returns the path of a project."""
         result = sess.query(self.db.Project).filter_by(id=project_id).first()
         return result.path
 
-    def init_gui(self, gui_params, sess=None):
+    def init_gui(self, gui_params: dict, sess: Union[sqlalchemy.orm.session.Session, None] = None) -> dict:
         logger.debug("=== Init Projects ===")
         projects = self.get_projects(sess)
         # if projects == []:
@@ -2134,5 +2334,8 @@ class DefaultValues:
         self.pipeline = 'full'
         self.prediction = 'alphafold'
         settings = other.settings.get_from_db(other.sess)
+        #update with defaults from advanced_settings
+        advanced_settings_defaults = AdvancedSettingsDefaults()
+        self.__dict__.update(advanced_settings_defaults.__dict__)
         if settings.queue_default:
             self.queue = True
