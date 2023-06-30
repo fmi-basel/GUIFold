@@ -50,9 +50,10 @@ class EvaluationPipeline:
             raise SystemExit(f"Output directory {self.results_dir} not found")
         
     def msa_coverage(self):
-        """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py and """
+        """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py 
+        and https://github.com/jasperzuallaert/VIBFold/blob/main/visualize_alphafold_results.py"""
         try:
-            feature_dict = pickle.load(open(os.path.join(self.output_dir, "features.pkl"), 'br'))
+            feature_dict = pickle.load(open(os.path.join(self.results_dir, "features.pkl"), 'br'))
         except OSError:
             raise SystemExit(f"Feature file {self.output_dir}/features.pkl not found")
 
@@ -83,7 +84,9 @@ class EvaluationPipeline:
         fig.colorbar(im, label="Sequence identity to query")
         ax.set_xlabel("Positions")
         ax.set_ylabel("Sequences")
-        fig.savefig('msa_coverage.png')
+        msa_coverage_path = os.path.join(self.results_dir, 'msa_coverage.png')
+        fig.savefig(msa_coverage_path)
+        return msa_coverage_path
 
     def run_pipeline(self):
         logging.info("Running evaluation pipeline.")
@@ -96,7 +99,6 @@ class EvaluationPipeline:
         seq_len_dict = self.get_sequence_len(input_sequences)
         indices = self.get_indices(seq_len_dict)
         results_pickle_path = os.path.join(self.results_dir, 'results.pickle')
-        features_pickle_path = os.path.join(self.output_dir, 'features.pkl')
 
         if len(input_sequences) > 1:
             multimer = True
@@ -137,9 +139,6 @@ class EvaluationPipeline:
             logging.debug(pae_list)
             logging.debug("Check none:")
             logging.debug(self.check_none(pae_list))
-            print("IPTM")
-            print(iptm_list)
-            print(ptm_list)
             if multimer:
                 if not self.check_none(pae_list):
                     pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
@@ -160,6 +159,8 @@ class EvaluationPipeline:
             plddt_list = sorted(plddt_list, key=lambda x: x[0], reverse=True)
             if not iptm_list is None:
                 if not self.check_none(iptm_list):
+                    logging.info("Sorting iptm list")
+                    logging.info(iptm_list)
                     iptm_list = sorted(iptm_list, key=lambda x: x[0], reverse=True)
                 else:
                     iptm_list = None
@@ -208,15 +209,15 @@ class EvaluationPipeline:
         templates_path = pkg_resources.resource_filename("guifold", "templates")
         pae_examples_path = pkg_resources.resource_filename("guifold", "images/pae_examples.png")
         logging.debug(templates_path)
+
+        ### Make MSA coverage plot
+        msa_coverage_path = self.msa_coverage()
+        
+        ### Render template
         env = Environment(loader=FileSystemLoader(templates_path))
         template = env.get_template('results.html')
-
-        logging.debug(plddt_list)
         if no_pae:
             average_pae = None
-        print("PTM IPTM")
-        print(iptm_list)
-        print(ptm_list)
         rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
@@ -228,11 +229,13 @@ class EvaluationPipeline:
                                    templates_path=templates_path,
                                    multimer=multimer,
                                    pae_examples_path=pae_examples_path,
-                                   use_model_viewer=False)
+                                   msa_coverage_path=msa_coverage_path,
+                                   use_model_viewer=False,
+                                   )
 
         html_path = os.path.join(self.results_dir, "results.html")
-        with open(html_path, "w") as fout:
-            fout.write(rendered)
+        with open(html_path, "w") as f_out:
+            f_out.write(rendered)
         rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
@@ -244,10 +247,11 @@ class EvaluationPipeline:
                                    templates_path=templates_path,
                                    multimer=multimer,
                                    pae_examples_path=pae_examples_path,
+                                   msa_coverage_path=msa_coverage_path,
                                    use_model_viewer=True)
         html_path = os.path.join(self.results_dir, "results_model_viewer.html")
-        with open(html_path, "w") as fout:
-            fout.write(rendered)
+        with open(html_path, "w") as f_out:
+            f_out.write(rendered)
         #plt.tight_layout()
         logging.info(f"Finished. Results written to {self.results_dir}.")
 
@@ -653,8 +657,6 @@ class EvaluationPipelineBatch:
     def run(self):
         with open('best_inter_pae.txt', 'w') as f:
             f.write("protein_names,model_name,best_pae\n")
-            print("MIN INTER PAE LIST")
-            print(self.min_inter_pae_list)
             for protein_names, model_name, pae in self.min_inter_pae_list:
                 protein_names = protein_names.replace(" vs ", "_")
                 f.write(f"{protein_names},{model_name},{pae}\n")
