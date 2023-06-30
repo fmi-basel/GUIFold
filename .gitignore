@@ -14,3 +14,7 @@
 /testing/
 guifold/collate_msas.py
 guifold/images/GUIFold.gif
+guifold/templates/submit_script_slurm.j2
+guifold/run_fastfold.py
+scripts/clean_output.py
+alphafold
