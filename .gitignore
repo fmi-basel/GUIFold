@@ -14,3 +14,7 @@
 /testing/
 guifold/collate_msas.py
 guifold/images/GUIFold.gif
+scripts/check_results_pkl.py
+scripts/clean_output.py
+scripts/compare_features.py
+scripts/minimize.py
