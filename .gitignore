@@ -18,3 +18,6 @@ guifold/templates/submit_script_slurm.j2
 guifold/run_fastfold.py
 scripts/clean_output.py
 alphafold
+scripts/check_results_pkl.py
+scripts/compare_features.py
+scripts/minimize.py
