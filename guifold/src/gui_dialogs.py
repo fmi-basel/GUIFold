@@ -34,9 +34,7 @@ def message_dlg(title, text):
 #From https://stackoverflow.com/a/64340482
 def open_files_and_dirs_dlg(parent=None, caption='', directory=None, 
                         filter=None, initialFilter=None, options=None):
-    print(parent)
     def updateText():
-        print("in function")
         rows = view.selectionModel().selectedRows()
         selected = []
         for index in rows:

@@ -15,8 +15,6 @@
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
 from __future__ import absolute_import
-from ast import List
-from genericpath import isdir
 import pkg_resources
 import datetime
 import sys
@@ -30,6 +28,7 @@ from jinja2 import Template, Environment, meta, PackageLoader
 from guifold.src.db_helper import DBHelper
 from guifold.src.gui_dialogs import message_dlg, open_files_and_dirs_dlg
 from sqlalchemy.orm.exc import NoResultFound
+from guifold.src.gui_threads import LogThread
 import traceback
 from datetime import date
 from shutil import copyfile, rmtree
@@ -44,7 +43,7 @@ from typing import Dict, Optional, Tuple, Union, List
 from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedSettingsDefaults
 import sqlalchemy.orm
 logger = logging.getLogger('guifold')
-#logger.setLevel(logging.DEBUG)
+#logger.setLevel(logger.DEBUG)
 
 class WebViewer(QtWebEngineWidgets.QWebEngineView):
 
@@ -217,6 +216,15 @@ class Variable:
             lst = self.value.split(',')
             for e in lst:
                 if not e in [None, "None", "none", ""]:
+                    return True
+        return False
+
+    def list_like_str_not_all_false(self) -> bool:
+        """Check if a string, that is list-like, contains at least one True value."""
+        if self.value:
+            lst = self.value.split(',')
+            for e in lst:
+                if not e in [False, "False", "false"]:
                     return True
         return False
 
@@ -860,9 +868,9 @@ class Evaluation(GUIVariables):
     def get_combination_names(self, results_folder: str) -> List[str]:
         """Get pairwise target combination names from results folder."""
         combination_names = []
-        print(results_folder)
+        logger.debug(results_folder)
         folders = [f for f in os.listdir(results_folder) if os.path.isdir(os.path.join(results_folder, f))]
-        print(folders)
+        logger.debug(folders)
         if os.path.exists(os.path.join(results_folder, "batch_summary.html")) and not "summary" in combination_names:
             combination_names.append("summary")
         for f in folders:
@@ -1019,7 +1027,12 @@ class JobParams(GUIVariables):
         self.chunk_size = Variable('chunk_size', 'int', ctrl_type="sbo", cmd=True)
         self.inplace = Variable('inplace', 'bool', ctrl_type="chk", cmd=True)
         self.pairwise_batch_prediction = Variable('pairwise_batch_prediction', 'bool')
-
+        self.use_model_1 = Variable('use_model_1', 'bool', ctrl_type='chk')
+        self.use_model_2 = Variable('use_model_2', 'bool', ctrl_type='chk')
+        self.use_model_3 = Variable('use_model_3', 'bool', ctrl_type='chk')
+        self.use_model_4 = Variable('use_model_4', 'bool', ctrl_type='chk')
+        self.use_model_5 = Variable('use_model_5', 'bool', ctrl_type='chk')
+        self.model_list = Variable('model_list', 'str', cmd=True)
 
     def set_db(self, db: DBHelper) -> None:
         """Set database helper object."""
@@ -1031,6 +1044,7 @@ class JobParams(GUIVariables):
 
     def write_fasta(self):
         """Write fasta file."""
+        logger.debug(f"Writing to file {self.fasta_path.get_value()}")
         with open(self.fasta_path.get_value(), 'w') as f:
             sequence_str = self.sequences.get_value()
             sequence_str = sequence_str.replace(" ", "")
@@ -1153,9 +1167,9 @@ class JobParams(GUIVariables):
         new_custom_template_list = []
         for i, item in enumerate(self.custom_template_list.get_value().split(',')):
             custom_template_folder = os.path.join(job_dir, f"custom_templates_{i}")
-            if not os.path.exists(custom_template_folder):
-                os.mkdir(custom_template_folder)
             if not item in [None, "None"]:
+                if not os.path.exists(custom_template_folder):
+                    os.mkdir(custom_template_folder)
                 if os.path.isdir(item):
                     cif_files = [f for f in os.listdir(item) if f.endswith(".cif")]
                     if len(cif_files) == 0:
@@ -1238,19 +1252,14 @@ class Job(GUIVariables):
         self.host = Variable('host', 'str', db=True)
         self.path = Variable('path', 'str', db=True)
         self.type = Variable('type', 'str', db=True)
+        self.tree_item_expanded = Variable('tree_item_expanded', 'bool', db=True)
+        self.active = Variable('active', 'bool', db=True)
 
-    def set_db(self, db) -> None:
-        # Set the database to use for this connection.
-        self.db = db
+    #Getters
 
     def get_status(self, job_id: str, sess: sqlalchemy.orm.Session) -> str:
         result = sess.query(self.db.Job).get(job_id)
         return result.status
-
-    def update_status(self, status: str, job_id: int, sess: sqlalchemy.orm.Session) -> None:
-        result = sess.query(self.db.Job).get(job_id)
-        result.status = status
-        sess.commit()
 
     def get_job_project_id(self, job_id: int, project_id: int, sess: sqlalchemy.orm.Session) -> Optional[int]:
         result = sess.query(self.db.Job).filter_by(id=job_id, project_id=project_id).first()
@@ -1258,41 +1267,37 @@ class Job(GUIVariables):
             return None
         else:
             return result.job_project_id
-        
+
     def get_project_id_by_job_id(self, job_id, sess):
         result = sess.query(self.db.Job).filter_by(id=job_id).first()
         return result.project_id
-
+    
     def get_max_job_project_id(self, project_id: int, sess: sqlalchemy.orm.Session) -> Optional[int]:
         result = sess.query(self.db.Job).filter_by(project_id=project_id).order_by(self.db.Job.job_project_id.desc()).first()
         if result is None:
             return None
         else:
             return result.job_project_id
-
+        
     def get_next_job_project_id(self, project_id: int, sess: sqlalchemy.orm.Session) -> int:
         max_id = self.get_max_job_project_id(project_id, sess)
         if max_id is None:
             logger.debug("No job_project_id found.")
             max_id = 0
         return max_id + 1
-
-    def set_next_job_project_id(self, project_id: str, sess: sqlalchemy.orm.Session) -> None:
-        job_project_id = self.get_next_job_project_id(project_id, sess)
-        self.job_project_id.value = job_project_id
-        logger.debug(f"job_project_id is {job_project_id}")
-
-    def get_job_id_by_job_project_id(self, job_project_id, project_id, sess):
+    
+    def get_job_id_by_job_project_id(self, job_project_id: int, project_id: int, sess: sqlalchemy.orm.Session):
         result = sess.query(self.db.Job).filter_by(project_id=project_id, job_project_id=job_project_id).first()
         return result.id
 
-    def get_pid(self, job_id, sess):
+    def get_pid(self, job_id: int, sess: sqlalchemy.orm.Session):
         result = sess.query(self.db.Job).get(job_id)
         logger.debug(f"Getting PID for job_id {job_id} from DB. PID is {result.pid}")
         return result.pid
-
-    def get_queue_job_id(self, log_file):
+    
+    def get_queue_job_id(self, log_file: str) -> str:
         queue_job_id = None
+        logger.debug(f"Reading from {log_file}")
         with open(log_file, 'r') as f:
             lines = f.readlines()
         regex = re.compile("QUEUE_JOB_ID=(\d+)")
@@ -1300,12 +1305,16 @@ class Job(GUIVariables):
             if re.search(regex, l):
                 queue_job_id = re.search(regex, l).group(1)
         return queue_job_id
-
-    def get_host(self, job_id, sess):
+    
+    def get_host(self, job_id: int, sess: sqlalchemy.orm.Session):
         result = sess.query(self.db.Job).get(job_id)
         return result.host
-
-    def get_jobs_by_project_id(self, project_id, sess):
+    
+    def get_tree_item_expanded(self, job_name: str, project_id: int, sess: sqlalchemy.orm.Session) -> bool:
+        result = sess.query(self.db.Job).filter_by(name=job_name, project_id=project_id).first()
+        return result.tree_item_expanded
+    
+    def get_jobs_by_project_id(self, project_id: int, sess: sqlalchemy.orm.Session):
         result = sess.query(self.db.Job).filter_by(project_id=project_id)
         return result
 
@@ -1320,14 +1329,55 @@ class Job(GUIVariables):
 
     def get_type_by_job_id(self, job_id, sess):
         result = sess.query(self.db.Job).get(job_id)
-        return result.type
+        return result.type    
+
+    def get_active_job_id(self, sess: sqlalchemy.orm.Session) -> int:
+        result = sess.query(self.db.Job).filter_by(active=True).first()
+        if result:
+            return result.id
+        else:
+            return None
+    
+    #Setters
+
+    def set_db(self, db) -> None:
+        # Set the database to use for this connection.
+        self.db = db
+
+    def set_next_job_project_id(self, project_id: str, sess: sqlalchemy.orm.Session) -> None:
+        job_project_id = self.get_next_job_project_id(project_id, sess)
+        self.job_project_id.value = job_project_id
+        logger.debug(f"job_project_id is {job_project_id}")
 
     def set_type(self, type):
         self.type.set_value(type)
 
+    def set_job_active(self, job_id: int, sess: sqlalchemy.orm.Session) -> int:
+        #Set all jobs inactive first
+        active_jobs = sess.query(self.db.Job).filter_by(active=True).all()
+        for i, item in enumerate(active_jobs):
+            active_jobs[i].active = False
+        #Set job active by job_id
+        job = sess.query(self.db.Job).get(job_id)
+        if job:
+            job.active = True
+        sess.commit()
+
     #ToDo: check usage and change to var.set()
     def set_project_id(self, project_id):
-        self.project_id.value = project_id
+        self.project_id.value = project_id        
+
+    #DB Updates
+
+    def update_status(self, status: str, job_id: int, sess: sqlalchemy.orm.Session) -> None:
+        result = sess.query(self.db.Job).get(job_id)
+        result.status = status
+        sess.commit()
+
+    def update_tree_item_expanded(self, job_name: str, project_id: int, tree_item_expanded: bool, sess: sqlalchemy.orm.Session) -> None:
+        result = sess.query(self.db.Job).filter_by(name=job_name, project_id=project_id).first()
+        result.tree_item_expanded = tree_item_expanded
+        sess.commit()
 
     def update_pid(self, pid, job_id, sess):
         logger.debug(f"Updating pid {pid} for job id {job_id}")
@@ -1361,7 +1411,7 @@ class Job(GUIVariables):
             #-rdzv_backend c10d --rdzv_endpoint localhost:0 allows running multiple instances on the same machine -> https://github.com/pytorch/pytorch/issues/73320
             command = [f"torchrun --rdzv_backend c10d --rdzv_endpoint localhost:0 {fastfold_exec}\\\n"] + job_args
         command = ' '.join(command)
-        logfile = job_params["log_file"]
+        logfile = os.path.join(job_params['job_path'], job_params["log_file"])
         submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
 
         #templates = pkg_resources.resource_filename("guifold", "templates")
@@ -1461,6 +1511,7 @@ class Job(GUIVariables):
                                    command=command,
                                    logfile=logfile)
 
+        logger.debug(f"Writing to file {submit_script}")
         with open(submit_script, 'w') as f:
             f.write(rendered)
         return submit_script, msgs
@@ -1478,7 +1529,7 @@ class Job(GUIVariables):
         logger.debug(total_seq_length)
         logger.debug(f"Total sequence length: {total_seq_length}")
         mem: int = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
-        chunk_size: int = int(361672*math.exp(-0.00295023*total_seq_length))
+        chunk_size: int = int(135097*math.exp(-0.00272605*total_seq_length))
         for i, chunk in enumerate(chunks):
             if chunk_size < chunks[0]:
                 selected_chunk_size: int = chunks[0]
@@ -1519,6 +1570,7 @@ class Job(GUIVariables):
         #self.convert_protocol(cmd_dict)
         logger.debug(cmd_dict)
         job_args = []
+        log_file = os.path.join(job_params['job_path'], job_params['log_file'])
 
         #Estimate memory
         #In case of FastFold also chunk_size needs to be adjusted
@@ -1608,8 +1660,6 @@ class Job(GUIVariables):
             queue_submit = job_params['queue_submit']
             submit_script, more_msgs = self.prepare_submit_script(job_params, job_args, estimated_gpu_mem, split_mem)
             error_msgs.extend(more_msgs)
-            with open(job_params['log_file'], 'a') as log_handle, open(submit_script, 'r') as submit_script_handle:
-                log_handle.write(submit_script_handle.read())
             cmd = [queue_submit, submit_script]
         else:
             cmd = []
@@ -1623,7 +1673,7 @@ class Job(GUIVariables):
                 cmd += [f"run_prediction.py\\\n"]
             elif job_params['prediction'] == 'fastfold':
                 cmd += [f"run_prediction.py\\\n"]
-            cmd += job_args + [f">> {job_params['log_file']} 2>&1"]
+            cmd += job_args + [f">> {log_file} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
         return cmd, error_msgs, warn_msgs, estimated_gpu_mem, estimated_chunk_size
 
@@ -1665,69 +1715,86 @@ class Job(GUIVariables):
                 }
         return task_status_dict
 
-    def update_job_status_params(self, params: dict) -> None:
+    def get_job_status_from_log(self, params):
+        logger.debug(f"Updating job status params")
         exit_code = None
         task_status_dict = self.get_status_dict()
         job_status = None
         exit_code_script = None
         exit_code_queue = None
-        try:
-            with open(params['log_file'], 'r') as f:
+        #try:
+        lines = []
+        #logger.debug(params)
+        log_file = os.path.join(params['job_path'], params['log_file'])
+        if os.path.exists(log_file):
+            logger.debug(f"Reading from {log_file}")
+            with open(log_file, 'r') as f:
                 lines = f.readlines()
-            for line in lines:
-                pattern_exit_code_script = re.compile(r'Exit\scode\s(\d+)')
-                pattern_exit_code_queue = re.compile(r'code\s(\d+)')
-                pattern_started = re.compile(r'Alphafold pipeline starting...')
-                cancelled_pattern = re.compile(r'CANCELLED')
-                pattern_db_search =  re.compile(r"Predicting\s\w+")
-                pattern_model_1 =  re.compile(r"Running\smodel\smodel_1")
-                pattern_model_2 =  re.compile(r"Running\smodel\smodel_2")
-                pattern_model_3 =  re.compile(r"Running\smodel\smodel_3")
-                pattern_model_4 =  re.compile(r"Running\smodel\smodel_4")
-                pattern_model_5 =  re.compile(r"Running\smodel\smodel_5")
-                pattern_task_finished = re.compile(r'Task finished')
-                pattern_finished =  re.compile(r"Alphafold pipeline completed")
-                if re.search(pattern_task_finished, line):
-                    task_status_dict['num_tasks_finished'] += 1
-                if re.search(pattern_exit_code_script, line):
-                    exit_code_script = int(re.search(pattern_exit_code_script, line).group(1))
-                if re.search(pattern_exit_code_queue, line):
-                    exit_code_queue = int(re.search(pattern_exit_code_queue, line).group(1))
-                if re.search(cancelled_pattern, line):
-                    exit_code = 2
-                if re.search(pattern_started, line):
-                    job_status = 'running'
-                if re.search(pattern_db_search, line):
-                    task_status_dict['db_search_started'] = True
-                if re.search(pattern_model_1, line):
-                    task_status_dict['model_1_started'] = True
-                if re.search(pattern_model_2, line):
-                    task_status_dict['model_2_started'] = True
-                if re.search(pattern_model_3, line):
-                    task_status_dict['model_3_started'] = True
-                if re.search(pattern_model_4, line):
-                    task_status_dict['model_4_started'] = True
-                if re.search(pattern_model_5, line):
-                    task_status_dict['model_5_started'] = True
-                if re.search(pattern_model_5, line):
-                    task_status_dict['evaluation_started'] = True
-                if re.search(pattern_finished, line):
-                    job_status = 'finished'
-            
-            if exit_code_script == 1 or exit_code_queue == 1:
-                exit_code = 1
-            elif exit_code_script == 2:
+
+        for line in lines:
+            pattern_exit_code_script = re.compile(r'Exit\scode\s(\d+)')
+            pattern_exit_code_queue = re.compile(r'Workflow\sfinished\swith\scode\s(\d+)')
+            pattern_started = re.compile(r'Alphafold pipeline starting...')
+            cancelled_pattern = re.compile(r'CANCELLED')
+            pattern_db_search =  re.compile(r"Predicting\s\w+")
+            pattern_model_1 =  re.compile(r"Running\smodel\smodel_1")
+            pattern_model_2 =  re.compile(r"Running\smodel\smodel_2")
+            pattern_model_3 =  re.compile(r"Running\smodel\smodel_3")
+            pattern_model_4 =  re.compile(r"Running\smodel\smodel_4")
+            pattern_model_5 =  re.compile(r"Running\smodel\smodel_5")
+            pattern_task_finished = re.compile(r'Task finished')
+            pattern_finished =  re.compile(r"Alphafold pipeline completed")
+            if re.search(pattern_task_finished, line):
+                task_status_dict['num_tasks_finished'] += 1
+                logger.debug(f"Task finished found. Current number: {task_status_dict['num_tasks_finished']}")
+            if re.search(pattern_exit_code_script, line):
+                exit_code_script = int(re.search(pattern_exit_code_script, line).group(1))
+                logger.debug(f"Exit code from script found in log file {exit_code_script}")
+            if re.search(pattern_exit_code_queue, line):
+                exit_code_queue = int(re.search(pattern_exit_code_queue, line).group(1))
+                logger.debug(f"Exit code from queue found in log file {exit_code_queue}")
+            if re.search(cancelled_pattern, line):
                 exit_code = 2
-            elif exit_code_script == 0 and exit_code_queue == 0:
-                exit_code = 0
-            elif exit_code_queue:
-                if exit_code_queue > 2:
-                    exit_code = 1
-            else:
-                exit_code = None
-        except Exception:
-            logger.debug(traceback.print_exc())
-            pass
+                logger.debug(f"Cancelled pattern found in log file {exit_code_queue}")
+            if re.search(pattern_started, line):
+                job_status = 'running'
+            if re.search(pattern_db_search, line):
+                task_status_dict['db_search_started'] = True
+            if re.search(pattern_model_1, line):
+                task_status_dict['model_1_started'] = True
+            if re.search(pattern_model_2, line):
+                task_status_dict['model_2_started'] = True
+            if re.search(pattern_model_3, line):
+                task_status_dict['model_3_started'] = True
+            if re.search(pattern_model_4, line):
+                task_status_dict['model_4_started'] = True
+            if re.search(pattern_model_5, line):
+                task_status_dict['model_5_started'] = True
+            if re.search(pattern_model_5, line):
+                task_status_dict['evaluation_started'] = True
+            if re.search(pattern_finished, line):
+                job_status = 'finished'
+        
+        logger.debug(f"exit_code_script {exit_code_script} exit_code_queue {exit_code_queue}")
+        if exit_code_script == 1 or exit_code_queue == 1:
+            logger.debug("Either exit code script or exit code_queue is 1")
+            exit_code = 1
+        elif exit_code_script == 2:
+            logger.debug("Exit code script is 2")
+            exit_code = 2
+        elif exit_code_script == 0 and exit_code_queue == 0:
+            logger.debug("Exit code script and exit_code_queue are 0")
+            exit_code = 0
+        elif exit_code_queue == 0 and exit_code_script is None:
+            #Assume there is an error if there is no exit code from the script
+            exit_code = 1
+        elif exit_code_queue:
+            if exit_code_queue > 2:
+                exit_code = 1
+        #except Exception as e:
+        #    logger.debug(f"Error while updating job status params: {e}")
+        #    logger.debug(traceback.print_exc())
+
         
         if not 'task_status' in params:
             params['task_status'] = {}
@@ -1739,6 +1806,9 @@ class Job(GUIVariables):
         if not 'exit_code' in params:
             params['exit_code'] = None
         params['exit_code'] = exit_code
+        logger.debug(params)
+        return params
+
 
     def db_insert_job(self, sess: sqlalchemy.orm.session.Session = None, data: list = None) -> None:
         assert isinstance(data, list)
@@ -1781,18 +1851,39 @@ class Job(GUIVariables):
 
     def read_log(self, log_file: str) -> List[str]:
         lines = []
+        logger.debug(f"Reading from {log_file}")
         with open(log_file, 'r') as log:
             lines = log.readlines()
         return lines
 
-    def update_log(self, gui_params: dict) -> None:
-        if 'log_file' in gui_params:
-            logger.debug(f"Log file: {gui_params['log_file']}")
-            if os.path.exists(gui_params['log_file']):
+    def update_log(self, log_lines: str = None, log_file: str = None, job_id_active: int = None, job_id_thread: int = None, notebook_page: str = None, append: bool = False) -> None:
+        logger.debug("Updating log")
+        if (job_id_active == job_id_thread) or job_id_thread is None:
+            if not append:
                 self.log.reset_ctrl()
-                lines = self.read_log(gui_params['log_file'])
-                for line in lines:
-                    self.log.ctrl.appendPlainText(line.strip('\n'))
+            if log_file:
+                if os.path.exists(log_file):
+                    logger.debug(f"Reading from {log_file}")
+                    with open(log_file, 'r') as f:
+                        lines = f.readlines()
+                else:
+                    logger.error(f"Log file {log_file} does not exist!")
+                    lines = []
+            elif log_lines:
+                logger.debug("Found log lines")
+                lines = log_lines
+            logger.debug("Appending lines")
+            for line in lines:
+                self.log.ctrl.appendPlainText(line.strip('\n'))
+            #self.log_reader_thread = LogThread(log_file, log_lines)
+            #self.log_reader_thread.log_updated.connect(self.append_log_lines)
+            #self.log_reader_thread.log_updated.connect(self.update_job_status_params)
+            #self.log_reader_thread.start()
+        else:
+            logger.debug("job ids do not match or LogTab not selected")
+
+    def append_log_lines(self, lines: list):
+        logger.debug("Appending line")
 
 
     def get_path_by_project_id(self, project_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
@@ -1832,6 +1923,7 @@ class Job(GUIVariables):
     def get_queue_pid(self, log_file: str, job_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
         pid = None
         regex = re.compile(r'QUEUE_JOB_ID=(\d+)')
+        logger.debug(f"Reading from {log_file}")
         with open(log_file, 'r') as f:
             content = f.read()
         if re.search(regex, content):
@@ -1859,10 +1951,14 @@ class Job(GUIVariables):
         except Exception:
             logger.debug("PID not found")
             return False
+        
+    def get_job_name_by_id(self, job_id, sess):
+        result = sess.query(self.db.Jobparams.job_name).filter_by(id=job_id).first()
+        return result[0]
 
     def reconnect_jobs(self, sess: sqlalchemy.orm.session.Session) -> list:
         jobs_running = []
-        result = sess.query(self.db.Job).filter((self.db.Job.status=="running") | (self.db.Job.status=="started") | (self.db.Job.status=="waiting")).all()
+        result = sess.query(self.db.Job).filter((self.db.Job.status=="running") | (self.db.Job.status=="starting") | (self.db.Job.status=="waiting")).all()
 
         for job in result:
             jobparams = sess.query(self.db.Jobparams).filter(self.db.Jobparams.id == job.id).one()
@@ -1875,6 +1971,7 @@ class Job(GUIVariables):
                                  'log_file': self.get_log_file(job.id, sess),
                                  'pid': job.pid,
                                  'time_started': job.timestamp})
+            logger.debug(f"Reconnect job {job.id}, {job.job_project_id}, {jobparams.job_name}, {job.status}")
         return jobs_running
 
     # def init_gui(self, gui_params: dict, sess=None) -> dict:
@@ -1914,14 +2011,26 @@ class Job(GUIVariables):
     #         #self.list.ctrl.scrollToBottom()
     #     return gui_params
     
+
+    def collect_group_subgroup_items(self, parent_item):
+        for i in range(parent_item.childCount()):
+            child_item = parent_item.child(i)
+            item_text = child_item.text(0)
+            if "Group" in item_text or "Subgroup" in item_text:
+                print(item_text)
+            self.collect_group_subgroup_items(child_item)
+
+
     #TreeView Implementation
-    def init_gui(self, gui_params: dict, sess=None) -> dict:
+    def init_gui(self, gui_params: dict, reset: bool = False, sess=None) -> dict:
         from PyQt5 import QtWidgets
 
         logger.debug("=== Init Job list ===")
         # Clear Lists
-        self.list.reset_ctrl()
-        self.log.reset_ctrl()
+        if reset:
+            logger.debug("Restting Job list")
+            self.list.reset_ctrl()
+        #self.log.reset_ctrl()
         logger.debug("reset end")
 
         # Fill job list
@@ -1935,32 +2044,77 @@ class Job(GUIVariables):
         project_id = gui_params['project_id']
 
         if project_id is not None:
-            gui_params['project_path'] = self.get_path_by_project_id(project_id, sess)
-            jobs = self.get_jobs_by_project_id(project_id, sess)
             job_groups = {}
+            existing_items = {}  # Dictionary to store existing items by job ID
 
-            for i, job in enumerate(jobs):
-                job_name = job.name
-                if job_name not in job_groups:
-                    group_item = QtWidgets.QTreeWidgetItem(self.list.ctrl)
-                    group_item.setFlags(group_item.flags() & ~QtCore.Qt.ItemIsSelectable)
-
-
-                    group_item.setText(0, job_name)
-                    self.list.ctrl.addTopLevelItem(group_item)
-                    #group_item.setExpanded(True)
+            # Iterate through existing top-level items in the tree widget and store them
+            for i in range(self.list.ctrl.topLevelItemCount()):
+                group_item = self.list.ctrl.topLevelItem(i)
+                job_name = group_item.text(0)
+                if not job_name in job_groups:
                     job_groups[job_name] = group_item
 
-                group_item = job_groups[job_name]
-                sub_item = QtWidgets.QTreeWidgetItem(group_item, [job.type.capitalize(), "", str(job.job_project_id)])
+                # Store sub-items in the dictionary by job ID
+                for j in range(group_item.childCount()):
+                    sub_item = group_item.child(j)
+                    job_project_id = str(sub_item.text(2))
+                    existing_items[job_project_id] = sub_item
 
-                status = self.get_status(job.id, sess)
-                if status is None:
-                    status = "unknown"
-                sub_item.setText(1, status)
-                if i == jobs.count() - 1:
-                    group_item.setExpanded(True)
+            jobs = self.get_jobs_by_project_id(project_id, sess)
+            logger.debug("Existing items in job list")
+            logger.debug(existing_items)
 
+
+            # Iterate through the fetched job list
+            for i, job in enumerate(jobs):
+                job_id = job.id
+                job_name = job.name
+                job_type = job.type.capitalize()
+                job_project_id = str(job.job_project_id)
+
+                # Check if job already has an item in the tree
+                if job_project_id in existing_items:
+                    logger.debug(f"{job_project_id} in existing_items")
+                    sub_item = existing_items[job_project_id]
+                    current_status = sub_item.text(1)
+                    new_status = self.get_status(job_id, sess)
+                    
+                    # Update status if it has changed
+                    if current_status != new_status:
+                        sub_item.setText(1, new_status)
+
+                    # Remove the job ID from the dictionary since it's been processed
+                    del existing_items[job_project_id]
+                else:
+                    logger.debug(f"{job_project_id} not in existing_items")
+                    # Create a new group item if necessary
+                    if job_name not in job_groups:
+                        group_item = QtWidgets.QTreeWidgetItem(self.list.ctrl)
+                        group_item.setFlags(group_item.flags() & ~QtCore.Qt.ItemIsSelectable)
+                        group_item.setText(0, job_name)
+                        self.list.ctrl.addTopLevelItem(group_item)
+                        job_groups[job_name] = group_item
+
+                    group_item = job_groups[job_name]
+                    sub_item = QtWidgets.QTreeWidgetItem(group_item, [job_type, "", job_project_id])
+                    sub_item.setText(1, self.get_status(job_id, sess))
+
+                    if i == jobs.count() - 1 or self.get_tree_item_expanded(job_name, project_id, sess):
+                        if not group_item.isExpanded():
+                            group_item.setExpanded(True)
+                        else:
+                            logger.debug("Is already expanded")
+
+            # Remove any items that no longer have corresponding job objects
+            for job_id, sub_item in existing_items.items():
+                parent_item = sub_item.parent()
+                parent_item.removeChild(sub_item)
+
+                if parent_item.childCount() == 0:
+                    index = self.list.ctrl.indexOfTopLevelItem(parent_item)
+                    self.list.ctrl.takeTopLevelItem(index)
+                    job_name = parent_item.text(0)
+                    del job_groups[job_name]
             # Automatically scroll to the bottom
             last_item = self.list.ctrl.topLevelItem(self.list.ctrl.topLevelItemCount() - 1)
             self.list.ctrl.scrollToItem(last_item, QtWidgets.QAbstractItemView.PositionAtBottom)
@@ -1968,6 +2122,16 @@ class Job(GUIVariables):
             #self.list.ctrl.expandAll()
             self.list.ctrl.setColumnCount(3)
             #self.list.ctrl.resizeColumnToContents(0)
+
+        if gui_params['job_id'] is None:
+            gui_params['job_id'] = self.get_active_job_id(sess)
+            if gui_params['job_id']:
+                gui_params['job_name'] = self.get_job_name_by_id(gui_params['job_id'], sess)
+                gui_params['job_dir'] = self.get_job_dir(gui_params['job_name'])
+                logger.debug(f"job_id is None, getting last active job from DB: {gui_params['job_id']}")
+        else:
+            self.set_job_active(gui_params['job_id'], sess)
+            logger.debug(f"Setting {gui_params['job_id']} to active.")
 
         return gui_params
 

@@ -14,6 +14,7 @@
 #
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
+import copy
 from subprocess import Popen, PIPE, STDOUT
 import logging
 import os
@@ -21,7 +22,7 @@ import shlex
 import time
 from typing import Union
 from typing_extensions import runtime
-from PyQt5.QtCore import QObject, pyqtSignal, QFileSystemWatcher, pyqtSlot
+from PyQt5.QtCore import QObject, pyqtSignal, QFileSystemWatcher, pyqtSlot, QThread
 import traceback
 import re
 import datetime
@@ -41,13 +42,15 @@ class MonitorJob(QObject):
     def __init__(self, parent, job_params):
         super(MonitorJob, self).__init__()
         self._parent = parent
-        self.job_params = job_params.copy()
+        self.job_params = copy.deepcopy(job_params)
         self.job_params['exit_code'] = None
         self.job_params['initial_submit'] = False
         self.status_dict = None
         self.pointer = None
         self.current_job_id = None
         self.job_params['pid'] = None
+        self.log_file = os.path.join(self.job_params['job_path'], self.job_params['log_file'])
+        logger.debug(f"Log file for monitor thread is {self.log_file}")
 
         with self._parent.db.session_scope() as sess:
             self.sess = sess
@@ -59,8 +62,9 @@ class MonitorJob(QObject):
         return hash(check)
 
     def log_changed(self) -> None:
-        logger.debug(f"Log file {self.job_params['log_file']} changed. updating")
-        with open(self.job_params['log_file'], 'r') as log:
+        logger.debug(f"Log file {self.log_file} changed. updating")
+        logger.debug(f"Reading from {self.log_file}")
+        with open(self.log_file, 'r') as log:
             if not self.pointer is None:
                 log.seek(self.pointer)
             lines = log.readlines()
@@ -71,9 +75,10 @@ class MonitorJob(QObject):
                 log.seek(0, 2)
             self.pointer = log.tell()
         if self.job_params['queue']:
-            self._parent.job.get_queue_pid(self.job_params['log_file'], self.job_params['job_id'], self.sess)
+            self._parent.job.get_queue_pid(self.log_file, self.job_params['job_id'], self.sess)
         #Update job_params status parameters exit_code, status, and task_status
-        self._parent.job.update_job_status_params(self.job_params)
+        self.job_params = self._parent.job.get_job_status_from_log(self.job_params)
+        time.sleep(10)
 
     def changed_test(self) -> None:
         logger.debug("file changed test")
@@ -95,6 +100,8 @@ class MonitorJob(QObject):
         log_file_found = False
         pid_found = False
         pid = None
+        time_counter = 0
+        runtime_exceeded = False
 
         self.clear_log.emit(0)
 
@@ -104,9 +111,9 @@ class MonitorJob(QObject):
             if self.check_runtime_exceeded(self.job_params['time_started'], runtime_days=10):
                 logger.warning(f"Maximum runtime exceeded and no logfile found. Not monitoring this job any longer (JobID {self.current_job_id}).")
                 self.job_params['status'] = "unknown"
-                self._parent.job.update_status("unknown", self.job_params['job_id'], self.sess)
+                runtime_exceeded = True
                 break
-            if os.path.exists(self.job_params['log_file']):
+            if os.path.exists(self.log_file):
                 log_file_found = True
                 logger.debug(f"{thread_info} Log file found")
                 break
@@ -119,13 +126,13 @@ class MonitorJob(QObject):
             self.job_params['status'] = "error"
             self._parent.job.update_status("error", self.job_params['job_id'], self.sess)
 
-        if log_file_found:
+        if log_file_found and not runtime_exceeded:
             #QFileSystemWatcher does not work with connect signal for strange reasons. Falling back to os.stat to check
             #if log file has changed before opening it
             #log_watcher = QFileSystemWatcher([self.job_params['log_file']])
 
             #Get time stamp of log file
-            previous_stamp = os.stat(self.job_params['log_file']).st_mtime
+            previous_stamp = os.stat(self.log_file).st_mtime
             #Execute log_changed once to get the current status
             self.log_changed()
             while True:
@@ -135,11 +142,13 @@ class MonitorJob(QObject):
                     self.job_params['status'] = "unknown"
                     break
 
-                #If time stamp as has changed, assume the log file has changed
-                stamp = os.stat(self.job_params['log_file']).st_mtime
+                #If time stamp as has changed, assume the log file has changed. Also check every 12*5 seconds if the log file has changed.
+                stamp = os.stat(self.log_file).st_mtime
                 logger.debug(f"{thread_info} setting log_watcher")
-                if stamp != previous_stamp:
+                if stamp != previous_stamp or time_counter > 12:
                     self.log_changed()
+                    if time_counter > 12:
+                        time_counter = 0
 
                 #Check if the job has started on the same host, otherwise the PID is not valid
                 host_started = self._parent.job.get_host(self.current_job_id, self.sess)
@@ -157,7 +166,7 @@ class MonitorJob(QObject):
                     if self.job_params['queue']:
                         logger.debug(f"{thread_info} Getting pid for queue job from log file.")
                         while pid is None:
-                            pid = self._parent.job.get_queue_pid(self.job_params['log_file'], self.current_job_id, self.sess)
+                            pid = self._parent.job.get_queue_pid(self.log_file, self.current_job_id, self.sess)
                             time.sleep(5)
                         self._parent.job.update_pid(pid, self.job_params['job_id'], self.sess)
                     else:
@@ -194,18 +203,50 @@ class MonitorJob(QObject):
 
                 #Check if the job parameters have changed and emit signal.
                 if checksum_prev_job_params != self.make_hash(self.job_params):
-                    logger.debug(f"{thread_info} Dictionary changed")
+                    logger.debug(f"{thread_info} Job status dictionary changed")
                     self.job_status.emit(self.job_params)
+                else:
+                    logger.debug(f"{thread_info} Job status dictionary did not change.")
+                    #self.job_status.emit(self.job_params)
+                #else:
+                #    logger.debug(f"{thread_info} Dictionary did not change, waited for 60 sec.")
+                #    self.job_status.emit(self.job_params)
                 checksum_prev_job_params = self.make_hash(self.job_params)
 
                 #Set previous time stamp to current time stamp
                 previous_stamp = stamp
+                time_counter += 1
                 time.sleep(5)
         #Emit signal at the end of the thread.
+        logger.debug(f"{thread_info} Status is {self.job_params['status']}.")
         self.job_status.emit(self.job_params)
         logger.debug(f"{thread_info} Job finished.")
 
+class LogThread(QThread):
+    """Thread to read log file."""
+    log_updated = pyqtSignal(list)
 
+    def __init__(self, log_file: str = None, log_lines: str = None):
+        super().__init__()
+        self.log_file = log_file
+        self.log_lines = log_lines
+
+    def run(self):
+        logger.debug("Starting LogReadThread")
+        if self.log_file:
+            logger.debug("Reading from logfile")
+            if os.path.exists(self.log_file):
+                logger.debug(f"Reading from {self.log_file}")
+                with open(self.log_file, 'r') as f:
+                    lines = f.readlines()
+            else:
+                logger.error(f"Log file {self.log_file} does not exist!")
+                lines = []
+        elif self.log_lines:
+            logger.debug("Found log lines")
+            lines = self.log_lines
+        self.log_updated.emit(lines)
+        
 
 class RunProcessThread(QObject):
     """Thread to run a process in the background."""
@@ -217,8 +258,10 @@ class RunProcessThread(QObject):
     def __init__(self, parent, job_params, cmd):
         super(RunProcessThread, self).__init__()
         self._parent = parent
-        self.job_params = job_params.copy()
+        self.job_params = copy.deepcopy(job_params)
         self.cmd = cmd
+        self.log_file = os.path.join(self.job_params['job_path'], self.job_params['log_file'])
+        logger.debug(f"Log file for process thread is {self.log_file}")
 
         with self._parent.db.session_scope() as sess:
             self.sess = sess
@@ -230,9 +273,10 @@ class RunProcessThread(QObject):
         try:
             #basedir = os.getcwd()
             os.chdir(self.job_params['job_path'])
+            logger.debug(f"Changing into directory {self.job_params['job_path']}")
         except:
             logger.error('Job directory not accessible!')
-        logger.debug("Starting job")
+        logger.debug(f"Starting job in {self.job_params['job_path']}")
         logger.debug(self.job_params)
 
         #pid = os.fork()
@@ -242,7 +286,7 @@ class RunProcessThread(QObject):
         #ppid = os.getppid()
         cmd = ' '.join(self.cmd)
         logger.debug("Starting with command\n{}".format(cmd))
-        with open("run.sh", 'w') as f:
+        with open(os.path.join(self.job_params['job_path'], "run.sh"), 'w') as f:
             f.write(cmd)
         #cmd = shlex.split(cmd, posix=False)
         logger.debug("Starting with command\n{}".format(cmd))
@@ -250,7 +294,8 @@ class RunProcessThread(QObject):
         logger.debug(cmd)
 
         error_found = False
-        with Popen(cmd, preexec_fn=os.setsid, shell=True, stdout=PIPE, stderr=PIPE) as p, open(self.job_params['log_file'], 'w') as f:
+        logger.debug(f"Writing to file {self.log_file}")
+        with Popen(cmd, preexec_fn=os.setsid, shell=True, stdout=PIPE, stderr=PIPE) as p, open(self.log_file, 'w') as f:
             try:
                 cpid = p.pid
                 logger.debug("PID of child is {}".format(cpid))
@@ -298,10 +343,6 @@ class RunProcessThread(QObject):
                 queue_job_id = None
                 self.job_params['status'] = "error"
                 traceback.print_exc()
-            self.job_params['initial_submit'] = True
-            self.job_status.emit(self.job_params)
-            self.change_tab.emit()
-            self.error.emit(error_msgs)
             f.write("############################################################\n\n")
             f.write(f"Job command:\n\n{cmd}\n\n")
             if not self.job_params['pipeline'] in ['batch_msas', 'only_features']:
@@ -319,3 +360,7 @@ class RunProcessThread(QObject):
                 for msg in error_msgs:
                     f.write(f"{msg}\n\n")
             f.write("############################################################\n\n")
+            self.job_params['initial_submit'] = True
+            self.job_status.emit(self.job_params)
+            self.change_tab.emit()
+            self.error.emit(error_msgs)
