@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>419</width>
-    <height>603</height>
+    <height>630</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -48,38 +48,47 @@
           <x>10</x>
           <y>40</y>
           <width>361</width>
-          <height>329</height>
+          <height>320</height>
          </rect>
         </property>
-        <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0,0,0" rowminimumheight="0,0,0,0,0,0,0">
+        <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0,0,0,0" rowminimumheight="0,0,0,0,0,0,0,0">
          <property name="sizeConstraint">
           <enum>QLayout::SetDefaultConstraint</enum>
          </property>
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_10">
-           <property name="text">
-            <string>Num multimer predictions per model</string>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="cmb_jobparams_model_preset"/>
+         </item>
+         <item row="6" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_num_recycle">
+           <property name="value">
+            <number>3</number>
            </property>
           </widget>
          </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_9">
-           <property name="text">
-            <string>Model preset</string>
+         <item row="3" column="1">
+          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
+         </item>
+         <item row="4" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
+           <property name="value">
+            <number>1</number>
            </property>
           </widget>
          </item>
-         <item row="0" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_force_cpu">
+         <item row="6" column="0">
+          <widget class="QLabel" name="label_12">
+           <property name="text">
+            <string>Max number recycles</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QLineEdit" name="lei_jobparams_max_template_date"/>
+         </item>
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="chk_jobparams_benchmark">
            <property name="text">
             <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="label_13">
-           <property name="text">
-            <string>Random seed</string>
            </property>
           </widget>
          </item>
@@ -97,10 +106,10 @@
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_benchmark">
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_13">
            <property name="text">
-            <string/>
+            <string>Random seed</string>
            </property>
           </widget>
          </item>
@@ -111,35 +120,72 @@
            </property>
           </widget>
          </item>
-         <item row="5" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_max_template_date"/>
-         </item>
-         <item row="1" column="1">
-          <widget class="QComboBox" name="cmb_jobparams_model_preset"/>
-         </item>
-         <item row="4" column="1">
-          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
-           <property name="value">
-            <number>1</number>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
-         </item>
-         <item row="6" column="1">
-          <widget class="QSpinBox" name="sbo_jobparams_num_recycle">
-           <property name="value">
-            <number>3</number>
-           </property>
-          </widget>
-         </item>
-         <item row="6" column="0">
-          <widget class="QLabel" name="label_12">
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="chk_jobparams_force_cpu">
            <property name="text">
-            <string>Max number recycles</string>
+            <string/>
            </property>
           </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_10">
+           <property name="text">
+            <string>Num multimer predictions per model</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_9">
+           <property name="text">
+            <string>Model preset</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="0">
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>Model params</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <item>
+            <widget class="QCheckBox" name="chk_jobparams_use_model_1">
+             <property name="text">
+              <string>1</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_jobparams_use_model_2">
+             <property name="text">
+              <string>2</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_jobparams_use_model_3">
+             <property name="text">
+              <string>3</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_jobparams_use_model_4">
+             <property name="text">
+              <string>4</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="chk_jobparams_use_model_5">
+             <property name="text">
+              <string>5</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </widget>
@@ -183,7 +229,11 @@
           <enum>QLayout::SetDefaultConstraint</enum>
          </property>
          <item row="1" column="2">
-          <widget class="QSpinBox" name="sbo_jobparams_chunk_size"/>
+          <widget class="QSpinBox" name="sbo_jobparams_chunk_size">
+           <property name="maximum">
+            <number>1000000000</number>
+           </property>
+          </widget>
          </item>
          <item row="0" column="2">
           <widget class="QSpinBox" name="sbo_jobparams_num_gpu"/>
@@ -212,7 +262,7 @@
          <item row="1" column="0">
           <widget class="QLabel" name="label_2">
            <property name="text">
-            <string>Chunk size</string>
+            <string>Chunk size (0 = auto)</string>
            </property>
           </widget>
          </item>

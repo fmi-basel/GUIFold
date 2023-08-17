@@ -24,6 +24,7 @@ class QueueSubmitDlg(QtWidgets.QDialog):
 
     def accept(self):
         text = self.submit_script_field.toPlainText()
+        logger.debug(f"Writing to file {self.submit_script_path}")
         with open(self.submit_script_path, 'w') as f:
             f.write(text)
         #if self.queue_submit_dialog.ctrl.isChecked():

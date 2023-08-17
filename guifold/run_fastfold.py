@@ -19,6 +19,7 @@
 
 """Full AlphaFold protein structure prediction script."""
 import json
+import multiprocessing
 import os
 import pathlib
 import pickle
@@ -28,7 +29,6 @@ import sys
 import time
 import traceback
 from typing import Dict, Union, Optional
-from pympler import asizeof
 from contextlib import closing
 from absl import app
 from absl import flags
@@ -48,7 +48,6 @@ from alphafold.relax import relax
 from alphafold.data import parsers
 import numpy as np
 import gzip
-from pympler import asizeof
 import re
 
 from alphafold.model import data
@@ -211,7 +210,6 @@ def _check_flag(flag_name: str,
     raise ValueError(f'{flag_name} must {verb} set when running with '
                      f'"--{other_flag_name}={FLAGS[other_flag_name].value}".')
 
-
 def inference_model(rank, world_size, result_q, batch, model_name, chunk_size, inplace, model_preset, data_dir):
     os.environ['RANK'] = str(rank)
     os.environ['LOCAL_RANK'] = str(rank)
@@ -286,8 +284,8 @@ def predict_structure(
             msa_output_dir=msa_output_dir,
             no_msa=no_msa_list,
             no_template=no_template_list,
-            custom_template=custom_template_list,
-            precomputed_msas=precomputed_msas_list,
+            custom_template_path=custom_template_list,
+            precomputed_msas_path=precomputed_msas_list,
             num_cpu=FLAGS.num_cpu)
       timings['features'] = time.time() - t_0
 
@@ -403,9 +401,6 @@ def predict_structure(
             
             with open(unrelaxed_pdb_path, 'w') as f:
               f.write(unrelaxed_pdbs[model_name])
-            size_result_q = asizeof.asizeof(result_q) / 1024**3
-            size_manager = asizeof.asizeof(manager) / 1024**3
-            print(f"result_q {size_result_q} size_manager {size_manager}")
         else:
           logging.info(f"Skipping prediction because {unrelaxed_pdb_path} already exists.")
           with open(unrelaxed_pdb_path, 'r') as f:
@@ -464,21 +459,14 @@ def predict_structure(
 
       evaluation: EvaluationPipeline = EvaluationPipeline(fasta_path, batch_prediction)
       evaluation.run_pipeline()
-
-      print("Size of objects in predict")
       
-      for name, obj in locals().items():
-        if name != 'asizeof':
-          size = asizeof.asizeof(obj) / 1024**3
-          if size > 1:
-            print(name)
-            print(size)
       if batch_prediction:
         logging.info("Task finished")
         min_inter_pae_list, min_iptm_list, min_ptm_list = scores
         min_inter_pae_list.append(evaluation.get_min_inter_pae(evaluation.get_pae_results_unsorted(), fasta_name))
         min_iptm_list.append(evaluation.get_min_iptm())
         min_ptm_list.append(evaluation.get_min_ptm())
+        return min_inter_pae_list, min_iptm_list, min_ptm_list
       else:
         logging.info("Alphafold pipeline completed. Exit code 0")
   else:
@@ -723,7 +711,8 @@ def main(argv):
 
   if FLAGS.pipeline == 'all_vs_all':
     combinations = []
-    min_inter_pae_list, min_iptm_list, min_ptm_list = [], [], []
+    manager = multiprocessing.Manager()
+    min_inter_pae_list, min_iptm_list, min_ptm_list = manager.list(), manager.list(), manager.list()
     for i, (desc_1, seq_1) in enumerate(description_sequence_dict.items()):
       for o, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
         #Check if sequence names are identical
@@ -743,24 +732,25 @@ def main(argv):
             f.write(f"\n\n>{desc_2}\n")
             f.write(seq_2)
 
-          predict_structure(
-            fasta_path=fasta_path,
-            fasta_name=fasta_name,
-            output_dir_base=FLAGS.output_dir,
-            data_pipeline=data_pipeline,
-            model_runners=model_runners,
-            amber_relaxer=amber_relaxer,
-            benchmark=FLAGS.benchmark,
-            random_seed=random_seed,
-            is_multimer=run_multimer_system,
-            no_msa_list=no_msa_list,
-            no_template_list=[no_template_list[i], no_template_list[o]],
-            custom_template_list=[custom_template_list[i], custom_template_list[o]],
-            precomputed_msas_list=[precomputed_msas_list[i], precomputed_msas_list[o]],
-            batch_prediction=True,
-            scores=(min_inter_pae_list, min_iptm_list, min_ptm_list))
-          print("Size min inter pae list GB")
-          print(asizeof.asizeof(min_inter_pae_list) / 1024**3)
+          process = multiprocessing.Process(target=predict_structure, kwargs={
+            "fasta_path": fasta_path,
+            "fasta_name": fasta_name,
+            "output_dir_base": FLAGS.output_dir,
+            "data_pipeline": data_pipeline,
+            "model_runners": model_runners,
+            "amber_relaxer": amber_relaxer,
+            "benchmark": FLAGS.benchmark,
+            "random_seed": random_seed,
+            "is_multimer": run_multimer_system,
+            "no_msa_list": no_msa_list,
+            "no_template_list": [no_template_list[0], no_template_list[i]],
+            "custom_template_list": [custom_template_list[0], custom_template_list[i]],
+            "precomputed_msas_list": [precomputed_msas_list[0], precomputed_msas_list[i]],
+            "batch_prediction": True,
+            "scores": (min_inter_pae_list, min_iptm_list, min_ptm_list)}
+            )
+          process.start()
+          process.join()
 
           #reset
           desc_1 = prev_desc_1
@@ -772,10 +762,11 @@ def main(argv):
 
   elif FLAGS.pipeline == 'first_vs_all':
     combinations = []
-    best_inter_pae_list = []
+    manager = multiprocessing.Manager()
+    min_inter_pae_list, min_iptm_list, min_ptm_list = manager.list(), manager.list(), manager.list()
     desc_1 = list(description_sequence_dict.keys())[0]
     seq_1 = description_sequence_dict[desc_1]
-    for i, seq_2, desc_2 in enumerate(description_sequence_dict.items()):
+    for i, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
       if desc_1 == desc_2:
         desc_1 = f"{desc_1}_1"
         desc_2 = f"{desc_2}_2"
@@ -787,24 +778,29 @@ def main(argv):
         f.write(f"\n\n>{desc_2}\n")
         f.write(seq_2)
 
-      predict_structure(
-        fasta_path=fasta_path,
-        fasta_name=fasta_name,
-        output_dir_base=FLAGS.output_dir,
-        data_pipeline=data_pipeline,
-        model_runners=model_runners,
-        amber_relaxer=amber_relaxer,
-        benchmark=FLAGS.benchmark,
-        random_seed=random_seed,
-        is_multimer=run_multimer_system,
-        no_msa_list=no_msa_list,
-        no_template_list=[no_template_list[0], no_template_list[i]],
-        custom_template_list=[custom_template_list[0], custom_template_list[i]],
-        precomputed_msas_list=[precomputed_msas_list[0], precomputed_msas_list[i]],
-        batch_prediction=True,
-        scores=(min_inter_pae_list, min_iptm_list, min_ptm_list))
 
-      evaluation_batch = EvaluationPipelineBatch(min_inter_pae_list, min_iptm_list, min_ptm_list)
+      process = multiprocessing.Process(target=predict_structure, kwargs={
+        "fasta_path": fasta_path,
+        "fasta_name": fasta_name,
+        "output_dir_base": FLAGS.output_dir,
+        "data_pipeline": data_pipeline,
+        "model_runners": model_runners,
+        "amber_relaxer": amber_relaxer,
+        "benchmark": FLAGS.benchmark,
+        "random_seed": random_seed,
+        "is_multimer": run_multimer_system,
+        "no_msa_list": no_msa_list,
+        "no_template_list": [no_template_list[0], no_template_list[i]],
+        "custom_template_list": [custom_template_list[0], custom_template_list[i]],
+        "precomputed_msas_list": [precomputed_msas_list[0], precomputed_msas_list[i]],
+        "batch_prediction": True,
+        "scores": (min_inter_pae_list, min_iptm_list, min_ptm_list)}
+        )
+      process.start()
+      process.join()
+
+
+      evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, min_inter_pae_list, min_iptm_list, min_ptm_list)
       evaluation_batch.run()
       
       

@@ -17,11 +17,13 @@
 from __future__ import absolute_import
 from guifold.src import gui_threads
 from guifold.src.gui_dialogs import message_dlg
+from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 from guifold.src.gui_dlg_settings import SettingsDlg
 from guifold.src.gui_dlg_about import AboutDlg
 from guifold.src.gui_dlg_project import ProjectDlg
 from guifold.src.gui_dlg_queue_submit import QueueSubmitDlg
 from guifold.src.gui_dlg_advanced_params import AdvancedParamsDlg
+from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 import signal
 import socket
 from subprocess import Popen
@@ -116,7 +118,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
     logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
 
 def main():
-    shared_objects = [JobParams(), Project(), Job(), Evaluation(), Settings()]
+    shared_objects = [Settings(), Project(), Job(), JobParams(), Evaluation()]
     if not args.custom_db_path:
         db_path = os.path.join(os.path.expanduser("~"), '.guifold.db')
     else:
@@ -186,7 +188,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
 
         self.install_path = install_path
-        self.jobparams, self.prj, self.job, self.evaluation, self.settings = self.shared_objects = shared_objects
+        self.settings, self.prj, self.job, self.jobparams, self.evaluation = self.shared_objects = shared_objects
 
 
         self.gui_params = {'job_id': None,
@@ -198,7 +200,8 @@ class MainFrame(QtWidgets.QMainWindow):
                            'job_project_id': None,
                            'project_id': None,
                            'queue': None,
-                           'selected_combination_name': None}
+                           'selected_combination_name': None,
+                           'pairwise_batch_prediction': False}
         self.gui_params['settings_locked'] = check_settings_locked()
         self.gui_params['force_settings_update'] = check_force_settings_update()
         self.files_selected_item = None
@@ -227,7 +230,7 @@ class MainFrame(QtWidgets.QMainWindow):
     # self.check_executables()
         self.currentDirectory = os.getcwd()
         self.threads = []
-
+        self.thread_workers = []
         self.reconnect_jobs()
         self.show() # Show the GUI
         logger.debug("GUI params")
@@ -316,7 +319,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
         for obj in self.shared_objects:
             logger.debug(f"Initializing  {obj}")
-            self.gui_params = obj.init_gui(self.gui_params, self.sess)
+            self.gui_params = obj.init_gui(self.gui_params, sess=self.sess)
             logger.debug("GUI Params")
             logger.debug(self.gui_params)
         #Init DB Preset List
@@ -346,9 +349,8 @@ class MainFrame(QtWidgets.QMainWindow):
             self.settings.update_from_global_config()
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
 
-
-
     def create_monitor_thread(self, job_params):
+        logger.debug(f"Creating monitor thread for {job_params['job_project_id']} {job_params['job_id']} {job_params['job_name']}")
         self.monitor_thread = QThread()
         self.monitor_worker = gui_threads.MonitorJob(self, job_params)
         self.monitor_worker.moveToThread(self.monitor_thread)
@@ -361,6 +363,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.monitor_worker.job_status.connect(self.OnJobStatus)
         self.monitor_thread.start()
         self.threads.append(self.monitor_thread)
+        self.thread_workers.append(self.monitor_worker)
 
     def check_project_exists(self):
         if self.prj.is_empty(self.sess):
@@ -397,7 +400,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.btn_evaluation_open_pymol.clicked.connect(lambda checked, x='pymol': self.OnOpenModelViewer(x))
         self.btn_open_browser.clicked.connect(self.OnOpenBrowser)
         self.btn_evaluation_open_results_folder.clicked.connect(self.OnOpenResultsFolder)
-        self.job.list.ctrl.cellClicked.connect(self.OnLstJobSelected)
+        #self.job.list.ctrl.cellClicked.connect(self.OnLstJobSelected)
+        self.job.list.ctrl.itemClicked.connect(self.OnLstJobSelected)
         self.btn_jobparams_advanced_settings.clicked.connect(self.OnBtnAdvancedParams)
         self.btn_jobparams_advanced_settings.setEnabled(False)
         self.btn_precomputed_msas_path.clicked.connect(self.OnBtnPrecomputedMSAsPath)
@@ -406,6 +410,10 @@ class MainFrame(QtWidgets.QMainWindow):
         self.job.list.ctrl.setContextMenuPolicy(Qt.CustomContextMenu)
         self.job.list.ctrl.customContextMenuRequested.connect(self.OnJobContextMenu)
         self.evaluation.pairwise_combinations_list.ctrl.activated.connect(self.OnCmbCombinations)
+        self.jobparams.pipeline.ctrl.activated.connect(self.OnCmbPipeline)
+        #TreeWidget
+        self.job.list.ctrl.itemExpanded.connect(self.OnItemExpanded)
+        self.job.list.ctrl.itemCollapsed.connect(self.OnItemCollapsed)
 
     def ToolbarSelected(self, s):
         selected = s.text()
@@ -418,68 +426,92 @@ class MainFrame(QtWidgets.QMainWindow):
         elif selected == 'Clear':
             self.OnBtnClear()
 
-
     def OnJobStatus(self, job_params):
         logger.debug("OnJobStatus")
+        log_file = os.path.join(job_params['job_path'], job_params['log_file'])
+        #Only change status in GUI if the job id from the thread matches the currently selected job.
+        if int(self.gui_params['job_id']) == int(job_params['job_id']):
+            logger.debug("Updating progress control:")
+            logger.debug(job_params['task_status'])
+            for item in [self.lbl_status_1,
+                        self.lbl_status_2,
+                        self.lbl_status_3,
+                        self.lbl_status_4,
+                        self.lbl_status_5,
+                        self.lbl_status_6,
+                        self.lbl_status_7]:
+                item.setStyleSheet("color: gray;")
+            try:
+                if 'task_status' in job_params:
+                    if job_params['task_status']['num_tasks_finished']:
+                            if not 'num_jobs' in job_params:
+                                job_params['num_jobs'] = '?'
+                            self.lbl_status_1.setText(f"{job_params['task_status']['num_tasks_finished']}/{job_params['num_jobs']} tasks finished")
+                    if job_params['task_status']['db_search_started']:
+                        self.lbl_status_1.setStyleSheet("color: black;")
+                    if job_params['task_status']['model_1_started']:
+                        self.lbl_status_1.setStyleSheet("color: green;")
+                        self.lbl_status_2.setStyleSheet("color: black;")
+                    if job_params['task_status']['model_2_started']:
+                        self.lbl_status_2.setStyleSheet("color: green;")
+                        self.lbl_status_3.setStyleSheet("color: black;")
+                    if job_params['task_status']['model_3_started']:
+                        self.lbl_status_3.setStyleSheet("color: green;")
+                        self.lbl_status_4.setStyleSheet("color: black;")
+                    if job_params['task_status']['model_4_started']:
+                        self.lbl_status_4.setStyleSheet("color: green;")
+                        self.lbl_status_5.setStyleSheet("color: black;")
+                    if job_params['task_status']['model_5_started']:
+                        self.lbl_status_5.setStyleSheet("color: green;")
+                        self.lbl_status_6.setStyleSheet("color: black;")
+                    if job_params['task_status']['evaluation_started']:
+                        self.lbl_status_6.setStyleSheet("color: green;")
+                        self.lbl_status_7.setStyleSheet("color: black;")
+                if job_params['status'] == 'finished':
+                    self.lbl_status_7.setStyleSheet("color: green;")
+            except KeyError:
+                logger.debug("job status key(s) not found.")
+                logger.debug(traceback.print_exc())
+                pass
+        else:
+            logger.debug("Job ids do not match. not Updating progress controls.")  
 
-        for item in [self.lbl_status_1,
-                     self.lbl_status_2,
-                     self.lbl_status_3,
-                     self.lbl_status_4,
-                     self.lbl_status_5,
-                     self.lbl_status_6,
-                     self.lbl_status_7]:
-            item.setStyleSheet("color: gray;")
-        try:
-            if job_params['num_tasks_finished']:
-                self.lbl_status_1.setText(f"{job_params['num_tasks_finished']}/{job_params['num_jobs']} tasks finished")
-            if job_params['db_search_started']:
-                self.lbl_status_1.setStyleSheet("color: black;")
-            if job_params['model_1_started']:
-                self.lbl_status_1.setStyleSheet("color: green;")
-                self.lbl_status_2.setStyleSheet("color: black;")
-            if job_params['model_2_started']:
-                self.lbl_status_2.setStyleSheet("color: green;")
-                self.lbl_status_3.setStyleSheet("color: black;")
-            if job_params['model_3_started']:
-                self.lbl_status_3.setStyleSheet("color: green;")
-                self.lbl_status_4.setStyleSheet("color: black;")
-            if job_params['model_4_started']:
-                self.lbl_status_4.setStyleSheet("color: green;")
-                self.lbl_status_5.setStyleSheet("color: black;")
-            if job_params['model_5_started']:
-                self.lbl_status_5.setStyleSheet("color: green;")
-                self.lbl_status_6.setStyleSheet("color: black;")
-            if job_params['evaluation_started']:
-                self.lbl_status_6.setStyleSheet("color: green;")
-                self.lbl_status_7.setStyleSheet("color: black;")
-            if job_params['finished']:
-                self.lbl_status_7.setStyleSheet("color: green;")
-        except KeyError:
-            logger.debug("job status key(s) not found.")
-            pass
+
+
+        #self.job.update_job_status_params(self, job_params)
 
         if 'status' in job_params:
+            logger.debug(f"Status found: {job_params['status']}")
             if job_params['status'] == "aborted":
                 self.job.update_status("aborted", job_params['job_id'], self.sess)
+            elif job_params['status'] == "waiting":
+                self.job.update_status("waiting", job_params['job_id'], self.sess)
             elif job_params['status'] == "running":
                 self.job.update_status("running", job_params['job_id'], self.sess)
+            elif job_params['status'] == "starting":
+                self.job.update_status("starting", job_params['job_id'], self.sess)
                 #self.job.update_pid(job_params['pid'], job_params['job_id'], self.sess)
-                if 'split_job' in job_params and 'queue' in job_params and 'split_job_step' in job_params:
-                    if job_params['queue'] and job_params['split_job'] and job_params['split_job_step'] == 'cpu':
-                        if not job_params['pid'] is None:
-                            logger.debug(f"Submit second step with PID dependency {job_params['pid']}.")
-                            if job_params['pid'] is None:
-                                message_dlg("Error", "Could not get JobID from queue submission command."
-                                                     " Second job cannot be submitted.")
-                            else:
-                                self.jobparams.pipeline.set_value("full")
-                                self.jobparams.pipeline.set_cmb_by_text("full")
-                                self.prepare_and_start_job(job_params['jobs_started'], split_job_step='gpu', queue_pid=job_params['pid'])
-                        else:
+            
+            #Submit second job if split_step option is selected
+            if 'split_job' in job_params and 'queue' in job_params and 'split_job_step' in job_params and 'initial_submit' in job_params:
+                logger.debug("split_job, queue and split_job_step found.")
+                if all([job_params['queue'], job_params['split_job'], job_params['split_job_step'] == 'cpu',
+                         job_params['status'] in ["waiting", "running"], job_params['initial_submit']]):
+                        logger.debug(f"Submit second step with PID dependency {job_params['pid']}.")
+                        if job_params['pid'] is None:
+                            message_dlg("Error", "Could not get JobID from queue submission command."
+                                                    " Second job cannot be submitted.")
                             logger.debug("Failed to submit gpu job because no queue_pid was found.")
-            elif job_params['status'] == "finished":
+                        else:
+                            self.jobparams.pipeline.set_value("full")
+                            self.jobparams.pipeline.set_cmb_by_text("full")
+                            self.prepare_and_start_job(job_params['jobs_started'], split_job_step='gpu', queue_pid=job_params['pid'])
+            if job_params['status'] == "finished":
+                logger.debug(f"Status of {job_params['job_id']} is finished.")
                 self.job.update_status("finished", job_params['job_id'], self.sess)
+                job_params['pairwise_batch_prediction']  = self.jobparams.get_pairwise_batch_prediction(job_params['job_id'], self.sess)
+                job_params['project_id'] = self.job.get_project_id_by_job_id(job_params['job_id'], self.sess)
+                job_params['project_path'] = self.prj.get_path_by_project_id(job_params['project_id'], self.sess)
                 evaluation = self.job.insert_evaluation(self.evaluation, job_params, self.sess)
                 if evaluation:
                     if not self.gui_params['job_id'] is None:
@@ -489,27 +521,28 @@ class MainFrame(QtWidgets.QMainWindow):
                 else:
                     self.notebook.setTabEnabled(2, False)
                     logger.debug("No evaluation report found!")
-            elif job_params['status'] == "error":
-                logger.debug("Status is error")
+            if job_params['status'] == "error":
+                logger.debug(f"Status of job_id {job_params['job_id']} is error")
                 self.job.update_status("error", job_params['job_id'], self.sess)
+            if job_params['status'] == "unknown":
+                self.job.update_status("unknown", job_params['job_id'], self.sess)
+                logger.debug(f"Status of job_id {job_params['job_id']} is unknown")
+                
         else:
             job_params['status'] = 'unknown'
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
-        self.job.update_log(job_params)
+            logger.debug("Status not found in job_params")
+        updated_status = self.job.get_status(job_params['job_id'], self.sess)
+        logger.debug(f"Updated status for {job_params['job_id']} from the DB is {updated_status}")
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        #Only update log if the job id from the thread matches the currently selected job and the Log Tab is selected.
+        
+        self.job.update_log(log_file=log_file, job_id_active=int(self.gui_params['job_id']), job_id_thread=int(job_params['job_id']), append=False)
 
     def OnUpdateLog(self, log):
         lines, job_id = log
         page = self.notebook.currentWidget().objectName()
         logger.debug("Notebook page {} id {} {}".format(page, self.gui_params['job_id'], job_id))
-        if not self.gui_params['job_id'] is None:
-            if int(self.gui_params['job_id']) == int(job_id) and page == "LogTab":
-                for line in lines:
-                    logger.debug(line)
-                    self.job.log.ctrl.appendPlainText(line)
-            else:
-                logger.debug("job id or page not matching")
-        else:
-            logger.debug("no job selected")
+        self.job.update_log(log_lines=lines, job_id_active=int(self.gui_params['job_id']), job_id_thread=job_id, notebook_page=page, append=True)
 
     def OnAbout(self):
         dlg = AboutDlg(self)
@@ -537,11 +570,18 @@ class MainFrame(QtWidgets.QMainWindow):
         self.process_thread.finished.connect(self.process_thread.deleteLater)
         self.process_worker.job_status.connect(self.OnJobStatus)
         self.process_worker.change_tab.connect(self.OnChangeTab)
+        self.process_worker.error.connect(self.OnError)
         self.process_thread.start()
         self.threads.append(self.process_thread)
+        self.thread_workers.append(self.process_worker)
         self.create_monitor_thread(self.job_params)
 
-    def OnBtnRun(self):
+    def OnError(self, msgs):
+        if len(msgs) > 0:
+            for msg in msgs:
+                message_dlg('Error', msg)
+
+    def OnBtnRun(self) -> None:
         jobs_started = 0
         self.prepare_and_start_job(jobs_started, split_job_step=None, queue_pid=None)
 
@@ -559,6 +599,25 @@ class MainFrame(QtWidgets.QMainWindow):
                 #If db_preset is not defined by user set it to full_dbs
                 self.jobparams.set_db_preset()
 
+                #Define which param models to use:
+                model_indices = []
+                if self.jobparams.use_model_1.get_value():
+                    model_indices.append('1')
+                if self.jobparams.use_model_2.get_value():
+                    model_indices.append('2')
+                if self.jobparams.use_model_3.get_value():
+                    model_indices.append('3')
+                if self.jobparams.use_model_4.get_value():
+                    model_indices.append('4')
+                if self.jobparams.use_model_5.get_value():
+                    model_indices.append('5')
+
+                if len(model_indices) == 0:
+                    msg = ("At least one Alphdafold model needs to be selected.")
+                    message_dlg('error', msg)
+                    raise InputError('msg')
+
+                self.jobparams.model_list.set_value(','.join(model_indices))
 
                 #exec_messages = self.settings.check_executables(self.sess)
                 logger.debug("EXEC messages")
@@ -569,6 +628,8 @@ class MainFrame(QtWidgets.QMainWindow):
                 else:
                     #Collect params from GUI and return as dict
                     job_params = self.jobparams.get_dict_run_job()
+                    #Extend with status dict
+                    job_params['task_status'] = self.job.get_status_dict()
 
                     #Prepare objects for DB insert
 
@@ -599,6 +660,9 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug(job_params['pipeline'])
                     logger.debug(split_job_step)
 
+                    if job_params['pipeline'] == 'batch_msas':
+                        self.jobparams.prediction.set_value('alphafold')
+                        job_params['prediction'] = 'alphafold'
                     if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
                         self.jobparams.pairwise_batch_prediction.set_value(True)
                         job_params['pairwise_batch_prediction'] = True
@@ -651,11 +715,12 @@ class MainFrame(QtWidgets.QMainWindow):
                     job_params['job_project_id'] = self.job.job_project_id.get_value()
                     #Job folder name
                     job_params['job_dir'] = self.job.get_job_dir(job_params['job_name'])
+                    #Project path
+                    job_params['project_path'] = self.gui_params['project_path']
                     #Full path to job folder
                     job_params['output_dir'] = job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
                                                                    job_params['job_dir'])
-                    job_params['log_file'] = self.job.build_log_file_path(self.gui_params['project_path'],
-                                                                   job_params['job_name'], job_params['type'])
+                    job_params['log_file'] = self.job.build_log_file_path(job_params['job_name'], job_params['type'])
                     #Full path to results folder created by AF inside job folder
                     if job_params['pairwise_batch_prediction']:
                         job_params['results_path'] = job_params['job_path']
@@ -664,19 +729,26 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 
+                    #Check if job name is too long
+                    if len(job_params['job_name']) > 100:
+                        msg = 'Job name is too long. Please choose a shorter one.'
+                        message_dlg('error', msg)
+                        raise InputError(msg)
+
                     if os.path.exists(job_params['job_path']):
+                        #Only show the warnings for the first step in case of split_job
                         if not split_job_step == 'gpu':
                             if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
                                 pc_msa_paths = self.jobparams.precomputed_msas_list.get_value().split(',') + [self.jobparams.precomputed_msas_path.get_value()]
                                 pc_msa_paths = [x for x in pc_msa_paths if not x is None]
                                 logger.debug(pc_msa_paths)
-                                if any([re.match(job_params['output_dir'], item) for item in pc_msa_paths]):
+                                if any([re.match(job_params['output_dir'], item) for item in pc_msa_paths if not re.search('batch_msas', item)]):
                                     message_dlg('error', 'One or more precomputed MSAs are from the current folder.'
                                                          ' Please select a new Job Name.')
                                     raise PrecomputedMSAConflict("One or more precomputed MSAs are from the current folder.")
                             else:
                                 message = "Output directory already exists. Click \"Yes\" if you want to continue from existing MSAs or \"No\" " \
-                                          "if existing MSAs should be recalculated. Existing model files will be overwritten in any case."
+                                          "if existing MSAs should be recalculated."
                                 ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
                                                                      QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
                                 if ret == QtWidgets.QMessageBox.Cancel:
@@ -687,6 +759,18 @@ class MainFrame(QtWidgets.QMainWindow):
                                     job_params['use_precomputed_msas'] = False
                     else:
                         os.mkdir(job_params['job_path'])
+
+                    #Check if mmseqs_api is selected and give warning notice
+                    if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
+                        if job_params['pipeline'] in ['first_vs_all', 'all_vs_all']:
+                            message = "You selected the colabfold_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
+                        else:
+                            message = "You selected the colabfold_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
+                        ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel)
+                        if ret == QtWidgets.QMessageBox.Cancel:
+                            raise JobSubmissionCancelledByUser
+
 
                     #Check if features.pkl exists when continue_from_features selected
                     if job_params['pipeline'] == 'continue_from_features' and not split_job_step == 'gpu':
@@ -728,23 +812,45 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     #Check input for pairwise prediction protocols
                     if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                        batch_msas_path = os.path.join(job_params['project_path'], job_params['job_name'], job_params['job_name'], 'batch_msas')
+                        if os.path.exists(batch_msas_path) and not self.jobparams.precomputed_msas_path.is_set():
+                            logger.debug(f"batch msa folder found: {batch_msas_path} ")
+                            self.jobparams.precomputed_msas_path.set_value(batch_msas_path)
+                            self.jobparams.precomputed_msas_path.ctrl.setText(batch_msas_path)
+                        else:
+                            logger.debug(f"No batch msa folder found: {batch_msas_path}")
                         if not self.jobparams.precomputed_msas_path.is_set():
                             msg =  'Pairwise combinatorial prediction requires precomputed MSAs (e.g. from batch_msas job).'
                             message_dlg('error', msg) 
                             raise InputError(msg)
                         if not job_params['prediction'] == 'fastfold':
-                            msg = 'Pairwise combinatorial prediction requires fastfold to be selected as prediction method.'
-                            message_dlg('error', msg) 
-                            raise InputError(msg)
+                            message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
+                            ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
+                            if ret == QtWidgets.QMessageBox.Cancel:
+                                raise JobSubmissionCancelledByUser
+                            elif ret == QtWidgets.QMessageBox.Yes:
+                                job_params['prediction'] = "fastfold"
+                                self.jobparams.prediction.set_value("fastfold")
+                                self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
+                    #Change Log display for batch jobs
+                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all', 'batch_msas']:
                         if job_params['pipeline'] == 'all_vs_all':
                             len_seqs = len(sequences)
                             num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
                         elif job_params['pipeline'] == 'first_vs_all':
+                            len_seqs = len(sequences)
                             num_jobs = len_seqs
+                        elif self.jobparams.pipeline.get_value() == 'batch_msas':
+                            num_jobs = len(sequences)
                         num_jobs = int(num_jobs)
                         job_params['num_jobs'] = num_jobs
-                        message = f"This will start a batch prediction job with {num_jobs} tasks. Continue?"
+                        if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                            placeholder = 'predictoin'
+                        else:
+                            placeholder = 'feature'
+                        message = f"This will start a batch {placeholder} job with {num_jobs} tasks. Continue?"
                         ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
                                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
                         if ret == QtWidgets.QMessageBox.No:
@@ -838,7 +944,24 @@ class MainFrame(QtWidgets.QMainWindow):
                             raise QueueSubmitError("Queue submit command not found")
                         else:
                             job_params['queue_submit'] = settings.queue_submit
-                    job_params['total_seqlen'] = sum([len(s) for s in sequences])
+                    if job_params['pipeline'] == 'first_vs_all':
+                        seq_len_list = []
+                        for i, seq in enumerate(sequences):
+                            if i == 0:
+                                len_seq1 = len(seq)
+                                seq_len_list.append(len_seq1 + len_seq1)
+                            else:
+                                len_seq = len(seq)
+                                seq_len_list.append(len_seq + len_seq1)
+                        job_params['total_seqlen'] = max(seq_len_list)
+                    elif job_params['pipeline'] == 'all_vs_all':
+                        seq_len_list = []
+                        for seq1 in sequences:
+                            for seq2 in sequences:
+                                seq_len_list.append(len(seq1) + len(seq2))
+                        job_params['total_seqlen'] = max(seq_len_list)
+                    else:
+                        job_params['total_seqlen'] = sum([len(s) for s in sequences])
                     logger.debug(f"Number of amino acids: {job_params['total_seqlen']}")
                     job_params['multimer'] = True if len(sequences) > 1 else False
                     logger.debug(job_params)
@@ -848,7 +971,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
 
                     #Clear contents of file if it already exists
-                    with open(job_params['log_file'], 'w'):
+                    with open(os.path.join(job_params['job_path'], job_params['log_file']), 'w'):
                         pass
 
 
@@ -875,8 +998,8 @@ class MainFrame(QtWidgets.QMainWindow):
                             del cmd_dict['chunk_size']
                         if 'inplace' in cmd_dict:
                             del cmd_dict['inplace']
-                    if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
-                        del cmd_dict['chunk_size']
+                    #if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
+                    #    del cmd_dict['chunk_size']
                     if 'use_precomputed_msas' in job_params:
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""
@@ -897,9 +1020,23 @@ class MainFrame(QtWidgets.QMainWindow):
                         del cmd_dict['uniref30_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
                         del cmd_dict['colabfold_envdb_database_path']
-                    if job_params['db_preset'] == 'colabfold':
+                    if job_params['db_preset'] == 'colabfold_local':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_database_path']
+                    if job_params['db_preset'] == 'colabfold_web':
+                        del cmd_dict['small_bfd_database_path']
+                        del cmd_dict['uniref30_database_path']
+                        del cmd_dict['uniref30_mmseqs_database_path']
+                        del cmd_dict['colabfold_envdb_database_path']
+                    #In case list-like strings contain only None remove them from the command
+                    if not self.jobparams.no_msa_list.list_like_str_not_all_false() and 'no_msa_list' in cmd_dict:
+                        del cmd_dict['no_msa_list']
+                    if not self.jobparams.no_template_list.list_like_str_not_all_false() and 'no_template_list' in cmd_dict:
+                        del cmd_dict['no_template_list']
+                    if not self.jobparams.custom_template_list.list_like_str_not_all_none() and 'custom_template_list' in cmd_dict:
+                        del cmd_dict['custom_template_list']
+                    if not self.jobparams.precomputed_msas_list.list_like_str_not_all_none() and 'precomputed_msas_list' in cmd_dict:
+                        del cmd_dict['precomputed_msas_list']
 
                     logger.debug(job_params['force_cpu'])
                     logger.debug(cmd_dict)
@@ -909,14 +1046,15 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Prepare command to run alphafold
                     self.job_params = job_params
                     if job_params['split_job'] and job_params['queue']:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
                     else:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict)
 
                     for msg in error_msgs:
                         logger.debug(msg)
                         message_dlg('Error', msg)
                         raise PrepareCMDError(msg)
+                    
                     for msg in warn_msgs:
                         ret = QtWidgets.QMessageBox.question(self, 'Warning',
                                                              msg,
@@ -943,6 +1081,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     self.start_thread(job_params, cmd)
 
             except Exception:
+                logging.debug("Exception in start job")
                 job_params['status'] = 'error'
                 self.OnJobStatus(job_params)
                 traceback.print_exc()
@@ -953,7 +1092,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
     def OnChangeTab(self):
         self.notebook.setCurrentIndex(1)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnBtnCancel(self):
         if self.gui_params['job_id'] is None:
@@ -972,8 +1111,8 @@ class MainFrame(QtWidgets.QMainWindow):
                     try:
                         Popen(cmd)
                         self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
-                        self.job.init_gui(self.gui_params, self.sess)
-                        self.job.update_log(self.gui_params)
+                        self.job.init_gui(self.gui_params, sess=self.sess)
+                        self.job.update_log(os.path.join(self.job_params['job_path'], self.gui_params['log_file']), int(self.gui_params['job_id']), append=False)
                     except:
                         cmd = ' '.join(cmd)
                         message_dlg('Error', f'Cannot cancel job. The command was {cmd}!')
@@ -992,8 +1131,8 @@ class MainFrame(QtWidgets.QMainWindow):
                     os.killpg(int(pid), signal.SIGINT)
                     os.killpg(int(pid), signal.SIGTERM)
                     self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
-                    self.job.init_gui(self.gui_params, self.sess)
-                    self.job.update_log(self.gui_params)
+                    self.job.init_gui(self.gui_params, sess=self.sess)
+                    self.job.update_log(os.path.join(self.job_params['job_path'], self.gui_params['log_file']), int(self.gui_params['job_id']), append=False)
                 except (TypeError, ProcessLookupError):
                     message_dlg('Error', 'No process ID found for this job!')
                 except Exception as e:
@@ -1022,7 +1161,7 @@ class MainFrame(QtWidgets.QMainWindow):
             self.gui_params['project_id'] = new_project_id
             self.gui_params['project_path'] = self.prj.get_path_by_project_id(new_project_id, self.sess)
             self.gui_params['other_settings_changed'] = False
-            self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+            self.gui_params = self.job.init_gui(self.gui_params, reset=True, sess=self.sess)
 
     def OnCmbCombinations(self):
         combination_name = str(self.evaluation.pairwise_combinations_list.ctrl.currentText())
@@ -1030,56 +1169,108 @@ class MainFrame(QtWidgets.QMainWindow):
         logger.debug(f"Combination name: {self.gui_params['selected_combination_name']}")
         self.gui_params = self.evaluation.init_gui(self.gui_params, self.sess)
 
-    def OnLstJobSelected(self):
-        self.btn_jobparams_advanced_settings.setEnabled(True)
-        self.tb_run.setEnabled(True)
-        index = int(self.job.list.ctrl.currentRow())
-        logger.debug(f"OnLstJobSelected index {index}")
-        logger.debug(self.job.list.ctrl.item(index, 0).text())
-        self.gui_params['job_project_id'] = self.job.list.ctrl.item(index, 0).text()
-        logger.debug(f"Job project id {self.gui_params['job_project_id']} project id {self.gui_params['project_id']}")
-        self.gui_params['job_id'] = self.job.get_job_id_by_job_project_id(self.gui_params['job_project_id'],
-                                                                          self.gui_params['project_id'],
-                                                                          self.sess)
-        logger.debug(f"{self.gui_params['job_id']}")
-        self.gui_params['job_name'] = self.jobparams.get_name_by_job_id(self.gui_params['job_id'],
-                                                                              self.sess)
-        self.gui_params['job_dir'] = self.job.get_job_dir(self.gui_params['job_name'])
-        self.gui_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
-                                                            self.gui_params['job_dir'])
-        self.gui_params['log_file'] = self.job.get_log_file(self.gui_params['job_id'],
-                                                            self.sess)
-        self.gui_params['pairwise_batch_prediction'] = self.jobparams.get_pairwise_batch_prediction(self.gui_params['job_id'], self.sess)
-        if self.gui_params['pairwise_batch_prediction']:
-            self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'])
-        else:
-            self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
-        self.gui_params['other_settings_changed'] = True
-        result = self.jobparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
-        self.jobparams.update_from_db(result)
+    def OnCmbPipeline(self):
+        pipeline_name = self.jobparams.pipeline.ctrl.currentText()
+        if pipeline_name in ['first_vs_all', 'all_vs_all']:
+            #self.jobparams.prediction.ctrl.setCurrentText('fastfold')
+            self.jobparams.prediction.set_value('fastfold')
+            #self.jobparams.num_recycle.ctrl.setCurrentText('3')
+            self.jobparams.num_recycle.set_value('3')
+        if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all']:
+            #self.jobparams.force_cpu.ctrl.setChecked(False)
+            self.jobparams.force_cpu.set_value(False)
 
-        exit_code, status_dict = self.job.get_job_status(self.gui_params['log_file'])
-        self.gui_params.update(status_dict)
-        self.gui_params['status'] = self.job.get_status(self.gui_params['job_id'], self.sess)
-        self.gui_params['pid'] = self.job.get_pid(self.gui_params['job_id'], self.sess)
-        self.gui_params['queue'] = self.jobparams.queue.get_value()
-        self.OnJobStatus(self.gui_params)
-        self.job.update_log(self.gui_params)
-        self.job.insert_evaluation(self.evaluation, self.gui_params, self.sess)
-        logger.debug(self.gui_params['pairwise_batch_prediction'])
-        if self.evaluation.check_exists(self.gui_params['job_id'], self.sess) or self.gui_params['pairwise_batch_prediction']:
-            self.notebook.setTabEnabled(2, True)
-            self.evaluation.init_gui(self.gui_params, self.sess)
-        else:
-            self.notebook.setTabEnabled(2, False)
-            logger.debug("No evaluation found for this job")
+    def OnLstJobSelected(self, item):
+        #index = int(self.job.list.ctrl.currentRow())
+        #model = self.job.list.ctrl.model()
+        #model_index = model.index(index.row(), 0:
+        job_project_id = item.text(2)
+        if job_project_id:
+            self.gui_params['job_project_id'] = job_project_id
+            self.btn_jobparams_advanced_settings.setEnabled(True)
+            self.tb_run.setEnabled(True)
+            self.gui_params['job_project_id'] = job_project_id
+            #logger.debug(f"OnLstJobSelected index {index}")
+            logger.debug(f"job_project_id: {self.gui_params['job_project_id']}")
+            #logger.debug(self.job.list.ctrl.item(index, 0).text())
+            #self.gui_params['job_project_id'] = self.job.list.ctrl.item.text()#(index, 0).text()
+            logger.debug(f"Job project id {self.gui_params['job_project_id']} project id {self.gui_params['project_id']}")
+            self.gui_params['job_id'] = self.job.get_job_id_by_job_project_id(self.gui_params['job_project_id'],
+                                                                            self.gui_params['project_id'],
+                                                                            self.sess)
+            logger.debug(f"{self.gui_params['job_id']}")
+            self.gui_params['job_name'] = self.jobparams.get_name_by_job_id(self.gui_params['job_id'],
+                                                                                self.sess)
+            self.gui_params['job_dir'] = self.job.get_job_dir(self.gui_params['job_name'])
+            self.gui_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
+                                                                self.gui_params['job_dir'])
+            self.gui_params['log_file'] = self.job.get_log_file(self.gui_params['job_id'],
+                                                                self.sess)
+            self.gui_params['pairwise_batch_prediction'] = self.jobparams.get_pairwise_batch_prediction(self.gui_params['job_id'], self.sess)
+            if self.gui_params['pairwise_batch_prediction']:
+                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'])
+            else:
+                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
+            self.gui_params['other_settings_changed'] = True
+            #Get job params from DB
+            result = self.jobparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
+            #Update job params
+            self.jobparams.update_from_db(result)
+            self.gui_params = self.job.get_job_status_from_log(self.gui_params)
+            logger.debug("Task params after update:")
+            logger.debug(self.gui_params['task_status'])
+            logger.debug(self.gui_params['status'])
+            self.gui_params['status'] = self.job.get_status(self.gui_params['job_id'], self.sess)
+            self.gui_params['pid'] = self.job.get_pid(self.gui_params['job_id'], self.sess)
+            self.gui_params['queue'] = self.jobparams.queue.get_value()
+            self.OnJobStatus(self.gui_params)
+            #self.job.update_log(self.gui_params['log_file'], int(self.gui_params['job_id']), append=False)
+            self.job.insert_evaluation(self.evaluation, self.gui_params, self.sess)
+            logger.debug(self.gui_params['pairwise_batch_prediction'])
+            #Display evaluation tab only if evaluation exists
+            if self.evaluation.check_exists(self.gui_params['job_id'], self.sess) or self.gui_params['pairwise_batch_prediction']:
+                self.notebook.setTabEnabled(2, True)
+                self.evaluation.init_gui(self.gui_params, self.sess)
+            else:
+                self.notebook.setTabEnabled(2, False)
+                logger.debug("No evaluation found for this job")
+            #Get num jobs
+            sequences = self.jobparams.parse_fasta(self.jobparams.fasta_path.get_value())
+            if self.jobparams.pipeline.get_value() == 'all_vs_all':
+                len_seqs = len(sequences)
+                num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
+            elif self.jobparams.pipeline.get_value() == 'first_vs_all':
+                len_seqs = len(sequences)
+                num_jobs = len_seqs
+            elif self.jobparams.pipeline.get_value() == 'batch_msas':
+                num_jobs = len(sequences)
+            #Change progress display
+            if self.jobparams.pipeline.get_value() in ['all_vs_all', 'first_vs_all', 'batch_msas']:
+                for item in [self.lbl_status_2,
+                            self.lbl_status_3,
+                            self.lbl_status_4,
+                            self.lbl_status_5,
+                            self.lbl_status_6,
+                            self.lbl_status_7]:
+                            item.setHidden(True)
+                self.lbl_status_1.setText(f"{self.gui_params['task_status']['num_tasks_finished']}/{num_jobs} tasks finished")
+            else:
+                #Reset labels in case they were changed/hidden by a previous job
+                for item in [self.lbl_status_2,
+                    self.lbl_status_3,
+                    self.lbl_status_4,
+                    self.lbl_status_5,
+                    self.lbl_status_6,
+                    self.lbl_status_7]:
+                    item.setHidden(False)
+                self.lbl_status_1.setText('Feature generation')
 
     def OnJobContextMenu(self, pos):
         item = self.job.list.ctrl.itemAt(pos)
         if not item is None:
             menu = QtWidgets.QMenu()
-            job_project_id = self.job.list.ctrl.item(item.row(), 0).text()
-            job_name = self.job.list.ctrl.item(item.row(), 1).text()
+            job_project_id = item.text(2)
+            job_name = item.text(1)
             job_id = self.job.get_job_id_by_job_project_id(job_project_id, self.gui_params['project_id'], self.sess)
             job_dir = self.job.get_job_dir(job_name)
             project_path = self.prj.get_path_by_project_id(self.gui_params['project_id'], self.sess)
@@ -1102,24 +1293,25 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnDeleteEntry(self, job_id):
         logger.debug(f"OnDeleteEntry. Job id {job_id}")
         self.job.delete_job(job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnDeleteEntryFiles(self, job_id, job_path):
         self.job.delete_job_files(job_id, job_path, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnStatusRunning(self, job_id):
         self.job.update_status("running", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnStatusFinished(self, job_id):
         self.job.update_status("finished", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 
     def OnBtnPrjAdd(self):
         dlg = ProjectDlg(self, "add")
         dlg.exec()
         self.gui_params = self.prj.init_gui(self.gui_params, self.sess)
+        self.OnBtnClear()
         logger.debug("PrjAdd button pressed")
 
     def OnBtnPrjRemove(self):
@@ -1171,7 +1363,7 @@ class MainFrame(QtWidgets.QMainWindow):
                 error = f"Could not open {model_viewer}. Check if it is in your PATH."
                 logger.error(error)
                 message_dlg('Error', error)
-                traceback.print_exc()
+                logger.debug(traceback.print_exc())
         else:
             logger.debug('results_path not in gui_params')
 
@@ -1180,11 +1372,17 @@ class MainFrame(QtWidgets.QMainWindow):
             results_html = os.path.join(self.gui_params['results_path'], "results_model_viewer.html")
             if os.path.exists(results_html):
                 url = QUrl(f'file://{results_html}')
-                QDesktopServices.openUrl(url)
+                try:
+                    QDesktopServices.openUrl(url)
+                except:
+                    error =  f"Could not open {results_html} in an external browser. Maybe a default browser is not set."
+                    logger.error(error)
+                    message_dlg('Error', error)
+                    logger.debug(traceback.print_exc())
             else:
-                logger.debug('Results path does not exist')
+                logger.error(f'Results path {results_html} does not exist')
         else:
-            logger.debug('results_path not in gui_params')
+            logger.error('results_path not in gui_params')
 
 
     def OnOpenResultsFolder(self):
@@ -1194,12 +1392,18 @@ class MainFrame(QtWidgets.QMainWindow):
                     qfile = QUrl.fromLocalFile(
                         self.gui_params['results_path'])
                     logger.debug(qfile)
-                    QDesktopServices.openUrl(qfile)
+                    try:
+                        QDesktopServices.openUrl(qfile)
+                    except:
+                        error = f"Could not open {self.gui_params['results_path']} in a file manager. Maybe a default file manager is not set"
+                        logger.error(error)
+                        message_dlg('Error', error)
+                        logger.debug(traceback.print_exc())
                 else:
-                    logger.debug('Results path does not exist')
+                    logger.error(f"Results path {self.gui_params['results_path']} does not exist")
 
             else:
-                logger.debug('results_path not in gui_params')
+                logger.error('results_path not in gui_params')
 
 
     def OnClearLog(self):
@@ -1216,6 +1420,20 @@ class MainFrame(QtWidgets.QMainWindow):
         self.jobparams.init_gui(self.gui_params, self.sess)
         self.init_gui()
 
+
+    def OnItemExpanded(self, item):
+        # Item expanded
+        fields = [item.text(column) for column in range(item.columnCount())]
+        job_name = fields[0]
+        logger.debug(f"Item expanded: {job_name}")
+        self.job.update_tree_item_expanded(job_name, self.gui_params['project_id'], True, self.sess)
+
+    def OnItemCollapsed(self, item):
+        # Item collapsed
+        fields = [item.text(column) for column in range(item.columnCount())]
+        job_name = fields[0]
+        logger.debug(f"Item collapsed: {job_name}")
+        self.job.update_tree_item_expanded(job_name, self.gui_params['project_id'], False, self.sess)
 
 if __name__ == "__main__":
     main()

@@ -9,6 +9,7 @@ patch -p0 < $base_dir/GUIFold/alphafold/docker/openmm.patch && \
 cd $base_dir && \
 git clone https://github.com/hpcaitech/FastFold.git && \
 cd FastFold && \
+git checkout add_iptm_in_heads && \
 python setup.py install && \
 cd $base_dir && \
 cd GUIFold && \

@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 6
+DB_REVISION = 8
 
 def get_type(type):
     types = {'str': String,
@@ -48,7 +48,7 @@ class DBMigration:
 
 
 class DBHelper:
-    def __init__(self, shared_objects, db_path):
+    def __init__(self, shared_objects, db_path) -> None:
         self.shared_objects = shared_objects
         #self.add_attr(self.job)
         #self.add_attr(self.prj)
@@ -58,7 +58,7 @@ class DBHelper:
         name = '.'.join([__name__, self.__class__.__name__])
         self.logger = logging.getLogger(name)
 
-    def init_db(self):
+    def init_db(self) -> None:
         self.reflect_tables()
         self.create_tables()
         self.conn = None
@@ -67,7 +67,7 @@ class DBHelper:
         self.sess = None
 
 
-    def reflect_tables(self):
+    def reflect_tables(self) -> None:
         """
         Create tables classes from shared object names and attributes.
         name = Name of the Table Object, e.g. Job, Project, etc.
@@ -149,14 +149,8 @@ class DBHelper:
             for obj in objs:
                 setattr(self.__dict__[name.capitalize()], obj[0], obj[1])
         logger.debug("adding relationships")
-
-
-
         self.Base.prepare(self.engine, reflect=True)
-
-
         logger.debug(self.__dict__)
-
 
     def create_tables(self):
         """
@@ -166,7 +160,6 @@ class DBHelper:
         self.metadata.create_all(self.engine, checkfirst=True)
         for _class in self.Base.classes:
             logger.debug(_class)
-
 
     def set_session(self, session):
         session = self.Session()
@@ -185,8 +178,6 @@ class DBHelper:
             raise
         finally:
             self.Session.remove()
-
-
 
     def backup_db(self, db_path):
         prev_db_revision = DB_REVISION - 1
@@ -281,11 +272,19 @@ class DBHelper:
         #Add FastFold parameters
         stmts += ['ALTER TABLE jobparams ADD COLUMN prediction VARCHAR DEFAULT "alphafold"']
         stmts += ['ALTER TABLE jobparams ADD COLUMN num_gpu INTEGER DEFAULT(1)']
-        stmts += ['ALTER TABLE jobparams ADD COLUMN chunk_size INTEGER DEFAULT(1)']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN chunk_size INTEGER DEFAULT(0)']
         stmts += ['ALTER TABLE jobparams ADD COLUMN inplace BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE settings RENAME COLUMN num_cpus TO num_cpu']
         stmts += ['ALTER TABLE settings ADD num_cpu INTEGER DEFAULT(20)']
         stmts += ['ALTER TABLE jobparams ADD COLUMN pairwise_batch_prediction BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE job ADD COLUMN tree_item_expanded BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_1 BOOLEAN DEFAULT TRUE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_2 BOOLEAN DEFAULT TRUE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_3 BOOLEAN DEFAULT TRUE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_4 BOOLEAN DEFAULT TRUE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_5 BOOLEAN DEFAULT TRUE']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN model_list VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE job ADD COLUMN active BOOLEAN DEFAULT FALSE']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

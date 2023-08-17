@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1210</width>
-    <height>787</height>
+    <height>815</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -47,7 +47,7 @@
             </font>
            </property>
            <property name="currentIndex">
-            <number>2</number>
+            <number>0</number>
            </property>
            <property name="tabBarAutoHide">
             <bool>false</bool>
@@ -284,14 +284,14 @@
                     <item>
                      <widget class="QLabel" name="label_2">
                       <property name="text">
-                       <string>DB preset</string>
+                       <string>Feature pipeline</string>
                       </property>
                      </widget>
                     </item>
                     <item>
                      <widget class="QComboBox" name="cmb_jobparams_db_preset">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DB preset:&lt;/p&gt;&lt;p&gt;full_dbs: Run HHblits on uniref30 and bfd databses, jackhmmer on uniref90 and mgnify databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;reduced_dbs: Run jackhmmer on smaller bfd, mgnify, and uniref90 databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;colabfold: Run MMseqs on uniref30 and colabfold_envdb, jackhmmer on uniref90 database.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DB preset:&lt;/p&gt;&lt;p&gt;full_dbs: Run HHblits on uniref30 and bfd databses, jackhmmer on uniref90 and mgnify databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;reduced_dbs: Run jackhmmer on smaller bfd, mgnify, and uniref90 databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;colabfold_local: Run local MMseqs2 on uniref30 and colabfold_envdb, jackhmmer on uniref90 database.&lt;/p&gt;&lt;p&gt;colabfold_web: Run MMseqs2 through Colabfold API (https://www.colabfold.com) on uniref30 and colabfold_envdb, jackhmmer on uniref90 database.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                      </widget>
                     </item>
@@ -302,7 +302,7 @@
                     <item>
                      <widget class="QLabel" name="label_4">
                       <property name="text">
-                       <string>Pipeline</string>
+                       <string>Workflow</string>
                       </property>
                      </widget>
                     </item>
@@ -320,7 +320,7 @@
                     <item>
                      <widget class="QLabel" name="label_5">
                       <property name="text">
-                       <string>Prediction</string>
+                       <string>Prediction pipeline</string>
                       </property>
                      </widget>
                     </item>
@@ -735,7 +735,13 @@
              </property>
              <layout class="QVBoxLayout" name="verticalLayout_6">
               <item>
-               <widget class="QTableWidget" name="tbl_job_list"/>
+               <widget class="QTreeWidget" name="tre_job_list">
+                <column>
+                 <property name="text">
+                  <string notr="true">1</string>
+                 </property>
+                </column>
+               </widget>
               </item>
              </layout>
             </widget>

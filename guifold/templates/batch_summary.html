@@ -24,7 +24,7 @@
             <h2>pTM</h2>
 
             <table border = "1">
-                {% for protein_names, ptm, model_name in min_ptm_list %}
+                {% for score in scores %}
                 {% if loop.index == 1 %}
                 <tr>
                     <th>Combination</th>
@@ -34,9 +34,9 @@
                 {% endif %}
 
                 <tr id="ptm-table-{{loop.index}}">
-                    <td>{{protein_names}}</td>
-                    <td>{{model_name}}</td>
-                    <td>{{ptm}}</td>
+                    <td>{{score['protein_names']}}</td>
+                    <td>{{score['min_ptm_model_name']}}</td>
+                    <td>{{score['min_ptm_value']}}</td>
                 </tr>
                 {% endfor %}
             </table>
@@ -44,7 +44,7 @@
             <h2>ipTM</h2>
 
             <table border = "1">
-                {% for protein_names, iptm, model_name in min_iptm_list %}
+                {% for score in scores %}
                 {% if loop.index == 1 %}
                 <tr>
                     <th>Combination</th>
@@ -54,9 +54,9 @@
                 {% endif %}
 
                 <tr id="iptm-table-{{loop.index}}">
-                    <td>{{protein_names}}</td>
-                    <td>{{model_name}}</td>
-                    <td>{{iptm}}</td>
+                    <td>{{score['protein_names']}}</td>
+                    <td>{{score['min_iptm_model_name']}}</td>
+                    <td>{{score['min_iptm_value']}}</td>
                 </tr>
                 {% endfor %}
             </table>
@@ -64,7 +64,7 @@
             <h2>Best inter-PAE</h2>
 
             <table border = "1">
-                {% for protein_names, model_name, pae in min_inter_pae_list %}
+                {% for score in scores %}
                 {% if loop.index == 1 %}
                 <tr>
                     <th>Combination</th>
@@ -74,9 +74,9 @@
                 {% endif %}
 
                 <tr id="pae-table-{{loop.index}}">
-                    <td>{{protein_names}}</td>
-                    <td>{{model_name}}</td>
-                    <td>{{pae}}</td>
+                    <td>{{score['protein_names']}}</td>
+                    <td>{{score['min_pae_model_name']}}</td>
+                    <td>{{score['min_pae_value']}}</td>
                 </tr>
                 {% endfor %}
             </table>

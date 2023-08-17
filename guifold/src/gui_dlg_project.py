@@ -83,8 +83,9 @@ class ProjectDlg(QtWidgets.QDialog):
         elif not os.path.exists(self.prj.path.get_value()):
             message_dlg('Error', 'Selected folder does not exist!')
         else:
-            if self.prj.check_if_exists(self.prj.name.value, self.sess):
+            if self.prj.check_if_exists(self.prj.name.value, self.sess) and not self.mode == 'update':
                 message_dlg('Error', 'Project name already exists!')
+                logger.debug(f"mode is {self.mode}")
             else:
                 if self.mode == 'add':
                     logger.debug("Adding project.")

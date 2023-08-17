@@ -14,6 +14,7 @@
 #
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
+import json
 import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.gridspec as gridspec
@@ -32,6 +33,9 @@ from jinja2 import Template, Environment, FileSystemLoader
 import pickle
 import re
 import typing
+
+import jax
+import jax.numpy as jnp
 
 
 
@@ -59,14 +63,14 @@ class EvaluationPipeline:
         self.seq_titles = seq_titles
         seq_len_dict = self.get_sequence_len(input_sequences)
         indices = self.get_indices(seq_len_dict)
-        pickle_path = os.path.join(self.results_dir, 'results.pickle')
+        results_pickle_path = os.path.join(self.results_dir, 'results.pkl')
 
         if len(input_sequences) > 1:
             multimer = True
 
-        if not os.path.exists(pickle_path) or not self.continue_from_existing_results:
+        if not os.path.exists(results_pickle_path) or not self.continue_from_existing_results:
             for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
-                                     if x.startswith("result_model") and x.endswith(".pkl")]):
+                                     if x.startswith("result_") and x.endswith(".pkl")]):
                 if not i > 6:
                     logging.debug(mdl)
                     with open(mdl, 'rb') as f:
@@ -100,9 +104,6 @@ class EvaluationPipeline:
             logging.debug(pae_list)
             logging.debug("Check none:")
             logging.debug(self.check_none(pae_list))
-            print("IPTM")
-            print(iptm_list)
-            print(ptm_list)
             if multimer:
                 if not self.check_none(pae_list):
                     pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
@@ -123,6 +124,8 @@ class EvaluationPipeline:
             plddt_list = sorted(plddt_list, key=lambda x: x[0], reverse=True)
             if not iptm_list is None:
                 if not self.check_none(iptm_list):
+                    logging.info("Sorting iptm list")
+                    logging.info(iptm_list)
                     iptm_list = sorted(iptm_list, key=lambda x: x[0], reverse=True)
                 else:
                     iptm_list = None
@@ -131,14 +134,14 @@ class EvaluationPipeline:
                     ptm_list = sorted(ptm_list, key=lambda x: x[0], reverse=True)
                 else:
                     ptm_list = None
-            with open(pickle_path, 'wb') as handle:
+            with open(results_pickle_path, 'wb') as handle:
                 pickle.dump((plddt_list, average_pae, iptm_list, ptm_list), handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
             try:
-                with open(pickle_path, 'rb') as handle:
+                with open(results_pickle_path, 'rb') as handle:
                     plddt_list, average_pae, iptm_list, ptm_list = pickle.load(handle)
             except ValueError:
-                with open(pickle_path, 'rb') as handle:
+                with open(results_pickle_path, 'rb') as handle:
                     plddt_list, average_pae = pickle.load(handle)
                     iptm_list, ptm_list = None, None
             if self.check_none(average_pae):
@@ -171,15 +174,15 @@ class EvaluationPipeline:
         templates_path = pkg_resources.resource_filename("guifold", "templates")
         pae_examples_path = pkg_resources.resource_filename("guifold", "images/pae_examples.png")
         logging.debug(templates_path)
+
+        ### Make MSA coverage plot
+        msa_coverage_path = self.msa_coverage()
+        
+        ### Render template
         env = Environment(loader=FileSystemLoader(templates_path))
         template = env.get_template('results.html')
-
-        logging.debug(plddt_list)
         if no_pae:
             average_pae = None
-        print("PTM IPTM")
-        print(iptm_list)
-        print(ptm_list)
         rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
@@ -191,11 +194,13 @@ class EvaluationPipeline:
                                    templates_path=templates_path,
                                    multimer=multimer,
                                    pae_examples_path=pae_examples_path,
-                                   use_model_viewer=False)
+                                   msa_coverage_path=msa_coverage_path,
+                                   use_model_viewer=False,
+                                   )
 
         html_path = os.path.join(self.results_dir, "results.html")
-        with open(html_path, "w") as fout:
-            fout.write(rendered)
+        with open(html_path, "w") as f_out:
+            f_out.write(rendered)
         rendered = template.render(pae_results=average_pae,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
@@ -207,12 +212,53 @@ class EvaluationPipeline:
                                    templates_path=templates_path,
                                    multimer=multimer,
                                    pae_examples_path=pae_examples_path,
+                                   msa_coverage_path=msa_coverage_path,
                                    use_model_viewer=True)
         html_path = os.path.join(self.results_dir, "results_model_viewer.html")
-        with open(html_path, "w") as fout:
-            fout.write(rendered)
+        with open(html_path, "w") as f_out:
+            f_out.write(rendered)
+        self.save_confidence_json(pkl_data)
         #plt.tight_layout()
         logging.info(f"Finished. Results written to {self.results_dir}.")
+
+    def msa_coverage(self):
+        """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py 
+        and https://github.com/jasperzuallaert/VIBFold/blob/main/visualize_alphafold_results.py"""
+        try:
+            feature_dict = pickle.load(open(os.path.join(self.results_dir, "features.pkl"), 'br'))
+        except OSError:
+            raise SystemExit(f"Feature file {self.output_dir}/features.pkl not found")
+
+        #Get subunit boundaries
+        subunits, num_residues = np.unique(feature_dict['asym_id'], return_counts=True)
+        cumulative_num_residues = []
+        cumulative_num = 0
+        for num_res in num_residues:
+            cumulative_num += num_res
+            cumulative_num_residues.append(cumulative_num)
+        msa = feature_dict['msa']
+        seq_identity = np.mean(msa[0] == msa, axis=-1)
+        seq_identity_full = (msa[0] == msa)
+        seq_identity_indices = np.argsort(seq_identity)
+        msa_by_identity = np.where(msa == 21, np.nan, 1.0) * seq_identity[:, np.newaxis]
+        msa_by_identity = msa_by_identity[seq_identity_indices]
+        #print(msa_by_identity)
+
+        fig, ax = plt.subplots(figsize=(14, 4), dpi=100)
+        ax.set_title(f"Sequence coverage ()")
+        im = ax.imshow(msa_by_identity, interpolation='nearest', aspect='auto',
+                    cmap="rainbow", vmin=0, vmax=1, origin='lower')
+        ax.plot(np.sum(msa != 21, axis=0), color='black')
+        #Plot vertical lines after each subunit
+        ax.vlines(cumulative_num_residues, 0, msa.shape[0], color='black', linewidth=2)
+        ax.set_xlim(-0.5, msa.shape[1] - 0.5)
+        ax.set_ylim(-0.5, msa.shape[0] - 0.5)
+        fig.colorbar(im, label="Sequence identity to query")
+        ax.set_xlabel("Positions")
+        ax.set_ylabel("Sequences")
+        msa_coverage_path = os.path.join(self.results_dir, 'msa_coverage.png')
+        fig.savefig(msa_coverage_path)
+        return msa_coverage_path    
 
     def check_none(self, nested_list):
         if isinstance(nested_list, list):
@@ -562,23 +608,53 @@ class EvaluationPipeline:
     def get_pae_results_unsorted(self):
         return self.pae_results_unsorted
 
-    def get_min_inter_pae(self, results, name) -> tuple:
+    def get_min_inter_pae(self, results) -> tuple:
         logging.info(results)
         results = sorted(results.items(),
                       key = lambda x: x[1][list(x[1].keys())[2]],
                       reverse=False)
         logging.info(results)
-        protein_name = list(results[0][1].keys())[2]
+        protein_name = list(results[0][1].keys())[3]
         model_name = results[0][0]
         min_pae = results[0][1][protein_name]
-        return (protein_name.replace(" vs ", "_"), model_name, min_pae)
+        return (protein_name.replace(" vs ", "_"), min_pae, model_name)
     
     def get_min_iptm(self) -> tuple:
         #return model_name, value
-        return ('_'.join(self.seq_titles), self.iptm_list[0][0], self.iptm_list[0][1])
+        protein_names = '_'.join(self.seq_titles)
+        min_iptm = self.iptm_list[0][0].tolist()
+        min_iptm_model_name = self.iptm_list[0][1]
+        return (protein_names, min_iptm, min_iptm_model_name)
     
     def get_min_ptm(self):
-        return('_'.join(self.seq_titles), self.ptm_list[0][0], self.ptm_list[0][1])
+        protein_names = '_'.join(self.seq_titles)
+        min_ptm = self.ptm_list[0][0].tolist()
+        min_ptm_model_name = self.ptm_list[0][1]
+        return (protein_names, min_ptm, min_ptm_model_name)
+    
+    def get_scores(self, scores: dict):
+        protein_names_pae, min_pae, model_name_min_pae = self.get_min_inter_pae(self.get_pae_results_unsorted())
+        protein_names_ptm, min_ptm, model_name_min_ptm = self.get_min_ptm()
+        protein_names_iptm, min_iptm, model_name_min_iptm = self.get_min_iptm()
+        logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{scores[-1]['protein_names']}")
+        assert protein_names_pae == protein_names_ptm == protein_names_iptm == scores[-1]['protein_names']
+        score = scores[-1].copy()
+        logging.debug(f"model_name_min_pae: {model_name_min_pae}")
+        score['min_pae_model_name'] = model_name_min_pae
+        logging.debug(f"min_pae: {min_pae}")
+        score['min_pae_value'] = min_pae
+        logging.debug(f"model_name_min_ptm: {model_name_min_ptm}")
+        score['min_ptm_model_name'] = model_name_min_ptm
+        logging.debug(f"min ptm: {min_ptm}")
+        score['min_ptm_value'] = min_ptm
+        logging.debug(f"model_name_min_iptm: {model_name_min_iptm}")
+        score['min_iptm_model_name'] = model_name_min_iptm
+        logging.debug(f"min_iptm_value: {min_iptm}")
+        score['min_iptm_value'] = min_iptm
+        scores[-1] = score
+        logging.debug(scores[-1]['min_pae_model_name'])
+        logging.debug("Updated scores dict")
+        logging.debug(scores)
 
     def get_pae_messages(self, results):
         best_result = float(results[0][1]['Overall'])
@@ -605,30 +681,32 @@ class EvaluationPipeline:
         chains = [str(c.get_id()) for c in pdb.get_chains()]
         return list(zip(chains,
             ["lime","cyan","magenta","yellow","salmon","white","blue","orange"]))
+    
+
+    def convert_to_list(self, obj):
+        if isinstance(obj, dict):
+            return {k: self.convert_to_list(v) for k, v in obj.items()}
+        elif isinstance(obj, (jnp.ndarray, jax.interpreters.xla.DeviceArray)):
+            return jax.device_get(obj).tolist()
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+    
+    def save_confidence_json(self, data):
+        keys = ['predicted_aligned_error', 'plddt', 'predicted_tm_score', 'ptm', 'iptm', 'predicted_lddt']
+        for key in keys:
+            confidence_data = {key: data[key] for key in keys if key in data}
+        confidence_data = self.convert_to_list(confidence_data)
+        with open(os.path.join(self.results_dir, 'confidence_metrics.json'), 'w') as f:
+            json.dump(confidence_data, f)
 
 class EvaluationPipelineBatch:
-    def __init__(self, results_dir, min_inter_pae_list, min_iptm_list, min_ptm_list):
+    def __init__(self, results_dir: str, scores: dict):
         self.results_dir = results_dir
-        self.min_inter_pae_list = min_inter_pae_list
-        self.min_iptm_list = min_iptm_list
-        self.min_ptm_list = min_ptm_list
+        self.scores = scores
         
     def run(self):
-        with open('best_inter_pae.txt', 'w') as f:
-            f.write("protein_names,model_name,best_pae\n")
-            print("MIN INTER PAE LIST")
-            print(self.min_inter_pae_list)
-            for protein_names, model_name, pae in self.min_inter_pae_list:
-                protein_names = protein_names.replace(" vs ", "_")
-                f.write(f"{protein_names},{model_name},{pae}\n")
-        with open('best_iptm.csv','w') as f:
-            f.write("model_name,iptm\n")
-            for protein_names, model_name, iptm in self.min_iptm_list:
-                f.write(f"{model_name},{iptm}")
-        with open('best_ptm.csv','w') as f:
-            f.write("model_name,ptm\n")
-            for protein_names, model_name, ptm in self.min_ptm_list:
-                f.write(f"{model_name},{ptm}")
         self.write_html()
 
     def write_html(self):
@@ -636,10 +714,10 @@ class EvaluationPipelineBatch:
         logging.debug(templates_path)
         env = Environment(loader=FileSystemLoader(templates_path))
         template = env.get_template('batch_summary.html')
+        logging.debug("Writing to summary.html")
+        logging.debug(self.scores)
 
-        rendered = template.render(min_inter_pae_list=self.min_inter_pae_list,
-                                   min_iptm_list=self.min_iptm_list,
-                                   min_ptm_list=self.min_ptm_list)
+        rendered = template.render(scores=self.scores)
         
         html_path = os.path.join(self.results_dir, "batch_summary.html")
         with open(html_path, "w") as fout:
