@@ -12,6 +12,7 @@ Main Features:
 * Splitting into feature generation (CPU) and prediction (GPU) steps
 * Support of MMseqs2/colabfold MSA pipeline (in addition to original MSA pipeline)
 * Interface to FastFold
+* Automated pairwise interaction screening
 * Evaluation pipeline (PAE/pLDDT tables, PAE plots)
 
 ![Demo-Image](guifold/images/screenshots.png)
