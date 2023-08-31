@@ -15,13 +15,11 @@
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
 import copy
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE
 import logging
 import os
-import shlex
 import time
 from typing import Union
-from typing_extensions import runtime
 from PyQt5.QtCore import QObject, pyqtSignal, QFileSystemWatcher, pyqtSlot, QThread
 import traceback
 import re

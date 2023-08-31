@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>932</width>
-    <height>806</height>
+    <height>778</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -57,6 +57,90 @@
            </rect>
           </property>
           <layout class="QGridLayout" name="gridLayout_2">
+           <item row="9" column="0">
+            <widget class="QLabel" name="label_28">
+             <property name="text">
+              <string>JobID regular expression</string>
+             </property>
+            </widget>
+           </item>
+           <item row="9" column="1">
+            <widget class="QLineEdit" name="lei_settings_queue_jobid_regex">
+             <property name="toolTip">
+              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+             </property>
+             <property name="statusTip">
+              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1">
+            <widget class="QSpinBox" name="sbo_settings_max_ram">
+             <property name="toolTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>900</number>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QSpinBox" name="sbo_settings_max_gpu_mem">
+             <property name="toolTip">
+              <string>Maximum GPU memory available in the cluster. </string>
+             </property>
+             <property name="statusTip">
+              <string>Maximum GPU memory available in the cluster.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>80</number>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="0">
+            <widget class="QLabel" name="label_3">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="toolTip">
+              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
+             </property>
+             <property name="statusTip">
+              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
+             </property>
+             <property name="text">
+              <string>Min RAM (GB)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1">
+            <widget class="QSpinBox" name="sbo_settings_min_ram">
+             <property name="toolTip">
+              <string>Minimum RAM to reserve. When reserved RAM is too little some MSAs can cause out-of-memory error.</string>
+             </property>
+             <property name="statusTip">
+              <string>Minimum RAM to reserve. When reserved RAM is too little (&lt; 50 GB) some MSAs can cause out-of-memory error.</string>
+             </property>
+             <property name="maximum">
+              <number>9999</number>
+             </property>
+             <property name="value">
+              <number>70</number>
+             </property>
+            </widget>
+           </item>
            <item row="0" column="1">
             <widget class="QLineEdit" name="lei_settings_queue_submit">
              <property name="toolTip">
@@ -70,7 +154,7 @@
              </property>
             </widget>
            </item>
-           <item row="9" column="0">
+           <item row="10" column="0">
             <widget class="QLabel" name="label">
              <property name="toolTip">
               <string>Activate Queue checkbox on Input Page by default.</string>
@@ -83,7 +167,7 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="label_7">
              <property name="font">
               <font>
@@ -102,7 +186,7 @@
              </property>
             </widget>
            </item>
-           <item row="9" column="1">
+           <item row="10" column="1">
             <widget class="QCheckBox" name="chk_settings_queue_default">
              <property name="toolTip">
               <string>Activate Queue checkbox on Input Page by default.</string>
@@ -141,7 +225,7 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="0">
+           <item row="8" column="0">
             <widget class="QLabel" name="label_31">
              <property name="toolTip">
               <string>Split job into CPU and GPU submissions.</string>
@@ -154,7 +238,7 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="1">
+           <item row="8" column="1">
             <widget class="QCheckBox" name="chk_settings_split_job">
              <property name="toolTip">
               <string>Split job into CPU and GPU submissions. Requires Job ID Regular Expression to be defined. Only tested on SLURM.</string>
@@ -176,7 +260,7 @@
               <string>Number of CPUs is relevant for MSA generation. </string>
              </property>
              <property name="text">
-              <string>Number of CPUs</string>
+              <string>Min num CPUs</string>
              </property>
             </widget>
            </item>
@@ -194,7 +278,7 @@
             </widget>
            </item>
            <item row="3" column="1">
-            <widget class="QSpinBox" name="sbo_settings_num_cpu">
+            <widget class="QSpinBox" name="sbo_settings_min_cpus">
              <property name="toolTip">
               <string>Number of CPUs is relevant for MSA generation. </string>
              </property>
@@ -222,7 +306,7 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="0">
+           <item row="6" column="0">
             <widget class="QLabel" name="label_6">
              <property name="font">
               <font>
@@ -248,87 +332,32 @@
              </property>
             </widget>
            </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_33">
+             <property name="toolTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="statusTip">
+              <string>Number of CPUs is relevant for MSA generation. </string>
+             </property>
+             <property name="text">
+              <string>Max num CPUs</string>
+             </property>
+            </widget>
+           </item>
            <item row="4" column="1">
-            <widget class="QSpinBox" name="sbo_settings_max_gpu_mem">
+            <widget class="QSpinBox" name="sbo_settings_max_cpus">
              <property name="toolTip">
-              <string>Maximum GPU memory available in the cluster. </string>
+              <string>Number of CPUs is relevant for MSA generation. </string>
              </property>
              <property name="statusTip">
-              <string>Maximum GPU memory available in the cluster.</string>
+              <string>Number of CPUs is relevant for MSA generation. </string>
              </property>
              <property name="maximum">
               <number>9999</number>
              </property>
              <property name="value">
-              <number>80</number>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="0">
-            <widget class="QLabel" name="label_3">
-             <property name="font">
-              <font>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="toolTip">
-              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
-             </property>
-             <property name="statusTip">
-              <string>Minimum RAM to reserve. Some MSA might need up to 60 GB.</string>
-             </property>
-             <property name="text">
-              <string>Min RAM (GB)</string>
-             </property>
-            </widget>
-           </item>
-           <item row="5" column="1">
-            <widget class="QSpinBox" name="sbo_settings_max_ram">
-             <property name="toolTip">
-              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-             </property>
-             <property name="statusTip">
-              <string>Maximum RAM available in the cluster. Only relevant for unified memory or CPU jobs.</string>
-             </property>
-             <property name="maximum">
-              <number>9999</number>
-             </property>
-             <property name="value">
-              <number>900</number>
-             </property>
-            </widget>
-           </item>
-           <item row="6" column="1">
-            <widget class="QSpinBox" name="sbo_settings_min_ram">
-             <property name="toolTip">
-              <string>Minimum RAM to reserve. When reserved RAM is too little some MSAs can cause out-of-memory error.</string>
-             </property>
-             <property name="statusTip">
-              <string>Minimum RAM to reserve. When reserved RAM is too little (&lt; 50 GB) some MSAs can cause out-of-memory error.</string>
-             </property>
-             <property name="maximum">
-              <number>9999</number>
-             </property>
-             <property name="value">
-              <number>70</number>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="1">
-            <widget class="QLineEdit" name="lei_settings_queue_jobid_regex">
-             <property name="toolTip">
-              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
-             </property>
-             <property name="statusTip">
-              <string>Regular expression to extract Job ID from batch submission command (see Documentation). Might not work with all queueing systems.</string>
-             </property>
-            </widget>
-           </item>
-           <item row="8" column="0">
-            <widget class="QLabel" name="label_28">
-             <property name="text">
-              <string>JobID regular expression</string>
+              <number>20</number>
              </property>
             </widget>
            </item>

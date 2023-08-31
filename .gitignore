@@ -21,3 +21,5 @@ alphafold
 scripts/check_results_pkl.py
 scripts/compare_features.py
 scripts/minimize.py
+scripts/extract_memory.py
+scripts/make_dummy_features.py

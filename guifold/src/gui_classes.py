@@ -1519,7 +1519,10 @@ class Job(GUIVariables):
     def calculate_gpu_mem_alphafold(self, total_seq_length: int) -> int:
         """Calculate required gpu memory in GB by sequence length for alphafold"""
         logger.debug(total_seq_length)
-        mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
+        #polynomal fit large dataset
+        mem = 0.00000504*total_seq_length**2 - 0.00135796*total_seq_length + 5.55021461
+        #exponential fit
+        #mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
     
@@ -1629,10 +1632,10 @@ class Job(GUIVariables):
         #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
         if job_params['db_preset'] == 'colabfold_local':
             if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
-               if job_params['max_ram'] < 300:
+                if job_params['max_ram'] < 500:
                    job_params['min_ram'] = job_params['max_ram']
-               else:
-                   job_params['min_ram'] = 300
+                else:
+                   job_params['min_ram'] = 500
 
         split_mem = None
         if not any([gpu_mem is None,
@@ -2038,9 +2041,9 @@ class Job(GUIVariables):
         header_labels = ["Name", "Status", "ID"]
         self.list.ctrl.setHeaderLabels(header_labels)
         #self.list.ctrl.setHeaderHidden(True)
-        self.list.ctrl.setColumnWidth(0, 120)
-        self.list.ctrl.setColumnWidth(1, 120)
-        self.list.ctrl.setColumnWidth(2, 20)
+        self.list.ctrl.setColumnWidth(0, 240)
+        self.list.ctrl.setColumnWidth(1, 70)
+        self.list.ctrl.setColumnWidth(2, 15)
         project_id = gui_params['project_id']
 
         if project_id is not None:
@@ -2301,7 +2304,9 @@ class Settings(GUIVariables):
         self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
-        self.num_cpu = Variable('num_cpu', 'int', ctrl_type='sbo', cmd=True)
+        self.num_cpu = Variable('num_cpu', 'int', ctrl_type='sbo', cmd=True, db=False)
+        self.min_cpus = Variable('min_cpus', 'int', ctrl_type='sbo')
+        self.max_cpus = Variable('max_cpus', 'int', ctrl_type='sbo')
         self.max_gpu_mem = Variable('max_gpu_mem', 'int', ctrl_type='sbo')
         self.split_job = Variable('split_job', 'bool', ctrl_type='chk')
         self.min_ram = Variable('min_ram', 'int', ctrl_type='sbo')

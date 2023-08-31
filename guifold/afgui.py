@@ -17,13 +17,11 @@
 from __future__ import absolute_import
 from guifold.src import gui_threads
 from guifold.src.gui_dialogs import message_dlg
-from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 from guifold.src.gui_dlg_settings import SettingsDlg
 from guifold.src.gui_dlg_about import AboutDlg
 from guifold.src.gui_dlg_project import ProjectDlg
 from guifold.src.gui_dlg_queue_submit import QueueSubmitDlg
 from guifold.src.gui_dlg_advanced_params import AdvancedParamsDlg
-from guifold.src.gui_dlg_fastfold import FastfoldParamsDlg
 import signal
 import socket
 from subprocess import Popen
@@ -40,7 +38,6 @@ from guifold.src.db_helper import DBHelper
 import traceback
 from guifold.src.gui_classes import Job, Settings, JobParams, Project, Evaluation, DefaultValues
 from guifold.src.gui_dlg_advanced_params import DefaultValues as AdvancedParamsDefaultValues
-from shutil import copyfile
 import argparse
 import configparser
 import re
@@ -644,7 +641,8 @@ class MainFrame(QtWidgets.QMainWindow):
                     job_params['host'] = self.job.host.get_value()
                     self.job.set_status("starting")
                     job_params['job_name'] = self.jobparams.job_name.get_value()
-                    job_params['num_cpu'] = settings.num_cpu
+                    job_params['min_cpus'] = settings.min_cpus
+                    job_params['max_cpus'] = settings.max_cpus
                     job_params['split_job'] = settings.split_job
                     job_params['split_job_step'] = None
                     job_params['queue_jobid_regex'] = settings.queue_jobid_regex
@@ -669,6 +667,17 @@ class MainFrame(QtWidgets.QMainWindow):
                     else:
                         self.jobparams.pairwise_batch_prediction.set_value(False)
                         job_params['pairwise_batch_prediction'] = False
+
+                    #Adjust num cpus based on pipeline
+                    if job_params['db_preset'] == 'colabfold_local':
+                        if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
+                            job_params['num_cpu'] = job_params['max_cpus']
+                            logger.debug(f"Switched CPUs to max {job_params['num_cpu']}")  
+                        else:
+                            job_params['num_cpu'] = job_params['min_cpus']   
+                    else:
+                        job_params['num_cpu'] = job_params['min_cpus']
+                                      
 
                     #Prepare split job
                     if job_params['queue']:
@@ -847,7 +856,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         num_jobs = int(num_jobs)
                         job_params['num_jobs'] = num_jobs
                         if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
-                            placeholder = 'predictoin'
+                            placeholder = 'prediction'
                         else:
                             placeholder = 'feature'
                         message = f"This will start a batch {placeholder} job with {num_jobs} tasks. Continue?"
@@ -926,11 +935,12 @@ class MainFrame(QtWidgets.QMainWindow):
                             raise QueueSubmitError("Minimum RAM not specified")
                         else:
                             job_params['min_ram'] = settings.min_ram
-                        if settings.num_cpu is None or settings.num_cpu == '':
-                            message_dlg("error", "Requested to submit to queue but found no CPU number in settings.")
-                            raise QueueSubmitError("CPU number not specified")
-                        else:
-                            job_params['num_cpu'] = settings.num_cpu
+                        if settings.min_cpus is None or settings.min_cpus == '':
+                            message_dlg("error", "Requested to submit to queue but found no minimum CPU number in settings.")
+                            raise QueueSubmitError("Minimum CPU number not specified")
+                        if settings.max_cpus is None or settings.max_cpus == '':
+                            message_dlg("error", "Requested to submit to queue but found no maximum CPU number in settings.")
+                            raise QueueSubmitError("Maximum CPU number not specified")
                         if settings.queue_account is None or settings.queue_account == '':
                             job_params['queue_account'] = None
                         else:
@@ -991,6 +1001,9 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug("cmd dict settings")
                     logger.debug(cmd_dict_settings)
                     cmd_dict = {**cmd_dict_jobparams, **cmd_dict_settings}
+                    #Backward compatibility
+                    if 'num_cpu' in cmd_dict:
+                        cmd_dict['num_cpu'] = job_params['num_cpu']
                     if job_params['prediction'] == 'alphafold':
                         if 'num_gpu' in cmd_dict:
                             del cmd_dict['num_gpu']
@@ -1172,7 +1185,7 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnCmbPipeline(self):
         pipeline_name = self.jobparams.pipeline.ctrl.currentText()
         if pipeline_name in ['first_vs_all', 'all_vs_all']:
-            #self.jobparams.prediction.ctrl.setCurrentText('fastfold')
+            self.jobparams.prediction.ctrl.setCurrentText('fastfold')
             self.jobparams.prediction.set_value('fastfold')
             #self.jobparams.num_recycle.ctrl.setCurrentText('3')
             self.jobparams.num_recycle.set_value('3')

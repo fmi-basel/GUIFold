@@ -285,6 +285,8 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_5 BOOLEAN DEFAULT TRUE']
         stmts += ['ALTER TABLE jobparams ADD COLUMN model_list VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE job ADD COLUMN active BOOLEAN DEFAULT FALSE']
+        stmts += ['ALTER TABLE settings ADD min_cpus INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD max_cpus INTEGER DEFAULT NULL']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:
