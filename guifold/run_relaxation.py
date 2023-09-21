@@ -32,12 +32,13 @@ amber_relaxer = relax.AmberRelaxation(
     max_outer_iterations=RELAX_MAX_OUTER_ITERATIONS,
     use_gpu=args.use_gpu_relax)
 
-def run(unrelaxed_pdb_path, model_name, relaxed_output_path, output_dir, relaxed_pdbs, relax_metrics):
+def run(unrelaxed_pdb_path, model_name, relaxed_output_path, relaxed_pdbs, relax_metrics):
 
     if os.path.exists(unrelaxed_pdb_path):
-        with open(args.unrelaxed_pdb_path, 'r') as f:
+        with open(unrelaxed_pdb_path, 'r') as f:
             unrelaxed_protein = protein.from_pdb_string(f.read())
         if not os.path.exists(relaxed_output_path):
+            logging.info(f"Running relax on {unrelaxed_pdb_path}")
             # Relax the prediction.
             t_0 = time.time()
             relaxed_pdb_str, _, violations = amber_relaxer.process(
@@ -49,12 +50,9 @@ def run(unrelaxed_pdb_path, model_name, relaxed_output_path, output_dir, relaxed
             runtime = time.time() - t_0
 
             relaxed_pdbs[model_name] = relaxed_pdb_str
-
-            # Save the relaxed PDB.
-            relaxed_output_path = os.path.join(
-                output_dir, f'relaxed_{model_name}.pdb')
             with open(relaxed_output_path, 'w') as f:
                 f.write(relaxed_pdb_str)
+            logging.info(f"Saved relaxed model to {relaxed_output_path}")
         else:
             logging.error(f"{relaxed_output_path} already exists. Skipping relaxation step.")
     else:
@@ -70,7 +68,7 @@ else:
     relax_metrics = {}
     relaxed_pdbs = {}
 
-run(args.unrelaxed_pdb_path, args.model_name, args.relaxed_output_path, args.output_dir, relaxed_pdbs, relax_metrics)
+run(args.unrelaxed_pdb_path, args.model_name, args.relaxed_output_path, relaxed_pdbs, relax_metrics)
 
 
 relax_results = {'relax_metrics': relax_metrics, 'relaxed_pdbs': relaxed_pdbs}

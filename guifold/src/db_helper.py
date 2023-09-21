@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 8
+DB_REVISION = 9
 
 def get_type(type):
     types = {'str': String,
@@ -287,6 +287,10 @@ class DBHelper:
         stmts += ['ALTER TABLE job ADD COLUMN active BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE settings ADD min_cpus INTEGER DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD max_cpus INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD uniref90_mmseqs_database_path INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD uniprot_mmseqs_database_path INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD pdb100_database_path INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD first_n_seq INTEGER DEFAULT NULL']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

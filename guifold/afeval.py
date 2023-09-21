@@ -41,7 +41,7 @@ import jax.numpy as jnp
 
 class EvaluationPipeline:
     def __init__(self, sequence_file: str, continue_from_existing_results: bool = False, custom_spacing: bool = False,
-                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch: str = False):
+                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch: str = False, prediction: str = 'alphafold'):
         self.sequence_file = sequence_file
         self.continue_from_existing_results = continue_from_existing_results
         self.output_dir = os.path.split(os.path.realpath(self.sequence_file))[0]
@@ -50,6 +50,7 @@ class EvaluationPipeline:
         self.custom_start_residue_list = custom_start_residue_list
         self.custom_axis_label_list = custom_axis_label_list
         self.pae_results_unsorted = None
+        self.prediction = prediction
         if not os.path.exists(self.results_dir):
             raise SystemExit(f"Output directory {self.results_dir} not found")
 
@@ -69,48 +70,70 @@ class EvaluationPipeline:
             multimer = True
 
         if not os.path.exists(results_pickle_path) or not self.continue_from_existing_results:
-            for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
-                                     if x.startswith("result_") and x.endswith(".pkl")]):
-                if not i > 6:
-                    logging.debug(mdl)
+            if self.prediction == 'alphafold':
+                for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
+                                        if x.startswith("result_") and x.endswith(".pkl")]):
+                    if not i > 6:
+                        logging.debug(mdl)
+                        with open(mdl, 'rb') as f:
+                            pkl_data = pickle.load(f)
+                            for k, v in pkl_data.items():
+                                logging.debug(k)
+                            if 'predicted_aligned_error' in pkl_data:
+                                pae = pkl_data['predicted_aligned_error']
+                            else:
+                                pae = None
+                            if 'plddt' in pkl_data:
+                                plddt = np.mean(pkl_data['plddt'])
+                            else:
+                                plddt = None
+                            if 'iptm' in pkl_data:
+                                iptm = pkl_data['iptm']
+                            else:
+                                iptm = None
+                            if 'ptm' in pkl_data:
+                                ptm = pkl_data['ptm']
+                            elif 'predicted_tm_score' in pkl_data:
+                                ptm = pkl_data['predicted_tm_score']
+                            else:
+                                ptm = None
+                            #print(plddt)
+                            mdl_name = os.path.splitext(os.path.basename(mdl))[0]
+                            pae_list.append((pae, mdl_name))
+                            plddt_list.append((plddt, mdl_name))
+                            iptm_list.append((iptm, mdl_name))
+                            ptm_list.append((ptm, mdl_name))
+                logging.debug(pae_list)
+                logging.debug("Check none:")
+                logging.debug(self.check_none(pae_list))
+
+
+
+                if multimer:
+                    if not self.check_none(pae_list):
+                        pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
+                    else:
+                        no_pae = True
+                    plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
+                logging.debug(pae_list)
+            elif self.prediction == 'rosettafold':
+                for i, mdl in enumerate([os.path.join(self.results_dir, 'models', x) for x in os.listdir(self.results_dir)
+                                if x.startswith("model_") and x.endswith(".npz")]):
                     with open(mdl, 'rb') as f:
-                        pkl_data = pickle.load(f)
-                        for k, v in pkl_data.items():
-                            logging.debug(k)
-                        if 'predicted_aligned_error' in pkl_data:
-                            pae = pkl_data['predicted_aligned_error']
+                        data = np.load(f)
+                        if 'pae' in data:
+                            pae = data['pae']
                         else:
                             pae = None
-                        if 'plddt' in pkl_data:
-                            plddt = np.mean(pkl_data['plddt'])
+                        if 'lddt' in data:
+                            plddt = np.mean(data['lddt'])
                         else:
                             plddt = None
-                        if 'iptm' in pkl_data:
-                            iptm = pkl_data['iptm']
-                        else:
-                            iptm = None
-                        if 'ptm' in pkl_data:
-                            ptm = pkl_data['ptm']
-                        elif 'predicted_tm_score' in pkl_data:
-                            ptm = pkl_data['predicted_tm_score']
-                        else:
-                            ptm = None
                         #print(plddt)
                         mdl_name = os.path.splitext(os.path.basename(mdl))[0]
                         pae_list.append((pae, mdl_name))
                         plddt_list.append((plddt, mdl_name))
-                        iptm_list.append((iptm, mdl_name))
-                        ptm_list.append((ptm, mdl_name))
-            logging.debug(pae_list)
-            logging.debug("Check none:")
-            logging.debug(self.check_none(pae_list))
-            if multimer:
-                if not self.check_none(pae_list):
-                    pae_list = self.get_best_prediction_for_model_by_pae(pae_list)
-                else:
-                    no_pae = True
-                plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
-            logging.debug(pae_list)
+
             if not self.check_none(pae_list):
                 average_pae = self.analyse_pae(pae_list,
                                                 indices,
@@ -147,6 +170,9 @@ class EvaluationPipeline:
             if self.check_none(average_pae):
                 no_pae = True
         self.iptm_list, self.ptm_list = iptm_list, ptm_list
+
+
+
 
         logging.info("Before sort")
         logging.info(average_pae)

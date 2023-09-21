@@ -15,6 +15,8 @@
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
 from __future__ import absolute_import
+import datetime
+from shutil import copyfile
 from guifold.src import gui_threads
 from guifold.src.gui_dialogs import message_dlg
 from guifold.src.gui_dlg_settings import SettingsDlg
@@ -22,6 +24,7 @@ from guifold.src.gui_dlg_about import AboutDlg
 from guifold.src.gui_dlg_project import ProjectDlg
 from guifold.src.gui_dlg_queue_submit import QueueSubmitDlg
 from guifold.src.gui_dlg_advanced_params import AdvancedParamsDlg
+from guifold.src.gui_dlg_first_n_seq import FirstNSeqDlg
 import signal
 import socket
 from subprocess import Popen
@@ -204,6 +207,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.files_selected_item = None
         self.db = db
         self.sess = sess
+        self.screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
 
         self.init_frame()
         #self.init_dialogs()
@@ -316,7 +320,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
         for obj in self.shared_objects:
             logger.debug(f"Initializing  {obj}")
-            self.gui_params = obj.init_gui(self.gui_params, sess=self.sess)
+            self.gui_params = obj.init_gui(self.gui_params, other=self, sess=self.sess)
             logger.debug("GUI Params")
             logger.debug(self.gui_params)
         #Init DB Preset List
@@ -408,6 +412,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.job.list.ctrl.customContextMenuRequested.connect(self.OnJobContextMenu)
         self.evaluation.pairwise_combinations_list.ctrl.activated.connect(self.OnCmbCombinations)
         self.jobparams.pipeline.ctrl.activated.connect(self.OnCmbPipeline)
+        self.jobparams.prediction.ctrl.activated.connect(self.OnCmbPrediction)
         #TreeWidget
         self.job.list.ctrl.itemExpanded.connect(self.OnItemExpanded)
         self.job.list.ctrl.itemCollapsed.connect(self.OnItemCollapsed)
@@ -530,7 +535,7 @@ class MainFrame(QtWidgets.QMainWindow):
             logger.debug("Status not found in job_params")
         updated_status = self.job.get_status(job_params['job_id'], self.sess)
         logger.debug(f"Updated status for {job_params['job_id']} from the DB is {updated_status}")
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
         #Only update log if the job id from the thread matches the currently selected job and the Log Tab is selected.
         
         self.job.update_log(log_file=log_file, job_id_active=int(self.gui_params['job_id']), job_id_thread=int(job_params['job_id']), append=False)
@@ -661,7 +666,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     if job_params['pipeline'] == 'batch_msas':
                         self.jobparams.prediction.set_value('alphafold')
                         job_params['prediction'] = 'alphafold'
-                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                    if job_params['pipeline'] in self.screening_protocol_names:
                         self.jobparams.pairwise_batch_prediction.set_value(True)
                         job_params['pairwise_batch_prediction'] = True
                     else:
@@ -681,12 +686,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     #Prepare split job
                     if job_params['queue']:
-                        if all([job_params['split_job'],
-                                not job_params['pipeline'] in ['continue_from_features',
-                                                               'only_features',
-                                                               'batch_msas',
-                                                               'all_vs_all',
-                                                               'first_vs_all']]):
+                        if job_params['split_job'] and job_params['pipeline'] == 'full':
                             #Start with cpu step
                             if split_job_step is None:
                                 split_job_step = job_params['split_job_step'] = 'cpu'
@@ -729,12 +729,30 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Full path to job folder
                     job_params['output_dir'] = job_params['job_path'] = self.job.get_job_path(self.gui_params['project_path'],
                                                                    job_params['job_dir'])
-                    job_params['log_file'] = self.job.build_log_file_path(job_params['job_name'], job_params['type'])
+                    job_params['log_file'] = self.job.build_log_file_path(job_params['job_name'], job_params['type'], job_params['prediction'], job_params['db_preset'], job_params['pipeline'])
+                    
+                    log_path = os.path.join(job_params['output_dir'], job_params['log_file'])
+                    
+                    if os.path.exists(log_path):
+                        modification_time = os.path.getmtime(log_path)
+                        modification_time_formatted = datetime.datetime.fromtimestamp(modification_time).strftime("%Y-%m-%d_%H-%M-%S")
+                        log_path_bkp = log_path.replace('.log', f'_backup_{modification_time_formatted}.log')
+                        copyfile(log_path, log_path_bkp)
+
+
+                                      
                     #Full path to results folder created by AF inside job folder
                     if job_params['pairwise_batch_prediction']:
-                        job_params['results_path'] = job_params['job_path']
+                        job_params['results_path'] = os.path.join(job_params['job_path'], f"results_{job_params['prediction']}")
+                        #Backward compatibility
+                        if not os.path.exists(job_params['results_path']):
+                            job_params['results_path'] = job_params['job_path']
                     else:
-                        job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_name'])
+                        job_params['results_path'] = os.path.join(job_params['job_path'], f"results_{job_params['prediction']}")
+                        #Backward compatibility
+                        if not os.path.exists(job_params['results_path']):
+                            job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_dir'])
+                    job_params['features_path'] = os.path.join(job_params['job_path'], "features")
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 
@@ -771,7 +789,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     #Check if mmseqs_api is selected and give warning notice
                     if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
-                        if job_params['pipeline'] in ['first_vs_all', 'all_vs_all']:
+                        if job_params['pipeline'] in self.screening_protocol_names:
                             message = "You selected the colabfold_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
                         else:
                             message = "You selected the colabfold_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
@@ -783,10 +801,10 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     #Check if features.pkl exists when continue_from_features selected
                     if job_params['pipeline'] == 'continue_from_features' and not split_job_step == 'gpu':
-                        if not os.path.exists(os.path.join(job_params['results_path'], 'features.pkl')):
+                        if not os.path.exists(os.path.join(job_params['features_path'], 'features.pkl')) and not os.path.exists(os.path.join(job_params['results_path'], 'features.pkl')):
                             message_dlg('error', 'continue_from_features requested but no features.pkl'
-                                                 ' file found in the current job directory. Cannot continue the job.')
-                            raise NoFeaturesExist(f"No features.pkl found in {job_params['results_path']}")
+                                                 ' file found in the current job directory. Either run a full or only_features job.')
+                            raise NoFeaturesExist(f"No features.pkl found.")
 
                     #Process custom templates
                     if self.jobparams.custom_template_list.is_set():
@@ -820,7 +838,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     self.jobparams.output_dir.set_value(job_params['job_path'])
 
                     #Check input for pairwise prediction protocols
-                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                    if job_params['pipeline'] in self.screening_protocol_names:
                         batch_msas_path = os.path.join(job_params['project_path'], job_params['job_name'], job_params['job_name'], 'batch_msas')
                         if os.path.exists(batch_msas_path) and not self.jobparams.precomputed_msas_path.is_set():
                             logger.debug(f"batch msa folder found: {batch_msas_path} ")
@@ -832,16 +850,16 @@ class MainFrame(QtWidgets.QMainWindow):
                             msg =  'Pairwise combinatorial prediction requires precomputed MSAs (e.g. from batch_msas job).'
                             message_dlg('error', msg) 
                             raise InputError(msg)
-                        if not job_params['prediction'] == 'fastfold':
-                            message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
-                            ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
-                            if ret == QtWidgets.QMessageBox.Cancel:
-                                raise JobSubmissionCancelledByUser
-                            elif ret == QtWidgets.QMessageBox.Yes:
-                                job_params['prediction'] = "fastfold"
-                                self.jobparams.prediction.set_value("fastfold")
-                                self.jobparams.prediction.ctrl.setCurrentText('fastfold')
+                        #if not job_params['prediction'] == 'fastfold':
+                        #    message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
+                        #    ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                        #                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
+                        #    if ret == QtWidgets.QMessageBox.Cancel:
+                        #        raise JobSubmissionCancelledByUser
+                        #    elif ret == QtWidgets.QMessageBox.Yes:
+                        #        job_params['prediction'] = "fastfold"
+                        #        self.jobparams.prediction.set_value("fastfold")
+                        #        self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
                     #Change Log display for batch jobs
                     if job_params['pipeline'] in ['all_vs_all', 'first_vs_all', 'batch_msas']:
@@ -851,11 +869,14 @@ class MainFrame(QtWidgets.QMainWindow):
                         elif job_params['pipeline'] == 'first_vs_all':
                             len_seqs = len(sequences)
                             num_jobs = len_seqs
+                        elif job_params['pipeline'] == 'first_n_vs_rest':
+                            len_seqs = len(sequences[job_params['first_n_seq'] + 1:])
+                            num_jobs = len_seqs
                         elif self.jobparams.pipeline.get_value() == 'batch_msas':
                             num_jobs = len(sequences)
                         num_jobs = int(num_jobs)
                         job_params['num_jobs'] = num_jobs
-                        if job_params['pipeline'] in ['all_vs_all', 'first_vs_all']:
+                        if job_params['pipeline'] in self.screening_protocol_names:
                             placeholder = 'prediction'
                         else:
                             placeholder = 'feature'
@@ -970,6 +991,9 @@ class MainFrame(QtWidgets.QMainWindow):
                             for seq2 in sequences:
                                 seq_len_list.append(len(seq1) + len(seq2))
                         job_params['total_seqlen'] = max(seq_len_list)
+                    elif job_params['pipeline'] == 'only_relax':
+                        #Dummy sequence length to calculate memory
+                        job_params['total_seqlen'] = 2000
                     else:
                         job_params['total_seqlen'] = sum([len(s) for s in sequences])
                     logger.debug(f"Number of amino acids: {job_params['total_seqlen']}")
@@ -1019,11 +1043,11 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug(cmd_dict)
                     if job_params['force_cpu']:
                        del cmd_dict['use_gpu_relax']
-                    if job_params['multimer'] is True:
-                        del cmd_dict['pdb70_database_path']
-                    else:
-                        del cmd_dict['pdb_seqres_database_path']
-                        del cmd_dict['uniprot_database_path']
+                    #if job_params['multimer'] is True:
+                    #    del cmd_dict['pdb70_database_path']
+                    #else:
+                    #    del cmd_dict['pdb_seqres_database_path']
+                    #    del cmd_dict['uniprot_database_path']
                     if job_params['db_preset'] == 'full_dbs':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
@@ -1105,7 +1129,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
     def OnChangeTab(self):
         self.notebook.setCurrentIndex(1)
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
 
     def OnBtnCancel(self):
         if self.gui_params['job_id'] is None:
@@ -1124,7 +1148,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     try:
                         Popen(cmd)
                         self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
-                        self.job.init_gui(self.gui_params, sess=self.sess)
+                        self.job.init_gui(self.gui_params, other=self, sess=self.sess)
                         self.job.update_log(os.path.join(self.job_params['job_path'], self.gui_params['log_file']), int(self.gui_params['job_id']), append=False)
                     except:
                         cmd = ' '.join(cmd)
@@ -1144,7 +1168,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     os.killpg(int(pid), signal.SIGINT)
                     os.killpg(int(pid), signal.SIGTERM)
                     self.job.update_status("aborted", self.gui_params['job_id'], self.sess)
-                    self.job.init_gui(self.gui_params, sess=self.sess)
+                    self.job.init_gui(self.gui_params, other=self, sess=self.sess)
                     self.job.update_log(os.path.join(self.job_params['job_path'], self.gui_params['log_file']), int(self.gui_params['job_id']), append=False)
                 except (TypeError, ProcessLookupError):
                     message_dlg('Error', 'No process ID found for this job!')
@@ -1174,24 +1198,40 @@ class MainFrame(QtWidgets.QMainWindow):
             self.gui_params['project_id'] = new_project_id
             self.gui_params['project_path'] = self.prj.get_path_by_project_id(new_project_id, self.sess)
             self.gui_params['other_settings_changed'] = False
-            self.gui_params = self.job.init_gui(self.gui_params, reset=True, sess=self.sess)
+            self.gui_params = self.job.init_gui(self.gui_params, reset=True, other=self, sess=self.sess)
 
     def OnCmbCombinations(self):
         combination_name = str(self.evaluation.pairwise_combinations_list.ctrl.currentText())
         self.gui_params['selected_combination_name'] = combination_name
         logger.debug(f"Combination name: {self.gui_params['selected_combination_name']}")
         self.gui_params = self.evaluation.init_gui(self.gui_params, self.sess)
+        self.evaluation.pairwise_combinations_list.ctrl.setCurrentText(combination_name)
 
     def OnCmbPipeline(self):
         pipeline_name = self.jobparams.pipeline.ctrl.currentText()
-        if pipeline_name in ['first_vs_all', 'all_vs_all']:
-            self.jobparams.prediction.ctrl.setCurrentText('fastfold')
-            self.jobparams.prediction.set_value('fastfold')
+        if pipeline_name in self.screening_protocol_names:
+            #self.jobparams.prediction.ctrl.setCurrentText('fastfold')
+            #self.jobparams.prediction.set_value('fastfold')
             #self.jobparams.num_recycle.ctrl.setCurrentText('3')
             self.jobparams.num_recycle.set_value('3')
-        if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all']:
+            #self.jobparams.num_gpu.set_value('1')
+        if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all', 'first_n_vs_rest']:
             #self.jobparams.force_cpu.ctrl.setChecked(False)
             self.jobparams.force_cpu.set_value(False)
+        if pipeline_name == 'first_n_vs_rest':
+            self.jobparams.update_from_gui()
+            dlg = FirstNSeqDlg(self)
+            dlg.exec()
+        if pipeline_name == 'batch_msas':
+            self.jobparams.db_preset.ctrl.setCurrentText('colabfold_web')
+
+
+    def OnCmbPrediction(self):
+        prediction = self.jobparams.prediction.ctrl.currentText()
+        if prediction == 'alphafold':
+            self.jobparams.num_gpu.set_value(1)
+        elif prediction == 'fastfold':
+            self.jobparams.chunk_size.set_value(0)
 
     def OnLstJobSelected(self, item):
         #index = int(self.job.list.ctrl.currentRow())
@@ -1208,6 +1248,7 @@ class MainFrame(QtWidgets.QMainWindow):
             #logger.debug(self.job.list.ctrl.item(index, 0).text())
             #self.gui_params['job_project_id'] = self.job.list.ctrl.item.text()#(index, 0).text()
             logger.debug(f"Job project id {self.gui_params['job_project_id']} project id {self.gui_params['project_id']}")
+            self.gui_params['prediction'] = self.jobparams.prediction.get_value()
             self.gui_params['job_id'] = self.job.get_job_id_by_job_project_id(self.gui_params['job_project_id'],
                                                                             self.gui_params['project_id'],
                                                                             self.sess)
@@ -1221,9 +1262,15 @@ class MainFrame(QtWidgets.QMainWindow):
                                                                 self.sess)
             self.gui_params['pairwise_batch_prediction'] = self.jobparams.get_pairwise_batch_prediction(self.gui_params['job_id'], self.sess)
             if self.gui_params['pairwise_batch_prediction']:
-                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'])
+                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], f"results_{self.gui_params['prediction']}")
+                #Backward compatibility
+                if not os.path.exists(self.gui_params['results_path']):
+                    self.gui_params['results_path'] = self.gui_params['job_path']
             else:
-                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
+                self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], f"results_{self.gui_params['prediction']}")
+                #Backward compatibility
+                if not os.path.exists(self.gui_params['results_path']):
+                    self.gui_params['results_path'] = os.path.join(self.gui_params['job_path'], self.gui_params['job_name'])
             self.gui_params['other_settings_changed'] = True
             #Get job params from DB
             result = self.jobparams.get_params_by_job_id(self.gui_params['job_id'], self.sess)
@@ -1255,10 +1302,13 @@ class MainFrame(QtWidgets.QMainWindow):
             elif self.jobparams.pipeline.get_value() == 'first_vs_all':
                 len_seqs = len(sequences)
                 num_jobs = len_seqs
+            elif self.jobparams.pipeline.get_value() == 'first_n_vs_rest':
+                len_seqs = len(sequences[self.jobparams.first_n_seq.get_value() + 1:])
+                num_jobs = len_seqs
             elif self.jobparams.pipeline.get_value() == 'batch_msas':
                 num_jobs = len(sequences)
             #Change progress display
-            if self.jobparams.pipeline.get_value() in ['all_vs_all', 'first_vs_all', 'batch_msas']:
+            if self.jobparams.pipeline.get_value() in self.screening_protocol_names:
                 for item in [self.lbl_status_2,
                             self.lbl_status_3,
                             self.lbl_status_4,
@@ -1306,19 +1356,19 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnDeleteEntry(self, job_id):
         logger.debug(f"OnDeleteEntry. Job id {job_id}")
         self.job.delete_job(job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
 
     def OnDeleteEntryFiles(self, job_id, job_path):
         self.job.delete_job_files(job_id, job_path, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
 
     def OnStatusRunning(self, job_id):
         self.job.update_status("running", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
 
     def OnStatusFinished(self, job_id):
         self.job.update_status("finished", job_id, self.sess)
-        self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
+        self.gui_params = self.job.init_gui(self.gui_params, other=self, sess=self.sess)
 
     def OnBtnPrjAdd(self):
         dlg = ProjectDlg(self, "add")
@@ -1381,8 +1431,15 @@ class MainFrame(QtWidgets.QMainWindow):
             logger.debug('results_path not in gui_params')
 
     def OnOpenBrowser(self):
-        if 'results_path' in self.gui_params:
-            results_html = os.path.join(self.gui_params['results_path'], "results_model_viewer.html")
+        if 'results_html' in self.gui_params:
+            if self.gui_params['pairwise_batch_prediction']:
+                if re.search('results.html', self.gui_params['results_html']):
+                    results_html = self.gui_params['results_html'].replace('results.html', 'results_model_viewer.html')
+                else:
+                    results_html = self.gui_params['results_html']
+            else:
+                results_html = self.gui_params['results_html'].replace('results.html', 'results_model_viewer.html')
+            logger.debug(f"Opening {results_html} in web browser")
             if os.path.exists(results_html):
                 url = QUrl(f'file://{results_html}')
                 try:
@@ -1402,18 +1459,23 @@ class MainFrame(QtWidgets.QMainWindow):
             logger.debug("open in file manager")
             if 'results_path' in self.gui_params:
                 if os.path.exists(self.gui_params['results_path']):
+                    results_path = self.gui_params['results_path']
+                else:
+                    results_path = None
+                
+                if results_path:
                     qfile = QUrl.fromLocalFile(
-                        self.gui_params['results_path'])
+                        results_path)
                     logger.debug(qfile)
                     try:
                         QDesktopServices.openUrl(qfile)
                     except:
-                        error = f"Could not open {self.gui_params['results_path']} in a file manager. Maybe a default file manager is not set"
+                        error = f"Could not open {results_path} in a file manager. Maybe a default file manager is not set"
                         logger.error(error)
                         message_dlg('Error', error)
                         logger.debug(traceback.print_exc())
                 else:
-                    logger.error(f"Results path {self.gui_params['results_path']} does not exist")
+                    logger.error(f"Results path {results_path} does not exist")
 
             else:
                 logger.error('results_path not in gui_params')
@@ -1426,7 +1488,7 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnBtnClear(self):
         logger.debug("Clear Btn pressed")
         self.jobparams.reset_ctrls()
-        self.jobparams.update_from_default(self.default_values)
+        #self.jobparams.update_from_default(self.default_values)
         self.gui_params['job_id'] = None
         self.gui_params['job_project_id'] = None
         self.gui_params['other_settings_changed'] = False

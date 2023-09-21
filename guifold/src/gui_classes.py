@@ -15,6 +15,7 @@
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
 from __future__ import absolute_import
+from copy import deepcopy
 import pkg_resources
 import datetime
 import sys
@@ -81,6 +82,7 @@ ctrl_type_dict = {'dsb': QtWidgets.QDoubleSpinBox,
 
 install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 
+screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
 
 class Variable:
     """
@@ -163,13 +165,15 @@ class Variable:
         if result_val == 'None' or result_val is None:
             result_val = ''
         if self.ctrl_type == 'dsb':
-            self.ctrl.setValue(float(result_val))
+            if result_val != '':
+                self.ctrl.setValue(float(result_val))
         elif self.ctrl_type == 'lei':
             self.ctrl.setText(str(result_val))
         elif self.ctrl_type == 'pte':
             self.ctrl.setPlainText(str(result_val))
         elif self.ctrl_type == 'sbo':
-            self.ctrl.setValue(int(result_val))
+            if result_val != '':
+                self.ctrl.setValue(int(result_val))
         elif self.ctrl_type == 'cmb':
             for k, v in self.cmb_dict.items():
                 logger.debug(f"Setting cmb, result_val {result_val} value in dict {v}")
@@ -439,7 +443,7 @@ class TblCtrlSequenceParams(Variable):
         sanitized_sequence = '\n'.join(sanitized_sequence)
         return sanitized_sequence, error_msgs
 
-    def init_gui(self) -> None:
+    def init_gui(self, other: object = None, sess: sqlalchemy.orm.Session = None) -> None:
         """Initialize the GUI"""
         self.ctrl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.ctrl.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
@@ -891,7 +895,7 @@ class Evaluation(GUIVariables):
             
         return results_file_path
 
-    def init_gui(self, gui_params: dict, sess: sqlalchemy.orm.Session) -> dict:
+    def init_gui(self, gui_params: dict, other: object = None, sess: sqlalchemy.orm.Session = None) -> dict:
         """Update GUI with evaluation results."""
         if not gui_params['job_id'] is None:
             #results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
@@ -924,6 +928,7 @@ class Evaluation(GUIVariables):
                 self.results.ctrl.loadFinished.connect(self.print_page_info)
                 self.results.ctrl.load(QtCore.QUrl(f'file://{results_path}'))
                 #self.results.ctrl.setUrl(QtCore.QUrl(f'file://{results_path}'))
+                gui_params['results_html'] = results_path
 
         return gui_params
 
@@ -1017,10 +1022,13 @@ class JobParams(GUIVariables):
                               2: 'batch_msas',
                               3: 'continue_from_features',
                               4: 'all_vs_all',
-                              5: 'first_vs_all'}
+                              5: 'first_vs_all',
+                              6: 'first_n_vs_rest',
+                              7: 'only_relax'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
         self.prediction_dict = {0: 'alphafold',
-                                1: 'fastfold'}
+                                1: 'fastfold',
+                                2: 'rosettafold'}
         self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict, cmd=True)
         #FastFold params
         self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)
@@ -1033,6 +1041,7 @@ class JobParams(GUIVariables):
         self.use_model_4 = Variable('use_model_4', 'bool', ctrl_type='chk')
         self.use_model_5 = Variable('use_model_5', 'bool', ctrl_type='chk')
         self.model_list = Variable('model_list', 'str', cmd=True)
+        self.first_n_seq = Variable('first_n_seq', 'int', ctrl_type='sbo', cmd=True)
 
     def set_db(self, db: DBHelper) -> None:
         """Set database helper object."""
@@ -1224,7 +1233,7 @@ class JobParams(GUIVariables):
         if not self.max_template_date.is_set():
             self.max_template_date.set_value(cur_date)
 
-    def init_gui(self, gui_params: dict, sess: sqlalchemy.orm.Session) -> dict:
+    def init_gui(self, gui_params: dict, other: object = None, sess: sqlalchemy.orm.Session = None) -> dict:
         """Update GUI with sequence params."""
         self.sequence_params.init_gui()
         return gui_params
@@ -1319,10 +1328,12 @@ class Job(GUIVariables):
         return result
 
     def get_type(self, job_params):
-        if job_params['pipeline'] == 'continue_from_features':
+        if job_params['pipeline'] in ['continue_from_features', 'first_vs_all', 'all_vs_all']:
             type = "prediction"
         elif job_params['pipeline'] in ['only_features', 'batch_msas']:
             type = "features"
+        elif job_params['pipeline'] == 'only_relax':
+            type = "relax"
         else:
             type = "full"
         return type
@@ -1404,7 +1415,7 @@ class Job(GUIVariables):
         msgs = []
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
-        if job_params['prediction'] == 'alphafold':
+        if job_params['prediction'] in ['alphafold', 'rosettafold']:
             command = ["run_prediction.py\\\n"] + job_args
         elif job_params['prediction'] == 'fastfold':
             fastfold_exec = shutil.which('run_prediction.py')
@@ -1532,6 +1543,7 @@ class Job(GUIVariables):
         logger.debug(total_seq_length)
         logger.debug(f"Total sequence length: {total_seq_length}")
         mem: int = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
+        #This was calculated for A100 GPU
         chunk_size: int = int(135097*math.exp(-0.00272605*total_seq_length))
         for i, chunk in enumerate(chunks):
             if chunk_size < chunks[0]:
@@ -1548,6 +1560,9 @@ class Job(GUIVariables):
                 else:
                     selected_chunk_size = chunks[0]
                 break
+        #The above formula works for A100. On GPUs with less memory, the chunk_size needs to be smaller to avoid memory fragmentation and oom errors.
+        if mem < 48.0:
+            chunk_size = chunk_size / 16
             
         logger.debug(f"Calculated memory: {mem}")
         logger.debug(f"Estimated chunk size: {chunk_size}, Selected chunk_size: {selected_chunk_size}")
@@ -1672,10 +1687,7 @@ class Job(GUIVariables):
             if job_params['pipeline'] in ['only_features', 'batch_msas'] or job_params['force_cpu']:
                 cmd = ['export CUDA_VISIBLE_DEVICES=""; '] + cmd
             bin_path = os.path.join(sys.exec_prefix, 'bin')
-            if job_params['prediction'] == 'alphafold':
-                cmd += [f"run_prediction.py\\\n"]
-            elif job_params['prediction'] == 'fastfold':
-                cmd += [f"run_prediction.py\\\n"]
+            cmd += [f"run_prediction.py\\\n"]
             cmd += job_args + [f">> {log_file} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
         return cmd, error_msgs, warn_msgs, estimated_gpu_mem, estimated_chunk_size
@@ -1904,10 +1916,25 @@ class Job(GUIVariables):
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
-    def build_log_file_path(self, job_name: str, type: str) -> str:
+    def build_log_file_path(self, job_name: str, type: str, prediction: str, db_preset: str, pipeline: str) -> str:
         #job_dir = self.get_job_dir(job_name)
         #job_path = self.get_job_path(project_path, job_dir)
-        log_file = os.path.join(f"{job_name}_{type}.log")
+        if type == 'prediction':
+            if pipeline in screening_protocol_names:
+                log_file = os.path.join(f"{job_name}_{type}_batch_{prediction}.log")
+            else:
+                log_file = os.path.join(f"{job_name}_{type}_{prediction}.log")
+        elif type == 'features':
+            if pipeline == "batch_msas":
+                log_file = os.path.join(f"{job_name}_{type}_batch_{db_preset}.log")
+            else:
+                log_file = os.path.join(f"{job_name}_{type}_{db_preset}.log")
+        elif type == 'full':
+            log_file = os.path.join(f"{job_name}_{type}_{db_preset}_{prediction}.log")
+        elif type == 'relax':
+            log_file = os.path.join(f"{job_name}_{type}.log")
+        else:
+            logger.error(f"Unknown type {type}")
         return log_file
 
     def get_log_file(self, job_id: int, sess: sqlalchemy.orm.session.Session) -> str:
@@ -2025,7 +2052,7 @@ class Job(GUIVariables):
 
 
     #TreeView Implementation
-    def init_gui(self, gui_params: dict, reset: bool = False, sess=None) -> dict:
+    def init_gui(self, gui_params: dict, reset: bool = False, other: object = None, sess: sqlalchemy.orm.Session = None) -> dict:
         from PyQt5 import QtWidgets
 
         logger.debug("=== Init Job list ===")
@@ -2072,7 +2099,27 @@ class Job(GUIVariables):
             for i, job in enumerate(jobs):
                 job_id = job.id
                 job_name = job.name
-                job_type = job.type.capitalize()
+                job_type = job.type
+                jobparams_result = other.jobparams.get_params_by_job_id(job_id, sess=sess)
+                prediction = jobparams_result.prediction
+                db_preset = jobparams_result.db_preset
+                pipeline = jobparams_result.pipeline
+
+                if job_type == 'prediction':
+                    if pipeline in screening_protocol_names:
+                        job_type = f"{job_type}_[batch_{prediction}]"
+                    else:
+                        job_type = f"{job_type}_[{prediction}]"
+                elif job_type == 'features':
+                    if pipeline == 'batch_msas':
+                        job_type = f"{job_type}_[batch_{db_preset}]"
+                    else:
+                        job_type = f"{job_type}_[{db_preset}]"
+                elif job_type == 'relax':
+                    pass
+                elif job_type == 'full':
+                    job_type= f"{job_type}_[{db_preset}_{prediction}]"
+
                 job_project_id = str(job.job_project_id)
 
                 # Check if job already has an item in the tree
@@ -2259,7 +2306,7 @@ class Project(GUIVariables):
         result = sess.query(self.db.Project).filter_by(id=project_id).first()
         return result.path
 
-    def init_gui(self, gui_params: dict, sess: Union[sqlalchemy.orm.session.Session, None] = None) -> dict:
+    def init_gui(self, gui_params: dict, other: object = None, sess: Union[sqlalchemy.orm.session.Session, None] = None) -> dict:
         logger.debug("=== Init Projects ===")
         projects = self.get_projects(sess)
         # if projects == []:
@@ -2276,6 +2323,12 @@ class Project(GUIVariables):
                 else:
                     logger.warning("{} not found.".format(item.name))
             name, id = self.get_active_project(sess)
+            if name is None:
+                for i, item in enumerate(projects):
+                    if i == 0:
+                        name = item.name
+                        id = item.id
+                        break
             logger.debug(f"Active project {name}")
             #Handle case when active project was deleted
             if not name is None:
@@ -2324,6 +2377,7 @@ class Settings(GUIVariables):
         self.kalign_binary_path = Variable('kalign_binary_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.data_dir = Variable('data_dir', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref90_database_path = Variable('uniref90_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.uniref90_mmseqs_database_path = Variable('uniref90_mmseqs_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref30_database_path = Variable('uniref30_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniref30_mmseqs_database_path = Variable('uniref30_mmseqs_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.colabfold_envdb_database_path = Variable('colabfold_envdb_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -2331,7 +2385,9 @@ class Settings(GUIVariables):
         self.bfd_database_path = Variable('bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.small_bfd_database_path = Variable('small_bfd_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniprot_database_path = Variable('uniprot_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.uniprot_mmseqs_database_path = Variable('uniprot_mmseqs_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb70_database_path = Variable('pdb70_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
+        self.pdb100_database_path = Variable('pdb100_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb_seqres_database_path = Variable('pdb_seqres_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.template_mmcif_dir = Variable('template_mmcif_dir', 'str', ctrl_type='lei', cmd=True, required=True)
         self.obsolete_pdbs_path = Variable('obsolete_pdbs_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -2342,7 +2398,7 @@ class Settings(GUIVariables):
     def set_db(self, db):
         self.db = db
 
-    def init_gui(self, gui_params, sess):
+    def init_gui(self, gui_params: dict, other: object = None, sess: sqlalchemy.orm.Session = None):
         return gui_params
 
     def get_from_db(self, sess):
@@ -2502,9 +2558,14 @@ class DefaultValues:
         self.db_preset = 'full_dbs'
         self.pipeline = 'full'
         self.prediction = 'alphafold'
+        _, project_id = other.prj.get_active_project(other.sess)
+        if project_id:
+            self.precomputed_msas_path = other.prj.get_path_by_project_id(project_id, other.sess)
         settings = other.settings.get_from_db(other.sess)
         #update with defaults from advanced_settings
         advanced_settings_defaults = AdvancedSettingsDefaults()
         self.__dict__.update(advanced_settings_defaults.__dict__)
+        logging.debug("Default values:")
+        logging.debug(self.__dict__)
         if settings.queue_default:
             self.queue = True
