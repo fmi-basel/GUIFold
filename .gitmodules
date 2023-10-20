@@ -1,4 +1,8 @@
 [submodule "alphafold"]
 	path = alphafold
-	url = https://github.com/fmi-basel/AF4GUIFold.git
+	url = https://github.com/fmi-basel/guifold-alphafold2.git
+	branch = guifold
+[submodule "rosettafold"]
+	path = rosettafold
+	url = https://github.com/fmi-basel/guifold-rosettafold2.git
 	branch = guifold

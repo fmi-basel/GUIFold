@@ -27,6 +27,224 @@ import datetime
 
 logger = logging.getLogger('guifold')
 
+
+class LoadProject(QObject):
+    finished = pyqtSignal()
+    progress_signal = pyqtSignal(int)
+    error_signal = pyqtSignal(str)
+    job_init_gui_signal = pyqtSignal(dict, bool, object, object, object)
+    clear_signal = pyqtSignal()
+
+    def __init__(self, parent, project_name):
+        super(LoadProject, self).__init__()
+        self._parent = parent
+        self.project_name = project_name
+        self.paused = False
+        logger.debug("init thread")
+
+    def resume(self):
+        self.paused = False
+
+    def pause(self):
+        self.paused = True
+
+    def run(self):
+        logger.debug("LoadProject thread started")
+        try:
+            if not self.project_name is None:
+                self.progress_signal.emit(0)
+                logger.debug(f"Current project {self.project_name}")
+                new_project_id = self._parent.prj.change_active_project(self.project_name, self._parent.sess)
+                logger.debug(f"New project ID {new_project_id}")
+                self._parent.gui_params['project_id'] = new_project_id
+                self._parent.gui_params['project_path'] = self._parent.prj.get_path_by_project_id(new_project_id, self._parent.sess)
+                self._parent.gui_params['other_settings_changed'] = False
+                self.progress_signal.emit(10)
+                self.pause()
+                self.job_init_gui_signal.emit(self._parent.gui_params, True, self._parent, self._parent.sess, self)
+                #self.gui_params = self.job.init_gui(self.gui_params, reset=True, other=self, sess=self.sess)
+                while self.paused:
+                    time.sleep(1)
+                self.clear_signal.emit()
+                self.progress_signal.emit(100)
+            else:
+                self.error_signal.emit("Project not found!")
+            self.finished.emit()
+        except Exception as e:
+            logger.error(e)
+            traceback.print_exc()
+            logger.debug("Thread finished with exceptions")
+            self.error_signal.emit(str(e))
+            self.finished.emit()
+
+
+class LoadJob(QObject):
+    update_signal = pyqtSignal(object)
+    btn_jobparams_advanced_settings_set_enabled_signal = pyqtSignal(bool)
+    tb_run_set_enabled_signal = pyqtSignal(bool)
+    notebook_tab_signal = pyqtSignal(int, bool)
+    evaluation_init_signal = pyqtSignal(dict, object)
+    lbl_status_signal = pyqtSignal(str)
+    job_status_signal = pyqtSignal(dict)
+    insert_evaluation_signal = pyqtSignal(object, dict, object, object)
+    update_from_db_signal = pyqtSignal(object, object)
+    progress_signal = pyqtSignal(int)
+    set_item_hidden_signal = pyqtSignal(object, bool)
+    error_signal = pyqtSignal(str)
+    finished = pyqtSignal()
+
+
+    def __init__(self, parent, job_project_id):
+        super(LoadJob, self).__init__()
+        self._parent = parent
+        self.job_project_id = job_project_id
+        self.paused = False
+        logger.debug("init thread")
+
+    def resume(self):
+        self.paused = False
+
+    def pause(self):
+        self.paused = True
+
+    def run(self):
+        logger.debug("LoadJob thread started")
+        try:
+            #self.app.processEvents()
+            #index = int(self.job.list.ctrl.currentRow())
+            #model = self.job.list.ctrl.model()
+            #model_index = model.index(index.row(), 0:
+            if self.job_project_id:
+                self.progress_signal.emit(0)
+                self._parent.gui_params['job_project_id'] = self.job_project_id
+                self.btn_jobparams_advanced_settings_set_enabled_signal.emit(True)
+                self.tb_run_set_enabled_signal.emit(True)
+                #self._parent.btn_jobparams_advanced_settings.setEnabled(True)
+                #self._parent.tb_run.setEnabled(True)
+                self._parent.gui_params['job_project_id'] = self.job_project_id
+                #logger.debug(f"OnLstJobSelected index {index}")
+                logger.debug(f"job_project_id: {self._parent.gui_params['job_project_id']}")
+                #logger.debug(self._parent.job.list.ctrl.item(index, 0).text())
+                #self._parent.gui_params['job_project_id'] = self._parent.job.list.ctrl.item.text()#(index, 0).text()
+                logger.debug(f"Job project id {self._parent.gui_params['job_project_id']} project id {self._parent.gui_params['project_id']}")
+                
+                self._parent.gui_params['job_id'] = self._parent.job.get_job_id_by_job_project_id(self._parent.gui_params['job_project_id'],
+                                                                                self._parent.gui_params['project_id'],
+                                                                                self._parent.sess)
+                logger.debug(f"{self._parent.gui_params['job_id']}")
+                #Get job params from DB
+                result = self._parent.jobparams.get_params_by_job_id(self._parent.gui_params['job_id'], self._parent.sess)
+                #Update job params
+                self.pause()
+                self.update_from_db_signal.emit(result, self)
+                #Wait until the update_from_db function has finished 
+                while self.paused:
+                    time.sleep(1) 
+                self._parent.gui_params['prediction'] = self._parent.jobparams.prediction.get_value()
+                self._parent.gui_params['job_name'] = self._parent.jobparams.job_name.get_value()
+                self._parent.gui_params['job_dir'] = self._parent.job.get_job_dir(self._parent.gui_params['job_name'])
+                self._parent.gui_params['job_path'] = self._parent.job.get_job_path(self._parent.gui_params['project_path'],
+                                                                    self._parent.gui_params['job_dir'])
+                self._parent.gui_params['log_file'] = self._parent.job.get_log_file(self._parent.gui_params['job_id'],
+                                                                    self._parent.sess)
+                logger.debug(f"Log file is {self._parent.gui_params['log_file']}")
+                self._parent.gui_params['pairwise_batch_prediction'] = self._parent.jobparams.pairwise_batch_prediction.get_value()
+                self._parent.gui_params['protein_names'] = self._parent.jobparams.get_protein_names()
+                if self._parent.gui_params['pairwise_batch_prediction']:
+                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
+                    #Backward compatibility
+                    if not os.path.exists(self._parent.gui_params['results_path']):
+                        self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']
+                else:
+                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
+                    #Backward compatibility
+                    if not os.path.exists(self._parent.gui_params['results_path']):
+                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
+                self._parent.gui_params['self._parent_settings_changed'] = True
+
+                #Reads log file
+                self._parent.gui_params = self._parent.job.get_job_status_from_log(self._parent.gui_params)
+                logger.debug("Task params after update:")
+                logger.debug(self._parent.gui_params['task_status'])
+                logger.debug(self._parent.gui_params['status'])
+                self._parent.gui_params['status'] = self._parent.job.get_status(self._parent.gui_params['job_id'], self._parent.sess)
+                self._parent.gui_params['pid'] = self._parent.job.get_pid(self._parent.gui_params['job_id'], self._parent.sess)
+                self._parent.gui_params['queue'] = self._parent.jobparams.queue.get_value()
+                #UChecks and updates the job status and updates all GUI controls with previous job params
+                self.job_status_signal.emit(self._parent.gui_params)
+                self.progress_signal.emit(90)
+                #self._parent.job.update_log(self._parent.gui_params['log_file'], int(self._parent.gui_params['job_id']), append=False)
+                #Load evaluation
+                self.pause()
+                self.insert_evaluation_signal.emit(self._parent.evaluation, self._parent.gui_params, self._parent.sess, self)
+                while self.paused:
+                    time.sleep(1) 
+                
+                #self._parent.job.insert_evaluation(self._parent.evaluation, self._parent.gui_params, self._parent.sess)
+                logger.debug(self._parent.gui_params['pairwise_batch_prediction'])
+                #Display evaluation tab only if evaluation exists
+                if self._parent.evaluation.check_exists(self._parent.gui_params['job_id'], self._parent.sess) or self._parent.gui_params['pairwise_batch_prediction']:
+                    self.notebook_tab_signal.emit(2, True)
+                    self.evaluation_init_signal.emit(self._parent.gui_params, self._parent.sess)
+                else:
+                    self.notebook_tab_signal.emit(2, False)
+                    logger.debug("No evaluation found for this job")
+                #Get num jobs
+
+                sequences = self._parent.jobparams.parse_fasta(self._parent.jobparams.fasta_path.get_value())
+                logging.debug("Fasta parsed")
+                if self._parent.jobparams.pipeline.get_value() == 'all_vs_all':
+                    len_seqs = len(sequences)
+                    num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
+                elif self._parent.jobparams.pipeline.get_value() == 'first_vs_all':
+                    len_seqs = len(sequences)
+                    num_jobs = len_seqs
+                elif self._parent.jobparams.pipeline.get_value() == 'first_n_vs_rest':
+                    len_seqs = len(sequences[self._parent.jobparams.first_n_seq.get_value() + 1:])
+                    num_jobs = len_seqs
+                elif self._parent.jobparams.pipeline.get_value() == 'batch_msas':
+                    num_jobs = len(sequences)
+                #Change progress display
+                if self._parent.jobparams.pipeline.get_value() in self._parent.screening_protocol_names:
+                    for item in [self._parent.lbl_status_2,
+                                self._parent.lbl_status_3,
+                                self._parent.lbl_status_4,
+                                self._parent.lbl_status_5,
+                                self._parent.lbl_status_6,
+                                self._parent.lbl_status_7]:
+                                self.set_item_hidden_signal.emit(item, True)
+                    self.lbl_status_signal.emit(f"{self._parent.gui_params['task_status']['num_tasks_finished']}/{num_jobs} tasks finished")
+                else:
+                    #Reset labels in case they were changed/hidden by a previous job
+                    for item in [self._parent.lbl_status_2,
+                        self._parent.lbl_status_3,
+                        self._parent.lbl_status_4,
+                        self._parent.lbl_status_5,
+                        self._parent.lbl_status_6,
+                        self._parent.lbl_status_7]:
+                        self.set_item_hidden_signal.emit(item, False)
+                    self.lbl_status_signal.emit('Feature generation')
+                self.progress_signal.emit(100)
+            else:
+                self.error_signal.emit("Job not found!")
+            logger.debug("Thread finished")
+            self.finished.emit()
+        except Exception as e:
+            logger.error(e)
+            traceback.print_exc()
+            logger.debug("Thread finished with exceptions")
+            self.error_signal.emit(str(e))
+            self.finished.emit()
+        
+        #self._parent.update_signal.emit(self._parent.gui_params)
+        # if len(self.gui_params['errors']) > 0:
+        #     errors = '\n'.join(self.gui_params['errors'])
+            
+        #     message_dlg('Error', f'The following errors occured during loading the job:\n{errors}')
+        #     #Reset error list
+        #     self.gui_params['errors'] = []
+
+
 class MonitorJob(QObject):
     """A thread to monitor a job. If the PID is known it checks if the job is running,
     otherwise it tries to get the queue id from the logfile.
@@ -43,6 +261,8 @@ class MonitorJob(QObject):
         self.job_params = copy.deepcopy(job_params)
         self.job_params['exit_code'] = None
         self.job_params['initial_submit'] = False
+        self.job_params['log_file_lines'] = []
+        self.job_params['errors'] = []
         self.status_dict = None
         self.pointer = None
         self.current_job_id = None
@@ -66,15 +286,20 @@ class MonitorJob(QObject):
             if not self.pointer is None:
                 log.seek(self.pointer)
             lines = log.readlines()
+
             if not lines == []:
+                self.job_params['log_file_lines'].extend(lines)
                 self.update_log.emit((lines, self.current_job_id))
-                pass
             if self.pointer is None:
+                self.job_params['log_file_lines'] = lines
                 log.seek(0, 2)
+            else:
+                self.job_params['log_file_lines'].extend(lines)
             self.pointer = log.tell()
         if self.job_params['queue']:
             self._parent.job.get_queue_pid(self.log_file, self.job_params['job_id'], self.sess)
         #Update job_params status parameters exit_code, status, and task_status
+        
         self.job_params = self._parent.job.get_job_status_from_log(self.job_params)
         time.sleep(10)
 
@@ -362,3 +587,21 @@ class RunProcessThread(QObject):
             self.job_status.emit(self.job_params)
             self.change_tab.emit()
             self.error.emit(error_msgs)
+
+class LogFileReadThread(QThread):
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+
+    def run(self):
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            total_lines = sum(1 for _ in file)
+            file.seek(0)
+            self.lines = list(file)
+
+            self.update_progress.emit(total_lines)
+            for line in self.lines:
+                self.line_read.emit(line)
+
+    def stop(self):
+        self.terminate()

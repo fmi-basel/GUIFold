@@ -30,6 +30,7 @@ from Bio import SeqIO
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator)
 from jinja2 import Template, Environment, FileSystemLoader
+from alphafold.data import parsers
 import pickle
 import re
 import typing
@@ -40,19 +41,46 @@ import jax.numpy as jnp
 
 
 class EvaluationPipeline:
-    def __init__(self, sequence_file: str, continue_from_existing_results: bool = False, custom_spacing: bool = False,
-                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch: str = False, prediction: str = 'alphafold'):
-        self.sequence_file = sequence_file
+    def __init__(self, fasta_path: str = None, results_dir: str = None, features_dir: str = None, continue_from_existing_results: bool = False, custom_spacing: bool = False,
+                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch_prediction: str = False, prediction_pipeline: str = 'alphafold'):
+        self.sequence_file = fasta_path
         self.continue_from_existing_results = continue_from_existing_results
-        self.output_dir = os.path.split(os.path.realpath(self.sequence_file))[0]
-        self.results_dir = os.path.join(self.output_dir, os.path.splitext(os.path.basename(sequence_file))[0])
+        self.output_dir_base = os.path.split(os.path.realpath(self.sequence_file))[0]
+        _, seq_titles = self.parse_input_sequence(self.sequence_file)
+        self.protein_names = '_'.join(seq_titles)
+        output_dir_predictions = os.path.join(self.output_dir_base, "predictions")
+        output_dir_features = os.path.join(self.output_dir_base, "features")
+        self.features_dir = features_dir
+        self.features_path = os.path.join(self.features_dir, f'features_{self.protein_names}.pkl')
+        self.results_dir = results_dir
         self.custom_spacing = custom_spacing
         self.custom_start_residue_list = custom_start_residue_list
         self.custom_axis_label_list = custom_axis_label_list
         self.pae_results_unsorted = None
-        self.prediction = prediction
+        self.prediction = prediction_pipeline
+        self.batch = batch_prediction
+        
+        
+        #Check if input path/files exist
         if not os.path.exists(self.results_dir):
-            raise SystemExit(f"Output directory {self.results_dir} not found")
+            error_msg = f"Results directory {self.results_dir} not found"
+            logging.error(error_msg)
+            raise SystemExit(error_msg)
+        if not os.path.exists(self.features_path):
+            error_msg = f"Features pickle file {self.features_path} not found"
+            logging.error(error_msg)
+            raise SystemExit(error_msg)
+        
+    def round_float(self, data):
+        decimal_places = 2
+        if isinstance(data, float):
+            return round(data, decimal_places)
+        elif isinstance(data, tuple):
+            return tuple(self.round_float(item) for item in data)
+        elif isinstance(data, list):
+            return [self.round_float(item) for item in data]
+        else:
+            return data
 
     def run_pipeline(self):
         logging.info("Running evaluation pipeline.")
@@ -69,7 +97,19 @@ class EvaluationPipeline:
         if len(input_sequences) > 1:
             multimer = True
 
-        if not os.path.exists(results_pickle_path) or not self.continue_from_existing_results:
+        if os.path.exists(results_pickle_path) and self.continue_from_existing_results:
+            logging.info("Results pickle exists and continue from existing results requested.")
+            try:
+                with open(results_pickle_path, 'rb') as handle:
+                    plddt_list, average_pae_list, iptm_list, ptm_list = pickle.load(handle)
+            except ValueError:
+                with open(results_pickle_path, 'rb') as handle:
+                    plddt_list, average_pae_list = pickle.load(handle)
+                    iptm_list, ptm_list = None, None
+            if self.check_none(average_pae_list):
+                no_pae = True
+        else:
+            logging.info(f"Extracting results from prediction pipeline {self.prediction}.")
             if self.prediction == 'alphafold':
                 for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
                                         if x.startswith("result_") and x.endswith(".pkl")]):
@@ -117,10 +157,12 @@ class EvaluationPipeline:
                     plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
                 logging.debug(pae_list)
             elif self.prediction == 'rosettafold':
-                for i, mdl in enumerate([os.path.join(self.results_dir, 'models', x) for x in os.listdir(self.results_dir)
-                                if x.startswith("model_") and x.endswith(".npz")]):
+                for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
+                                if x.startswith("result_") and x.endswith(".npz")]):
                     with open(mdl, 'rb') as f:
                         data = np.load(f)
+                        logging.debug("Loaded data PAE:")
+                        logging.debug(data['pae'])
                         if 'pae' in data:
                             pae = data['pae']
                         else:
@@ -132,10 +174,12 @@ class EvaluationPipeline:
                         #print(plddt)
                         mdl_name = os.path.splitext(os.path.basename(mdl))[0]
                         pae_list.append((pae, mdl_name))
+                        logging.debug("PAE list:")
+                        logging.debug(pae_list)
                         plddt_list.append((plddt, mdl_name))
 
             if not self.check_none(pae_list):
-                average_pae = self.analyse_pae(pae_list,
+                average_pae_list = self.analyse_pae(pae_list,
                                                 indices,
                                                 seq_titles)
                 self.plot_pae(pae_list,
@@ -143,7 +187,7 @@ class EvaluationPipeline:
                                  seq_titles)
             else:
                 no_pae = True
-                average_pae = [(model_name, None) for pae, model_name in pae_list]
+                average_pae_list = [(model_name, None) for pae, model_name in pae_list]
             plddt_list = sorted(plddt_list, key=lambda x: x[0], reverse=True)
             if not iptm_list is None:
                 if not self.check_none(iptm_list):
@@ -158,34 +202,25 @@ class EvaluationPipeline:
                 else:
                     ptm_list = None
             with open(results_pickle_path, 'wb') as handle:
-                pickle.dump((plddt_list, average_pae, iptm_list, ptm_list), handle, protocol=pickle.HIGHEST_PROTOCOL)
-        else:
-            try:
-                with open(results_pickle_path, 'rb') as handle:
-                    plddt_list, average_pae, iptm_list, ptm_list = pickle.load(handle)
-            except ValueError:
-                with open(results_pickle_path, 'rb') as handle:
-                    plddt_list, average_pae = pickle.load(handle)
-                    iptm_list, ptm_list = None, None
-            if self.check_none(average_pae):
-                no_pae = True
+                pickle.dump((plddt_list, average_pae_list, iptm_list, ptm_list), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
         self.iptm_list, self.ptm_list = iptm_list, ptm_list
 
 
 
 
-        logging.info("Before sort")
-        logging.info(average_pae)
-        self.pae_results_unsorted = average_pae
+        logging.debug("Before sort")
+        logging.debug(average_pae_list)
+        self.pae_results_unsorted = average_pae_list
         if not no_pae:
-            average_pae = self.sort_results(average_pae)
-            logging.debug(average_pae)
-            images = self.get_image_path_list(average_pae)
-            pae_messages = self.get_pae_messages(average_pae)
+            average_pae_list = self.sort_results(average_pae_list)
+            logging.debug(average_pae_list)
+            images = self.get_image_path_list(average_pae_list)
+            pae_messages = self.get_pae_messages(average_pae_list)
         else:
             images = None
             pae_messages = None
-        pdb_path_list = self.align_models(average_pae)
+        pdb_path_list = self.align_models(average_pae_list)
         chain_color = self.get_chain_color()
 
 
@@ -201,6 +236,10 @@ class EvaluationPipeline:
         pae_examples_path = pkg_resources.resource_filename("guifold", "images/pae_examples.png")
         logging.debug(templates_path)
 
+        #Round floats to two decimals
+        for item in [average_pae_list, plddt_list, iptm_list, ptm_list]:
+            item = self.round_float(item)
+
         ### Make MSA coverage plot
         msa_coverage_path = self.msa_coverage()
         
@@ -208,8 +247,8 @@ class EvaluationPipeline:
         env = Environment(loader=FileSystemLoader(templates_path))
         template = env.get_template('results.html')
         if no_pae:
-            average_pae = None
-        rendered = template.render(pae_results=average_pae,
+            average_pae_list = None
+        rendered = template.render(pae_results=average_pae_list,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
                                    ptm_list =ptm_list,
@@ -227,7 +266,7 @@ class EvaluationPipeline:
         html_path = os.path.join(self.results_dir, "results.html")
         with open(html_path, "w") as f_out:
             f_out.write(rendered)
-        rendered = template.render(pae_results=average_pae,
+        rendered = template.render(pae_results=average_pae_list,
                                    plddt_list=plddt_list,
                                    iptm_list=iptm_list,
                                    ptm_list=ptm_list,
@@ -243,7 +282,8 @@ class EvaluationPipeline:
         html_path = os.path.join(self.results_dir, "results_model_viewer.html")
         with open(html_path, "w") as f_out:
             f_out.write(rendered)
-        self.save_confidence_json(pkl_data)
+        if not self.prediction == 'rosettafold':
+            self.save_confidence_json(pkl_data)
         #plt.tight_layout()
         logging.info(f"Finished. Results written to {self.results_dir}.")
 
@@ -251,12 +291,17 @@ class EvaluationPipeline:
         """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py 
         and https://github.com/jasperzuallaert/VIBFold/blob/main/visualize_alphafold_results.py"""
         try:
-            feature_dict = pickle.load(open(os.path.join(self.results_dir, "features.pkl"), 'br'))
+            feature_dict = pickle.load(open(self.features_path, 'br'))
         except OSError:
-            raise SystemExit(f"Feature file {self.output_dir}/features.pkl not found")
+            raise SystemExit(f"Feature file {self.features_path} not found")
 
         #Get subunit boundaries
-        subunits, num_residues = np.unique(feature_dict['asym_id'], return_counts=True)
+        if 'asym_id' in feature_dict:
+            #multimer prediction
+            _, num_residues = np.unique(feature_dict['asym_id'], return_counts=True)
+        else:
+            #monomer prediction
+            num_residues = feature_dict['msa'][0]
         cumulative_num_residues = []
         cumulative_num = 0
         for num_res in num_residues:
@@ -264,7 +309,7 @@ class EvaluationPipeline:
             cumulative_num_residues.append(cumulative_num)
         msa = feature_dict['msa']
         seq_identity = np.mean(msa[0] == msa, axis=-1)
-        seq_identity_full = (msa[0] == msa)
+        #seq_identity_full = (msa[0] == msa)
         seq_identity_indices = np.argsort(seq_identity)
         msa_by_identity = np.where(msa == 21, np.nan, 1.0) * seq_identity[:, np.newaxis]
         msa_by_identity = msa_by_identity[seq_identity_indices]
@@ -287,7 +332,7 @@ class EvaluationPipeline:
         return msa_coverage_path    
 
     def check_none(self, nested_list):
-        if isinstance(nested_list, list):
+        if isinstance(nested_list, (list, tuple)):
             for x in nested_list:
                 if self.check_none(x):
                     return True
@@ -603,7 +648,7 @@ class EvaluationPipeline:
         reference = None
         for item in results:
             logging.debug(item[0])
-            model_index = re.search("model_(\d+)_", item[0]).group(1)
+            model_index = re.search("model_(\d+)", item[0]).group(1)
             if re.search("_pred_", item[0]):
                 pred_index = re.search("_pred_(\d+)", item[0]).group(1)
             else:
@@ -611,7 +656,7 @@ class EvaluationPipeline:
 
             for f in files_unrelaxed:
                 logging.debug(f"Index {model_index} {f}")
-                if model_index == re.search("model_(\d+)_", os.path.basename(f)).group(1):
+                if model_index == re.search("model_(\d+)", os.path.basename(f)).group(1):
                     if not pred_index is None:
                         if not pred_index == re.search("_pred_(\d+)", os.path.basename(f)).group(1):
                             continue
@@ -645,38 +690,40 @@ class EvaluationPipeline:
         min_pae = results[0][1][protein_name]
         return (protein_name.replace(" vs ", "_"), min_pae, model_name)
     
-    def get_min_iptm(self) -> tuple:
+    def get_max_iptm(self) -> tuple:
         #return model_name, value
         protein_names = '_'.join(self.seq_titles)
-        min_iptm = self.iptm_list[0][0].tolist()
-        min_iptm_model_name = self.iptm_list[0][1]
-        return (protein_names, min_iptm, min_iptm_model_name)
+        max_iptm = self.iptm_list[0][0].tolist()
+        max_iptm_model_name = self.iptm_list[0][1]
+        return (protein_names, max_iptm, max_iptm_model_name)
     
-    def get_min_ptm(self):
+    def get_max_ptm(self):
         protein_names = '_'.join(self.seq_titles)
-        min_ptm = self.ptm_list[0][0].tolist()
-        min_ptm_model_name = self.ptm_list[0][1]
-        return (protein_names, min_ptm, min_ptm_model_name)
+        max_ptm = self.ptm_list[0][0].tolist()
+        max_ptm_model_name = self.ptm_list[0][1]
+        return (protein_names, max_ptm, max_ptm_model_name)
     
     def get_scores(self, scores: dict):
         protein_names_pae, min_pae, model_name_min_pae = self.get_min_inter_pae(self.get_pae_results_unsorted())
-        protein_names_ptm, min_ptm, model_name_min_ptm = self.get_min_ptm()
-        protein_names_iptm, min_iptm, model_name_min_iptm = self.get_min_iptm()
-        logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{scores[-1]['protein_names']}")
-        assert protein_names_pae == protein_names_ptm == protein_names_iptm == scores[-1]['protein_names']
+        if not self.prediction == 'rosettafold':
+            protein_names_ptm, max_ptm, model_name_max_ptm = self.get_max_ptm()
+            protein_names_iptm, max_iptm, model_name_max_iptm = self.get_max_iptm()
+            logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{scores[-1]['protein_names']}")
+            assert protein_names_pae == protein_names_ptm == protein_names_iptm == scores[-1]['protein_names']
+            logging.debug(f"model_name_max_ptm: {model_name_max_ptm}")
         score = scores[-1].copy()
         logging.debug(f"model_name_min_pae: {model_name_min_pae}")
         score['min_pae_model_name'] = model_name_min_pae
         logging.debug(f"min_pae: {min_pae}")
         score['min_pae_value'] = min_pae
-        logging.debug(f"model_name_min_ptm: {model_name_min_ptm}")
-        score['min_ptm_model_name'] = model_name_min_ptm
-        logging.debug(f"min ptm: {min_ptm}")
-        score['min_ptm_value'] = min_ptm
-        logging.debug(f"model_name_min_iptm: {model_name_min_iptm}")
-        score['min_iptm_model_name'] = model_name_min_iptm
-        logging.debug(f"min_iptm_value: {min_iptm}")
-        score['min_iptm_value'] = min_iptm
+        if not self.prediction == 'rosettafold':
+            score['max_ptm_model_name'] = model_name_max_ptm
+            logging.debug(f"min ptm: {max_ptm}")
+            score['max_ptm_value'] = max_ptm
+            logging.debug(f"model_name_max_iptm: {model_name_max_iptm}")
+            score['max_iptm_model_name'] = model_name_max_iptm
+            logging.debug(f"max_iptm_value: {max_iptm}")
+            score['max_iptm_value'] = max_iptm
         scores[-1] = score
         logging.debug(scores[-1]['min_pae_model_name'])
         logging.debug("Updated scores dict")
@@ -751,17 +798,20 @@ class EvaluationPipelineBatch:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=".")
-    parser.add_argument('--fasta_path', help='Path to input FASTA file (must be located below the results folder).')
-    parser.add_argument('--debug', action='store_true', help='Debug mode.')
-    parser.add_argument('--continue_from_existing_results', action='store_true',
-                        help='Continue from previously extracted PAE values.')
-    parser.add_argument('--custom_spacing', help='Custom value for spacing of major tick labels.')
-    parser.add_argument('--custom_start_residue_list', help='Define custom axes minimum number. If the prediction was done with internal segments of the proteins,'
+    parser.add_argument('--fasta_path', default=None, required=True, help='Path to input FASTA file (must be located below the results folder).')
+    parser.add_argument('--results_dir', default=None, required=True, help='Path to results.')
+    parser.add_argument('--features_dir', default=None, required=True, help='Path to features.')
+    parser.add_argument('--prediction_pipeline', default='alphafold', help='(Optional) Prediciton pipeline')
+    parser.add_argument('--debug', default=False, action='store_true', help='(Optional) Debug mode.')
+    parser.add_argument('--continue_from_existing_results', default=False, action='store_true',
+                        help='(Optional) Continue from previously extracted PAE values.')
+    parser.add_argument('--custom_spacing', default=None, help='(Optional) Custom value for spacing of major tick labels.')
+    parser.add_argument('--custom_start_residue_list', default=None, help='(Optional) Define custom axes minimum number. If the prediction was done with internal segments of the proteins,'
                                                             'the actual residue numbering can be restored in the plot by'
                                                             'giving the starting residue numbers of the segments separated by a comma.'
                                                             'For example, if there are two subunits with predicted segments'
                                                             '15-100 and 50-300, the list would be --custom_start_residue_list 15,50')
-    parser.add_argument('--custom_axis_label_list', help='Define custom axes labels.'
+    parser.add_argument('--custom_axis_label_list', default=None, help='(Optional) Define custom axes labels.'
                                                           ' Labels for different subunits need to be separated by a comma'
                                                           ' and given in the same order as the sequences in the fasta file. Example: --custom_axis_label_list \"Protein A\", \"Protein B\"')
     args, unknown = parser.parse_known_args()
@@ -770,4 +820,11 @@ if __name__ == '__main__':
     else:
         logging.set_verbosity(logging.DEBUG)
 
-    EvaluationPipeline(args.fasta_path, args.continue_from_existing_results, args.custom_spacing, args.custom_start_residue_list, args.custom_axis_label_list).run_pipeline()
+    EvaluationPipeline(fasta_path=args.fasta_path,
+                        results_dir=args.results_dir,
+                        features_dir=args.features_dir,
+                        continue_from_existing_results=args.continue_from_existing_results,
+                        custom_spacing=args.custom_spacing,
+                        custom_start_residue_list=args.custom_start_residue_list,
+                        custom_axis_label_list=args.custom_axis_label_list,
+                        prediction_pipeline=args.prediction_pipeline).run_pipeline()

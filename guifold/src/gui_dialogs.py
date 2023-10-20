@@ -31,6 +31,49 @@ def message_dlg(title, text):
 
     return return_value
 
+class ProgressDialog(QtWidgets.QDialog):
+    def __init__(self):
+        super().__init__()
+        self.init()
+
+    def init(self):
+        self.setWindowTitle('Progress')
+        self.setGeometry(100, 100, 300, 100)
+        self.layout = QtWidgets.QVBoxLayout()
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.label = QtWidgets.QLabel() 
+        self.label.setStyleSheet("color: red")
+        self.accept_button = QtWidgets.QPushButton('Accept')
+        self.layout.addWidget(self.progress_bar)
+        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.accept_button) 
+        self.accept_button.setHidden(True)
+        self.label.setHidden(True)
+        self.setLayout(self.layout)
+
+
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
+        if value == 100:
+            self.progress_bar.setFormat("Task Complete")
+            self.accept()
+
+    def error(self, text):
+        self.accept_button.setHidden(False)
+        self.label.setHidden(False)
+        text = f"The following errors occured:\n{text}"
+        self.label.setText(text)
+
+        
+
+
+class LoadDialog(QtWidgets.QMessageBox):
+    def __init__(self, parent=None, text=None):
+        super(LoadDialog, self).__init__(parent)
+        self.setWindowTitle("Loading...")
+        self.setText(text)
+        self.setStandardButtons(QtWidgets.QMessageBox.Close)
+
 #From https://stackoverflow.com/a/64340482
 def open_files_and_dirs_dlg(parent=None, caption='', directory=None, 
                         filter=None, initialFilter=None, options=None):

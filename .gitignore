@@ -11,7 +11,6 @@
 /guifold.egg-info/
 /screenshots.ai
 /run_tests.py
-/testing/
 guifold/collate_msas.py
 guifold/images/GUIFold.gif
 guifold/templates/submit_script_slurm.j2
@@ -23,3 +22,13 @@ scripts/compare_features.py
 scripts/minimize.py
 scripts/extract_memory.py
 scripts/make_dummy_features.py
+scripts/features_to_msa.py
+scripts/collect_best_model.py
+testing/msa_test.png
+testing/msa_test2.png
+testing/msa_plot.py
+testing/mmseqs_test.py
+testing/mmseqs_api.py
+testing/prepare_fastfold_memory.py
+scripts/make_heatmap.py
+joss/paper.md

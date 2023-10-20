@@ -19,6 +19,8 @@ Main Features:
 
 ## Installation
 
+### Installation of the repository and dependencies
+
 The installation requires conda.
 
 ```

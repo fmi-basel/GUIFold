@@ -83,7 +83,7 @@ os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "false"
 logging.set_verbosity(logging.INFO)
 
 flags.DEFINE_string('fasta_path', None, 'Path to a single fasta file.')
-flags.DEFINE_string('data_dir', None, 'Path to directory of supporting data.')
+flags.DEFINE_string('data_dir', None, 'Path to the directory containing model weights.')
 flags.DEFINE_string('output_dir', None, 'Path to a directory that will '
                     'store the results.')
 flags.DEFINE_string('jackhmmer_binary_path', shutil.which('jackhmmer'),
@@ -138,10 +138,10 @@ flags.DEFINE_string('obsolete_pdbs_path', None, 'Path to file containing a '
 flags.DEFINE_enum('db_preset', 'full_dbs',
                   ['full_dbs', 'reduced_dbs', 'colabfold_local', 'colabfold_web'],
                   'Choose preset MSA database configuration - '
-                  'smaller genetic database config (reduced_dbs) or '
-                  'full genetic database config  (full_dbs) or '
-                  'colabfold database config (uniref30, colabfold_envdb) in combination with jackhmmer+mmseqs2 (colabfold_local) '
-                  'or colabfold web server (colabfold_web).')
+                  'full_dbs: uniref30_bfd:hhblits, mgnify:jackhmmer, uniref90:jackhmmer, uniprot:jackhmmer '
+                  'reduced_dbs: uniref30:jackhmmer, small_bfd:jackhmmer, uniref90:jackhmmer, uniprot:jackhmmer '
+                  'colabfold_local: uniref30:mmseqs, colabfold_envdb:mmseqs, uniref90:mmseqs, uniprot:mmseqs '
+                  'colabfold_webserver: uniref30:mmseqs (server), colabfold_envdb:mmseqs (server), uniref90:jackhmmer, unirpot:jackhmmer')
 flags.DEFINE_enum('model_preset', 'monomer',
                   ['monomer', 'monomer_casp14', 'monomer_ptm', 'multimer'],
                   'Choose preset model configuration - the monomer model, '
@@ -220,12 +220,13 @@ RELAX_ENERGY_TOLERANCE = 2.39
 RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
+BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
 
 
 def _check_flag(flag_name: str,
                 other_flag_name: str,
                 should_be_set: bool):
-  if should_be_set != bool(FLAGS[flag_name].value):
+  if should_be_set and not bool(FLAGS[flag_name].value):
     verb = 'be' if should_be_set else 'not be'
     raise ValueError(f'{flag_name} must {verb} set when running with '
                      f'"--{other_flag_name}={FLAGS[other_flag_name].value}".')
@@ -308,7 +309,7 @@ def reextract_msa(msa, sequences, msa_output_path):
 
     return msa_output_path
 
-def batch_minimization(output_dir):
+def batch_minimization(output_dir, gpu_relax):
     unrelaxed_pdbs, relaxed_pdbs = [], []
     for root, folders, files in os.walk(output_dir):
         for file in files:
@@ -330,6 +331,8 @@ def batch_minimization(output_dir):
         relax_results_pkl = os.path.join(model_dir, 'relax_results.pkl')
         try:
             cmd = f"run_relaxation.py --unrelaxed_pdb_path {unrelaxed_pdb} --relaxed_output_path {relaxed_output_path} --model_name {model_name} --relax_results_pkl {relax_results_pkl}"
+            if FLAGS.use_gpu_relax:
+                cmd = f"{cmd} --use_gpu_relax"
             logging.debug(cmd)
             p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
             output, error = p.communicate()
@@ -343,7 +346,7 @@ def batch_minimization(output_dir):
 
 def predict_structure(
     fasta_path: str,
-    fasta_name: str,
+    protein_names: str,
     output_dir_base: str,
     data_pipeline: Union[pipeline.DataPipeline, pipeline_multimer.DataPipeline],
     model_runners: Dict[str, model.RunModel],
@@ -356,27 +359,34 @@ def predict_structure(
     custom_template_list: Optional[str] = None,
     precomputed_msas_list: Optional[str] = None,
     prediction_pipeline: str = 'alphafold',
+    feature_pipeline: str = 'full_dbs',
     batch_prediction: Optional[bool] = False,
-    scores: Optional[tuple] = None):
+    scores: Optional[tuple] = None,
+    batch_mmseqs: bool = False):
     """Predicts structure using AlphaFold for the given sequence."""
-    logging.info('Predicting %s', fasta_name)
+    logging.info('Predicting %s', protein_names)
+    fasta_name = os.path.splitext(os.path.basename(fasta_path))[0]
     timings = {}
-    if batch_prediction:
-        output_dir = os.path.join(output_dir_base, f"results_{prediction_pipeline}", fasta_name)
-    else:
-        output_dir = os.path.join(output_dir_base, f"results_{prediction_pipeline}")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    if FLAGS.pipeline == 'batch_msas':
-        msa_output_dir = os.path.join(output_dir_base, 'features', 'batch_msas')
-    else:
-        msa_output_dir = os.path.join(output_dir_base, 'features', fasta_name, 'msas')
+    predictions_output_dir = os.path.join(output_dir_base, "predictions", prediction_pipeline)
+    features_output_dir = os.path.join(output_dir_base, "features", feature_pipeline)
+    results_dir = os.path.join(predictions_output_dir, protein_names)
+    msa_output_dir = features_output_dir
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir, exist_ok=True)    
     if not os.path.exists(msa_output_dir):
-        os.makedirs(msa_output_dir)
-
-    features_output_path = os.path.join(output_dir_base, 'features', 'features.pkl')
+        os.makedirs(msa_output_dir, exist_ok=True)
+    features_output_path = os.path.join(features_output_dir, f'features_{protein_names}.pkl')
     # Get features.
     if not FLAGS.pipeline == 'continue_from_features':
+        if batch_mmseqs:
+            #Calculate MSAs in batch
+            logging.info("Running batch mmseqs pipeline")
+            data_pipeline.process_batch_mmseqs(input_fasta_path=fasta_path,
+                                          msa_output_dir=msa_output_dir,
+                                          num_cpu=FLAGS.num_cpu)
+            #Use the MSAs computed in the previous step
+            data_pipeline.set_use_precomputed_msas(True)
+            data_pipeline.set_precomputed_msas_path(msa_output_dir)
         t_0 = time.time()
         feature_dict = data_pipeline.process(
                 input_fasta_path=fasta_path,
@@ -426,15 +436,13 @@ def predict_structure(
             if prediction_pipeline == 'fastfold':
                model_name = re.match('(model_\d{1}(_ptm|_multimer){0,1}).*', model_name).group(1)
             model_name = model_name.replace("_pred_0", "")
-            if prediction_pipeline == 'rosettafold':
-                unrelaxed_pdb_path = os.path.join(output_dir, "models", "model_0.pdb")
-            else:
-                unrelaxed_pdb_path = os.path.join(output_dir, f'unrelaxed_{model_name}.pdb')
+            unrelaxed_pdb_path = os.path.join(results_dir, f'unrelaxed_{model_name}.pdb')
 
-            logging.info('Running model %s on %s', model_name, fasta_name)
-            result_output_path = os.path.join(output_dir, f'result_{model_name}.pkl')
+            logging.info('Running model %s on %s', model_name, protein_names)
+            result_output_path = os.path.join(results_dir, f'result_{model_name}.pkl')
             #Skip if model already exists
-            if not os.path.exists(unrelaxed_pdb_path) and not os.path.exists(result_output_path):
+            logging.debug(f"Model exists: {os.path.exists(unrelaxed_pdb_path)}")
+            if not os.path.exists(unrelaxed_pdb_path) or not os.path.exists(result_output_path):
                 logging.info(feature_dict.keys())
                 if prediction_pipeline == 'rosettafold':
                     logging.info("Starting prediction pipeline for rosettafold2")
@@ -460,16 +468,27 @@ def predict_structure(
                                     read_data(FFDB+'_pdb.ffdata'))
                     logging.info(f"Inputs from run_prediciton {inputs}")
                     logging.info(f"Running prediction")
-                    pred.predict(
-                        inputs=inputs,
-                        output_dir=output_dir, 
-                        symm='C1', 
-                        n_recycles=FLAGS.num_recycle, 
-                        n_models=1, 
-                        subcrop=1, 
-                        nseqs=256, 
-                        nseqs_full=2048, 
-                        ffdb=ffdb)
+                    prediction_result = pred.predict(
+                                            inputs=inputs,
+                                            output_dir=results_dir, 
+                                            symm='C1', 
+                                            n_recycles=FLAGS.num_recycle, 
+                                            n_models=1, 
+                                            subcrop=1, 
+                                            nseqs=256, 
+                                            nseqs_full=2048, 
+                                            ffdb=ffdb)
+                    assert len(prediction_result) == 1
+                    prediction_result = prediction_result[0]
+                    model_output_path = os.path.join(results_dir, f"unrelaxed_model_{model_index}.pdb")
+                    if not os.path.exists(model_output_path):
+                        logging.error("No output model found!")
+                        raise SystemExit
+                    with open(model_output_path, 'r') as f:
+                        content = f.read()
+                        unrelaxed_pdbs[model_name] = content 
+                    
+                    
 
                 elif prediction_pipeline == 'fastfold':
                     feature_dict = {}
@@ -517,7 +536,7 @@ def predict_structure(
                         timings[f'predict_and_compile_{model_name}'] = t_diff
                         logging.info(
                             'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
-                            model_name, fasta_name, t_diff)
+                            model_name, protein_names, t_diff)
 
                         if benchmark:
                             pass
@@ -535,7 +554,7 @@ def predict_structure(
                     timings[f'predict_and_compile_{model_name}'] = t_diff
                     logging.info(
                         'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
-                        model_name, fasta_name, t_diff)
+                        model_name, protein_names, t_diff)
 
                     if benchmark:
                         t_0 = time.time()
@@ -545,10 +564,10 @@ def predict_structure(
                         timings[f'predict_benchmark_{model_name}'] = t_diff
                         logging.info(
                             'Total JAX model %s on %s predict time (excludes compilation time): %.1fs',
-                            model_name, fasta_name, t_diff)
+                            model_name, protein_names, t_diff)
 
                 plddt = prediction_result['plddt']
-                if not prediction_pipeline == 'fastfold':
+                if prediction_pipeline == 'alphafold':
                     ranking_confidences[model_name] = prediction_result['ranking_confidence']
 
                 # Save the model outputs.
@@ -574,7 +593,7 @@ def predict_structure(
                         remove_leading_feature_dimension=not model_runner.multimer_mode)
                     unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
 
-                unrelaxed_pdb_path = os.path.join(output_dir, f'unrelaxed_{model_name}.pdb')
+                unrelaxed_pdb_path = os.path.join(results_dir, f'unrelaxed_{model_name}.pdb')
                 with open(unrelaxed_pdb_path, 'w') as f:
                     f.write(unrelaxed_pdbs[model_name])
             else:
@@ -586,14 +605,18 @@ def predict_structure(
                         unrelaxed_protein = ff_protein.from_pdb_string(f.read())
                     elif prediction_pipeline == 'alphafold':
                         unrelaxed_protein = protein.from_pdb_string(f.read())
+                    elif prediction_pipeline == 'rosettafold':
+                        unrelaxed_protein = protein.from_pdb_string(f.read())
 
             if amber_relaxer:
                 relaxed_output_path = os.path.join(
-                    output_dir, f'relaxed_{model_name}.pdb')
+                    results_dir, f'relaxed_{model_name}.pdb')
                 #Run in a new process to prevent CUDA initialitation error of openmm  
-                relax_results_pkl = os.path.join(output_dir, 'relax_results.pkl')
+                relax_results_pkl = os.path.join(results_dir, 'relax_results.pkl')
                 try:
                     cmd = f"run_relaxation.py --unrelaxed_pdb_path {unrelaxed_pdb_path} --relaxed_output_path {relaxed_output_path} --model_name {model_name} --relax_results_pkl {relax_results_pkl}"
+                    if FLAGS.use_gpu_relax:
+                        cmd = f"{cmd} --use_gpu_relax"
                     logging.debug(cmd)
                     p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
                     output, error = p.communicate()
@@ -618,38 +641,41 @@ def predict_structure(
             for idx, (model_name, _) in enumerate(
                 sorted(ranking_confidences.items(), key=lambda x: x[1], reverse=True)):
                 ranked_order.append(model_name)
-                ranked_output_path = os.path.join(output_dir, f'ranked_by_plddt_{idx}.pdb')
+                ranked_output_path = os.path.join(results_dir, f'ranked_by_plddt_{idx}.pdb')
                 with open(ranked_output_path, 'w') as f:
                     if amber_relaxer:
                         f.write(relaxed_pdbs[model_name])
                     else:
                         f.write(unrelaxed_pdbs[model_name])
-            ranking_output_path = os.path.join(output_dir, 'ranking_debug.json')
+            ranking_output_path = os.path.join(results_dir, 'ranking_debug.json')
             with open(ranking_output_path, 'w') as f:
                 label = 'iptm+ptm' if 'iptm' in prediction_result else 'plddts'
                 f.write(json.dumps(
                     {label: ranking_confidences, 'order': ranked_order}, indent=4))
 
-        logging.info('Final timings for %s: %s', fasta_name, timings)
+        logging.info('Final timings for %s: %s', protein_names, timings)
 
-        timings_output_path = os.path.join(output_dir, 'timings.json')
+        timings_output_path = os.path.join(results_dir, 'timings.json')
         with open(timings_output_path, 'w') as f:
             f.write(json.dumps(timings, indent=4))
         if amber_relaxer:
-            relax_metrics_path = os.path.join(output_dir, 'relax_metrics.json')
+            relax_metrics_path = os.path.join(results_dir, 'relax_metrics.json')
             with open(relax_metrics_path, 'w') as f:
                 f.write(json.dumps(relax_metrics, indent=4))
 
-        evaluation = EvaluationPipeline(fasta_path)
+        evaluation = EvaluationPipeline(fasta_path=fasta_path,
+                                         results_dir=results_dir,
+                                           features_dir=msa_output_dir,
+                                           prediction_pipeline=prediction_pipeline)
         evaluation.run_pipeline()
 
         if batch_prediction:
             logging.info("Task finished")
             evaluation.get_scores(scores)
             #protein_names, model_name, value = evaluation.get_min_inter_pae(evaluation.get_pae_results_unsorted(), fasta_name))
-            #min_iptm_list.append(evaluation.get_min_iptm())
-            #min_ptm_list.append(evaluation.get_min_ptm())
-            #return min_inter_pae_list, min_iptm_list, min_ptm_list
+            #max_iptm_list.append(evaluation.get_max_iptm())
+            #max_ptm_list.append(evaluation.get_max_ptm())
+            #return min_inter_pae_list, max_iptm_list, max_ptm_list
         else:
             logging.info("Alphafold pipeline completed. Exit code 0")
 
@@ -677,6 +703,7 @@ def get_prediction_results(scores, results_file):
     if os.path.exists(results_file):
         with open(results_file, 'r') as f:
             lines = f.readlines()
+        lines = [l.strip('\n') for l in lines]
         if len(lines) > 1:
             keys = lines[0].split(',')
         for line in lines[1:]:
@@ -709,6 +736,7 @@ def main(argv):
     #Do not check for MSA tools when MSA already exists.
     run_multimer_system = 'multimer' in FLAGS.model_preset
     prediction_pipeline = FLAGS.prediction
+    feature_pipeline = FLAGS.db_preset
     use_small_bfd = FLAGS.db_preset == 'reduced_dbs'
     use_mmseqs_local = FLAGS.db_preset == 'colabfold_local'
     use_mmseqs_api = FLAGS.db_preset == 'colabfold_web'
@@ -719,21 +747,26 @@ def main(argv):
         for tool_name in (
             'jackhmmer', 'hhblits', 'hhsearch', 'hmmsearch', 'hmmbuild', 'kalign'):
             if not FLAGS[f'{tool_name}_binary_path'].value:
-                raise ValueError(f'Could not find path to the "{tool_name}" binary. Make '
-                            'sure it is installed on your system.')
+                raise ValueError(f'Path to "{tool_name}" binary not set.')
             if use_mmseqs_local:
                 if not FLAGS.mmseqs_binary_path:
-                    raise ValueError(f'Could not find path to mmseqs2 binary. Make sure it is installed on your system.')
-        #_check_flag('small_bfd_database_path', 'db_preset',
-        #            should_be_set=use_small_bfd)
-        #_check_flag('bfd_database_path', 'db_preset',
-        #            should_be_set=not use_small_bfd)
-        #_check_flag('uniref30_database_path', 'db_preset',
-        #            should_be_set=not use_small_bfd and not use_mmseqs_local and not use_mmseqs_api)
-        #_check_flag('colabfold_envdb_database_path', 'db_preset',
-        #            should_be_set=use_mmseqs_local)
-        #_check_flag('uniref30_mmseqs_database_path', 'db_preset',
-        #            should_be_set=use_mmseqs_local)
+                    raise ValueError(f'Path to mmseqs binary not set.')
+        _check_flag('small_bfd_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='reduced_dbs')
+        _check_flag('bfd_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='full_dbs')
+        _check_flag('mgnify_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='full_dbs' or FLAGS.db_preset=='reduced_dbs')
+        _check_flag('uniref30_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='full_dbs')
+        _check_flag('colabfold_envdb_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='colabfold_local')
+        _check_flag('uniref30_mmseqs_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='colabfold_local')
+        _check_flag('uniref90_mmseqs_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='colabfold_local')
+        _check_flag('uniprot_mmseqs_database_path', 'db_preset',
+                    should_be_set=FLAGS.db_preset=='colabfold_local')
 
     if FLAGS.model_preset == 'monomer_casp14':
         num_ensemble = 8
@@ -741,7 +774,7 @@ def main(argv):
         num_ensemble = 1
 
     #Only one fasta file allowed
-    fasta_name = pathlib.Path(FLAGS.fasta_path).stem
+    #protein_names = pathlib.Path(FLAGS.fasta_path).stem
 
 
     template_searcher_hmm = hmmsearch.Hmmsearch(
@@ -801,13 +834,15 @@ def main(argv):
 
     #Calculates all MSAs needed for monomer or multimer pipeline
     if FLAGS.pipeline == 'batch_msas':
+      logging.debug("Adjusting template searcher and featurizer for batch_msas pipeline.")
       monomer_data_pipeline.template_searcher_hmm = template_searcher_hmm
       monomer_data_pipeline.template_featurizer_hmm = template_featurizer_hmm
       #Calculates uniprot hits
       monomer_data_pipeline.multimer = True
-      data_pipeline = pipeline_batch.DataPipeline(monomer_data_pipeline=monomer_data_pipeline, batch_mmseqs=use_mmseqs_local)
+      data_pipeline = pipeline_batch.DataPipeline(monomer_data_pipeline=monomer_data_pipeline, batch_mmseqs=FLAGS.db_preset=='colabfold_local')
       num_predictions_per_model = 1
     elif run_multimer_system and not FLAGS.pipeline == 'batch_msas':
+        logging.debug("Adjusting template searcher and featurizer for multimer pipeline.")
         monomer_data_pipeline.template_searcher_hhr = None
         monomer_data_pipeline.template_featurizer_hhr = None
         monomer_data_pipeline.template_searcher_hmm = template_searcher_hmm
@@ -819,6 +854,7 @@ def main(argv):
             jackhmmer_binary_path=FLAGS.jackhmmer_binary_path,
             uniprot_database_path=FLAGS.uniprot_database_path)
     else:
+        logging.debug("Using monomer pipeline.")
         num_predictions_per_model = 1
         data_pipeline = monomer_data_pipeline
 
@@ -944,84 +980,109 @@ def main(argv):
     elif FLAGS.pipeline == 'batch_msas' and FLAGS.precomputed_msas_path:
         logging.warning("Precomputed MSAs will not be copied when running batch features.")
 
+    results_file_pairwise_predictions = f"pairwise_prediction_results_{FLAGS.prediction}.csv"
     if FLAGS.pipeline == 'all_vs_all':
         combinations = []
         manager = multiprocessing.Manager()
-        #min_inter_pae_list, min_iptm_list, min_ptm_list = manager.list(), manager.list(), manager.list()
+        #min_inter_pae_list, max_iptm_list, max_ptm_list = manager.list(), manager.list(), manager.list()
         scores = manager.list()
-        results_file = "pairwise_prediction_results.csv"
-        scores = get_prediction_results(scores, results_file)
+        
+        scores = get_prediction_results(scores, results_file_pairwise_predictions)
         for i, (desc_1, seq_1) in enumerate(description_sequence_dict.items()):
             for o, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
+                logging.debug(f"protein names {desc_1} {desc_2}")
                 #Check if sequence names are identical
                 if desc_1 == desc_2:
                     prev_desc_1 = desc_1
                     prev_desc_2 = desc_2
                     desc_1 = f"{desc_1}_1"
                     desc_2 = f"{desc_2}_2"
+                else:
+                    prev_desc_1, prev_desc_2 = None, None
+                #Skip if the complementary pair already exists
+                if (desc_2, desc_1) in combinations:
+                    if prev_desc_1:
+                        desc_1 = prev_desc_1
+                    if prev_desc_2:
+                        desc_2 = prev_desc_2
+                    continue
+                combinations.append((desc_1, desc_2))
                 protein_names = f"{desc_1}_{desc_2}"
                 if protein_names in [x['protein_names'] if 'protein_names' in x else None for x in scores]:
                     score_index = find_index(scores, protein_names)
                     if not None in [item for item in scores[score_index].values()]:
                         logging.info(f"Prediction pair {protein_names} already exists. Task finished. Skipping.")
+                        if prev_desc_1:
+                            desc_1 = prev_desc_1
+                        if prev_desc_2:
+                            desc_2 = prev_desc_2
                         continue
                     else:
                         logging.info(f"Prediction pair {protein_names} already exists but not all evaluation scores found.")
                 else:
                     logging.info(f"Prediction pair {protein_names} not found in score list. Running prediction.")
-                    score_dict = {'protein_names': protein_names,
-                                        'min_pae_value': None, 'min_pae_model_name': None,
-                                        'min_ptm_value': None, 'min_ptm_model_name': None,
-                                        'min_iptm_value': None, 'min_iptm_model_name': None}
-                    scores.append(score_dict)
-                #Check if reversed combination already exists
-                if not (desc_2, desc_1) in combinations:
-                    combinations.append((desc_1, desc_2))
-                    fasta_name = f"{desc_1}_{desc_2}"
-                    fasta_path = os.path.join(FLAGS.output_dir, f"{desc_1}_{desc_2}.fasta")
-                    with open(fasta_path, 'w') as f:
-                        f.write(f">{desc_1}\n")
-                        f.write(seq_1)
-                        f.write(f"\n\n>{desc_2}\n")
-                        f.write(seq_2)
-
-                    kwargs = {
-                            "fasta_path": fasta_path,
-                            "fasta_name": fasta_name,
-                            "output_dir_base": FLAGS.output_dir,
-                            "data_pipeline": data_pipeline,
-                            "model_runners": model_runners,
-                            "amber_relaxer": amber_relaxer,
-                            "benchmark": FLAGS.benchmark,
-                            "random_seed": random_seed,
-                            "is_multimer": run_multimer_system,
-                            "no_msa_list": no_msa_list,
-                            "no_template_list": [no_template_list[0], no_template_list[i]],
-                            "custom_template_list": [custom_template_list[0], custom_template_list[i]],
-                            "precomputed_msas_list": [precomputed_msas_list[0], precomputed_msas_list[i]],
-                            "batch_prediction": True,
-                            "scores": scores,
-                            "prediction_pipeline": prediction_pipeline}
-                    
-                    if prediction_pipeline == 'fastfold':
-                        process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
-                        process.start()
-                        process.join()
+                    if prediction_pipeline == 'rosettafold':
+                        score_dict = {'protein_names': protein_names,
+                                        'min_pae_value': None, 'min_pae_model_name': None}
                     else:
-                        predict_structure(**kwargs)
+                        score_dict = {'protein_names': protein_names,
+                                            'min_pae_value': None, 'min_pae_model_name': None,
+                                        'max_ptm_value': None, 'max_ptm_model_name': None,
+                                        'max_iptm_value': None, 'max_iptm_model_name': None}
+                    scores.append(score_dict)
+                #Check if reversed combination already exists   
+                protein_names = f"{desc_1}_{desc_2}"
+                fasta_path = os.path.join(FLAGS.output_dir, f"{desc_1}_{desc_2}.fasta")
+                with open(fasta_path, 'w') as f:
+                    f.write(f">{desc_1}\n")
+                    f.write(seq_1)
+                    f.write(f"\n\n>{desc_2}\n")
+                    f.write(seq_2)
+
+                kwargs = {
+                        "fasta_path": fasta_path,
+                        "protein_names": protein_names,
+                        "output_dir_base": FLAGS.output_dir,
+                        "data_pipeline": data_pipeline,
+                        "model_runners": model_runners,
+                        "amber_relaxer": amber_relaxer,
+                        "benchmark": FLAGS.benchmark,
+                        "random_seed": random_seed,
+                        "is_multimer": run_multimer_system,
+                        "no_msa_list": no_msa_list,
+                        "no_template_list": [no_template_list[i], no_template_list[o]],
+                        "custom_template_list": [custom_template_list[i], custom_template_list[o]],
+                        "precomputed_msas_list": [precomputed_msas_list[i], precomputed_msas_list[o]],
+                        "batch_prediction": True,
+                        "scores": scores,
+                        "prediction_pipeline": prediction_pipeline,
+                        "feature_pipeline": feature_pipeline}
+                
+                if prediction_pipeline == 'fastfold':
+                    logging.info("Starting FastFold in a new process.")
+                    process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
+                    process.start()
+                    process.join()
+                else:
+                    predict_structure(**kwargs)
 
                 #reset
-                desc_1 = prev_desc_1
-                desc_2 = prev_desc_2
+                if prev_desc_1:
+                    desc_1 = prev_desc_1
+                if prev_desc_2:
+                    desc_2 = prev_desc_2
+                logging.debug(f"protein names after reset: {desc_1} {desc_2}")
                 if not None in [item for item in scores[-1].values()]:
-                    write_prediction_results(scores, results_file)
-                else:
-                    logging.debug("Found None in scores list.")
+                    logging.debug("Scores dict")
                     logging.debug(scores)
+                    write_prediction_results(scores, results_file_pairwise_predictions)
+                else:
+                    logging.error("Found None in scores list.")
+                    logging.error(scores)
                     sys.exit()
 
         if FLAGS.run_relax:
-            batch_minimization(FLAGS.output_dir)
+            batch_minimization(FLAGS.output_dir, FLAGS.use_gpu_relax)
         evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, scores)
         evaluation_batch.run()
         logging.info("Alphafold pipeline completed. Exit code 0")
@@ -1030,32 +1091,40 @@ def main(argv):
         combinations = []
         manager = multiprocessing.Manager()
         scores = manager.list()
-        #min_inter_pae_list, min_iptm_list, min_ptm_list = manager.list(), manager.list(), manager.list()
+        #min_inter_pae_list, max_iptm_list, max_ptm_list = manager.list(), manager.list(), manager.list()
         desc_1 = list(description_sequence_dict.keys())[0]
         seq_1 = description_sequence_dict[desc_1]
-        results_file = "pairwise_prediction_results.csv"
-        scores = get_prediction_results(scores, results_file)
+        scores = get_prediction_results(scores, results_file_pairwise_predictions)
         for i, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
             if desc_1 == desc_2:
+                prev_desc_1 = desc_1
                 desc_1 = f"{desc_1}_1"
                 desc_2 = f"{desc_2}_2"
+            else:
+                prev_desc_1 = None
 
             protein_names = f"{desc_1}_{desc_2}"
             if protein_names in [x['protein_names'] if 'protein_names' in x else None for x in scores]:
                 score_index = find_index(scores, protein_names)
                 if not None in [item for item in scores[score_index].values()]:
                     logging.info(f"Prediction pair {protein_names} already exists. Task finished. Skipping.")
+                    if prev_desc_1:
+                        desc_1 = prev_desc_1
                     continue
                 else:
                     logging.info(f"Prediction pair {protein_names} already exists but not all evaluation scores found.")
             else:
                 logging.info(f"Prediction pair {protein_names} not found in score list. Running prediction.")
-                score_dict = {'protein_names': protein_names,
-                                    'min_pae_value': None, 'min_pae_model_name': None,
-                                    'min_ptm_value': None, 'min_ptm_model_name': None,
-                                    'min_iptm_value': None, 'min_iptm_model_name': None}
-                scores.append(score_dict)
-            fasta_name = f"{desc_1}_{desc_2}"
+                if prediction_pipeline == 'rosettafold':
+                    score_dict = {'protein_names': protein_names,
+                                    'min_pae_value': None, 'min_pae_model_name': None}
+                else:
+                    score_dict = {'protein_names': protein_names,
+                                        'min_pae_value': None, 'min_pae_model_name': None,
+                                    'max_ptm_value': None, 'max_ptm_model_name': None,
+                                    'max_iptm_value': None, 'max_iptm_model_name': None}
+            scores.append(score_dict)
+            protein_names = f"{desc_1}_{desc_2}"
             fasta_path = os.path.join(FLAGS.output_dir, f"{desc_1}_{desc_2}.fasta")
             with open(fasta_path, 'w') as f:
                 f.write(f">{desc_1}\n")
@@ -1068,7 +1137,7 @@ def main(argv):
 
             kwargs = {
                 "fasta_path": fasta_path,
-                "fasta_name": fasta_name,
+                "protein_names": protein_names,
                 "output_dir_base": FLAGS.output_dir,
                 "data_pipeline": data_pipeline,
                 "model_runners": model_runners,
@@ -1082,7 +1151,8 @@ def main(argv):
                 "precomputed_msas_list": [precomputed_msas_list[0], precomputed_msas_list[i]],
                 "batch_prediction": True,
                 "scores": scores,
-                "prediction_pipeline": prediction_pipeline}
+                "prediction_pipeline": prediction_pipeline,
+                "feature_pipeline": feature_pipeline}
 
             if prediction_pipeline == 'fastfold':
                 process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
@@ -1091,14 +1161,18 @@ def main(argv):
             else:
                 predict_structure(**kwargs)
 
+            if prev_desc_1:
+                desc_1 = prev_desc_1
+
             if not None in [item for item in scores[-1].values()]:
-                write_prediction_results(scores, results_file)
+                write_prediction_results(scores, results_file_pairwise_predictions)
             else:
                 logging.debug("Found None in scores list.")
                 logging.debug(scores)
                 sys.exit()
+
         if FLAGS.run_relax:
-            batch_minimization(FLAGS.output_dir)
+            batch_minimization(FLAGS.output_dir, FLAGS.use_gpu_relax)
         evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, scores)
         evaluation_batch.run()
         logging.info("Alphafold pipeline completed. Exit code 0")
@@ -1111,12 +1185,11 @@ def main(argv):
         combinations = []
         manager = multiprocessing.Manager()
         scores = manager.list()
-        #min_inter_pae_list, min_iptm_list, min_ptm_list = manager.list(), manager.list(), manager.list()
+        #min_inter_pae_list, max_iptm_list, max_ptm_list = manager.list(), manager.list(), manager.list()
         first_n_desc_list = list(description_sequence_dict.keys())[:first_n_seq]
         first_n_seq_list = list(description_sequence_dict.values())[:first_n_seq]
         desc_1 = '_'.join(first_n_desc_list)
-        results_file = "pairwise_prediction_results.csv"
-        scores = get_prediction_results(scores, results_file)
+        scores = get_prediction_results(scores, results_file_pairwise_predictions)
         for i, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
             if i > first_n_seq:
                 protein_names = f"{desc_1}_{desc_2}"
@@ -1129,12 +1202,16 @@ def main(argv):
                         logging.info(f"Prediction pair {protein_names} already exists but not all evaluation scores found.")
                 else:
                     logging.info(f"Prediction pair {protein_names} not found in score list. Running prediction.")
-                    score_dict = {'protein_names': protein_names,
-                                        'min_pae_value': None, 'min_pae_model_name': None,
-                                        'min_ptm_value': None, 'min_ptm_model_name': None,
-                                        'min_iptm_value': None, 'min_iptm_model_name': None}
+                    if prediction_pipeline == 'rosettafold':
+                        score_dict = {'protein_names': protein_names,
+                                        'min_pae_value': None, 'min_pae_model_name': None}
+                    else:
+                        score_dict = {'protein_names': protein_names,
+                                            'min_pae_value': None, 'min_pae_model_name': None,
+                                        'max_ptm_value': None, 'max_ptm_model_name': None,
+                                        'max_iptm_value': None, 'max_iptm_model_name': None}
                     scores.append(score_dict)
-                fasta_name = f"{desc_1}_{desc_2}"
+                protein_names = f"{desc_1}_{desc_2}"
                 fasta_path = os.path.join(FLAGS.output_dir, f"{desc_1}_{desc_2}.fasta")
                 with open(fasta_path, 'w') as f:
                     for desc_1 in first_n_desc_list:
@@ -1149,7 +1226,7 @@ def main(argv):
 
                 kwargs = {
                     "fasta_path": fasta_path,
-                    "fasta_name": fasta_name,
+                    "protein_names": protein_names,
                     "output_dir_base": FLAGS.output_dir,
                     "data_pipeline": data_pipeline,
                     "model_runners": model_runners,
@@ -1163,7 +1240,8 @@ def main(argv):
                     "precomputed_msas_list": [precomputed_msas_list[0], precomputed_msas_list[i]],
                     "batch_prediction": True,
                     "scores": scores,
-                    "prediction_pipeline": prediction_pipeline}
+                    "prediction_pipeline": prediction_pipeline,
+                    "feature_pipeline": feature_pipeline}
 
                 if prediction_pipeline == 'fastfold':
                     process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
@@ -1173,26 +1251,27 @@ def main(argv):
                     predict_structure(**kwargs)
 
                 if not None in [item for item in scores[-1].values()]:
-                    write_prediction_results(scores, results_file)
+                    write_prediction_results(scores, results_file_pairwise_predictions)
                 else:
                     logging.debug("Found None in scores list.")
                     logging.debug(scores)
                     sys.exit()
         if FLAGS.run_relax:
-            batch_minimization(FLAGS.output_dir)
+            batch_minimization(FLAGS.output_dir, FLAGS.use_gpu_relax)
         evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, scores)
         evaluation_batch.run()
         logging.info("Alphafold pipeline completed. Exit code 0")        
 
 
     elif FLAGS.pipeline == 'only_relax':
-        batch_minimization(FLAGS.output_dir)
+        batch_minimization(FLAGS.output_dir, FLAGS.use_gpu_relax)
         logging.info("Alphafold pipeline completed. Exit code 0")
 
     else:
+        protein_names = '_'.join(list(description_sequence_dict.keys()))
         predict_structure(
             fasta_path=FLAGS.fasta_path,
-            fasta_name=fasta_name,
+            protein_names=protein_names,
             output_dir_base=FLAGS.output_dir,
             data_pipeline=data_pipeline,
             model_runners=model_runners,
@@ -1204,7 +1283,9 @@ def main(argv):
             no_template_list=no_template_list,
             custom_template_list=custom_template_list,
             precomputed_msas_list=precomputed_msas_list,
-            prediction_pipeline=prediction_pipeline)
+            prediction_pipeline=prediction_pipeline,
+            feature_pipeline=feature_pipeline,
+            batch_mmseqs=FLAGS.db_preset=='colabfold_local')
 
 def sigterm_handler(_signo, _stack_frame):
     raise KeyboardInterrupt

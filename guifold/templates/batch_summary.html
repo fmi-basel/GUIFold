@@ -21,45 +21,6 @@
    <body>
 
         <div class="page">
-            <h2>pTM</h2>
-
-            <table border = "1">
-                {% for score in scores %}
-                {% if loop.index == 1 %}
-                <tr>
-                    <th>Combination</th>
-                    <th>Model number</th>
-                    <th>pTM</th>
-                </tr>
-                {% endif %}
-
-                <tr id="ptm-table-{{loop.index}}">
-                    <td>{{score['protein_names']}}</td>
-                    <td>{{score['min_ptm_model_name']}}</td>
-                    <td>{{score['min_ptm_value']}}</td>
-                </tr>
-                {% endfor %}
-            </table>
-
-            <h2>ipTM</h2>
-
-            <table border = "1">
-                {% for score in scores %}
-                {% if loop.index == 1 %}
-                <tr>
-                    <th>Combination</th>
-                    <th>Model number</th>
-                    <th>ipTM</th>
-                </tr>
-                {% endif %}
-
-                <tr id="iptm-table-{{loop.index}}">
-                    <td>{{score['protein_names']}}</td>
-                    <td>{{score['min_iptm_model_name']}}</td>
-                    <td>{{score['min_iptm_value']}}</td>
-                </tr>
-                {% endfor %}
-            </table>
 
             <h2>Best inter-PAE</h2>
 
@@ -81,6 +42,48 @@
                 {% endfor %}
             </table>
 
+
+            <h2>pTM</h2>
+
+            <table border = "1">
+                {% for score in scores %}
+                {% if loop.index == 1 %}
+                <tr>
+                    <th>Combination</th>
+                    <th>Model number</th>
+                    <th>pTM</th>
+                </tr>
+                {% endif %}
+
+                <tr id="ptm-table-{{loop.index}}">
+                    <td>{{score['protein_names']}}</td>
+                    <td>{{score['max_ptm_model_name']}}</td>
+                    <td>{{score['max_ptm_value']}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <h2>ipTM</h2>
+
+            <table border = "1">
+                {% for score in scores %}
+                {% if loop.index == 1 %}
+                <tr>
+                    <th>Combination</th>
+                    <th>Model number</th>
+                    <th>ipTM</th>
+                </tr>
+                {% endif %}
+
+                <tr id="iptm-table-{{loop.index}}">
+                    <td>{{score['protein_names']}}</td>
+                    <td>{{score['max_iptm_model_name']}}</td>
+                    <td>{{score['max_iptm_value']}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+          
         </div>
     </body>
 </html>

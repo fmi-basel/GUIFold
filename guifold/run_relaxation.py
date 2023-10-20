@@ -14,7 +14,7 @@ parser.add_argument('--model_name', default=None, type=str, help='Model name')
 parser.add_argument('--relaxed_output_path', default=None, type=str, help='Name for relaxed protein')
 parser.add_argument('--output_dir', default=None, type=str, help='Path to output directory')
 parser.add_argument('--relax_results_pkl', default=None, type=str, help='Path to a results pickle file')
-parser.add_argument('--use_gpu_relax', default=True, type=bool, help='Whether to use gpu for relax')
+parser.add_argument('--use_gpu_relax', action='store_true', help='Whether to use gpu for relax')
 args = parser.parse_args()
 
 
@@ -23,7 +23,7 @@ RELAX_ENERGY_TOLERANCE = 2.39
 RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
-
+logging.info(f"Using GPU: {args.use_gpu_relax} {type(args.use_gpu_relax)}")
 amber_relaxer = relax.AmberRelaxation(
     max_iterations=RELAX_MAX_ITERATIONS,
     tolerance=RELAX_ENERGY_TOLERANCE,

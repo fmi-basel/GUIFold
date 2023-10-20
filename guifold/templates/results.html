@@ -5,8 +5,8 @@
        <meta charset = "utf-8">
        <title>Alphafold results</title>
        <!--<link href = "https://code.jquery.com/ui/1.10.4/themes/ui-lightness/jquery-ui.css" rel = "stylesheet">-->
-       <script src = "https://code.jquery.com/jquery-1.10.2.js"></script>
-       <script src = "https://code.jquery.com/ui/1.10.4/jquery-ui.js"></script>
+       <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+       <script src="https://code.jquery.com/ui/1.10.4/jquery-ui.js"></script>
        {% if use_model_viewer %}
        <script src="https://3Dmol.org/build/3Dmol-min.js"></script>     
        <script src="https://3Dmol.org/build/3Dmol.ui-min.js"></script>
@@ -25,12 +25,9 @@
        <div class="sidenav">
        {% include 'navigation.html' %}
        </div>
-
-
-
         <div class="main">
             <div style="">
-                <h1 style="margin: 0;">AlphaFold results</h1>
+                <h1 style="margin: 0;">Results</h1>
             </div>
             <div>
                 {% if not multimer %}
@@ -41,11 +38,11 @@
                 {% include 'pae.html' %}
                 {% endif %}
                 <br />
-                {% if not ptm is none %}
+                {% if not ptm_list is none %}
                 {% include 'ptm.html' %}
                 {% endif %}
                 <br />
-                {% if not iptm is none %}
+                {% if not iptm_list is none %}
                 {% include 'iptm.html' %}
                 {% endif %}
                 <br />

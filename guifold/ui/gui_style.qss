@@ -1,0 +1,49 @@
+QMainWindow {
+    background: #ffffff;
+}
+
+QMenuBar,
+QToolBar {
+    background-color: #4B527E;
+    color: #ffffff;
+}
+
+QTabWidget {
+    background: #ffffff;
+    border: 2px solid #4B527E;
+}
+
+QTabBar::tab {
+    background-color: #4B527E;
+    border: 1px solid  #4B527E;
+    padding: 6px;
+}
+
+QScrollBar {
+    border: 2px solid grey;
+    background: #4B527E;
+}
+
+
+QLineEdit,
+QComboBox {
+    background: #ffffff;
+    border: 2px solid #4B527E;
+}
+
+QPushButton {
+    background-color: #4B527E;
+    color: #ffffff;
+}
+
+QTableWidget,
+QListWidget,
+QTreeWidget {
+    background: #ffffff;
+    alternate-background-color: #ffffff;
+}
+
+QHeaderView {
+    background-color: #4B527E;
+    color: #ffffff;
+}

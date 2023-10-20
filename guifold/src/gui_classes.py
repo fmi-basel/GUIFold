@@ -898,14 +898,21 @@ class Evaluation(GUIVariables):
     def init_gui(self, gui_params: dict, other: object = None, sess: sqlalchemy.orm.Session = None) -> dict:
         """Update GUI with evaluation results."""
         if not gui_params['job_id'] is None:
-            #results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
-            results_path = os.path.join(gui_params['project_path'], gui_params['job_dir'])
+            if not gui_params['results_path'] is None:
+                #results_path = self.get_results_path_by_id(gui_params['job_id'], sess)
+                results_path = gui_params['results_path']
+                logger.debug(f"Results path: {results_path}")
+                #Backward compatibility
+                if not os.path.exists(results_path):
+                    results_path = os.path.join(gui_params['project_path'], gui_params['job_dir'])
 
-            if not results_path is None:
                 if not gui_params['pairwise_batch_prediction']:
                     self.pairwise_combinations_list.ctrl.setHidden(True)
                     self.pairwise_combinations_label.ctrl.setHidden(True)
-                    results_path = os.path.join(results_path, gui_params['job_dir'], "results.html")
+                    results_path = os.path.join(results_path, "results.html")
+                    #Backward compatibility
+                    if not os.path.exists(results_path):
+                        results_path = os.path.join(results_path, gui_params['job_dir'], "results.html")
                 else:
                     self.pairwise_combinations_list.ctrl.setHidden(False)
                     self.pairwise_combinations_label.ctrl.setHidden(False)
@@ -1075,8 +1082,16 @@ class JobParams(GUIVariables):
     def get_params_by_job_id(self, job_id, sess) -> sqlalchemy.orm.Query:
         """Get params by job id."""
         logger.debug(f"get result for job id {job_id}")
-        result = sess.query(self.db.Jobparams).filter_by(job_id=job_id).one()
+        if isinstance(job_id, int):
+            result = sess.query(self.db.Jobparams).filter_by(job_id=job_id).one()
+        elif isinstance(job_id, list):
+            result = sess.query(self.db.Jobparams).filter(self.db.Jobparams.id.in_(job_id)).all()
         return result
+    
+    def get_protein_names(self) -> str:
+        seq_names = self.seq_names.get_value()
+        protein_names = seq_names.replace(',', '_')
+        return protein_names
 
     def parse_fasta(self, fasta_file: str) -> List[str]:
         """Parse fasta file."""
@@ -1647,10 +1662,10 @@ class Job(GUIVariables):
         #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
         if job_params['db_preset'] == 'colabfold_local':
             if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
-                if job_params['max_ram'] < 500:
+                if job_params['max_ram'] < 800:
                    job_params['min_ram'] = job_params['max_ram']
                 else:
-                   job_params['min_ram'] = 500
+                   job_params['min_ram'] = 800
 
         split_mem = None
         if not any([gpu_mem is None,
@@ -1696,11 +1711,10 @@ class Job(GUIVariables):
         if not _evaluation.check_exists(job_params['job_id'], sess):
             job_obj = self.get_job_by_id(job_params['job_id'], sess)
             if job_params['pairwise_batch_prediction']:
-                results_path = job_params['job_name']
+                results_path = job_params['results_path']
             else:
-                results_path = os.path.join(job_params['job_name'],
-                                                    job_params["job_name"],
-                                                    "results.html")
+                results_path = os.path.join(job_params['results_path'],
+                                                            "results.html")
             if os.path.exists(os.path.join(job_params['project_path'], results_path)):
                 _evaluation.results_path.set_value(results_path)
                 _evaluation.job_id.set_value(job_params['job_id'])
@@ -1741,10 +1755,16 @@ class Job(GUIVariables):
         lines = []
         #logger.debug(params)
         log_file = os.path.join(params['job_path'], params['log_file'])
-        if os.path.exists(log_file):
+        if params['log_file_lines']:
+            lines = params['log_file_lines']
+        elif os.path.exists(log_file):
             logger.debug(f"Reading from {log_file}")
             with open(log_file, 'r') as f:
                 lines = f.readlines()
+        else:
+            msg = f'Log file {log_file} does not exist'
+            params['errors'].append(msg)
+            return params
 
         for line in lines:
             pattern_exit_code_script = re.compile(r'Exit\scode\s(\d+)')
@@ -1872,6 +1892,7 @@ class Job(GUIVariables):
         return lines
 
     def update_log(self, log_lines: str = None, log_file: str = None, job_id_active: int = None, job_id_thread: int = None, notebook_page: str = None, append: bool = False) -> None:
+        """ Updates the log control """
         logger.debug("Updating log")
         if (job_id_active == job_id_thread) or job_id_thread is None:
             if not append:
@@ -1916,25 +1937,28 @@ class Job(GUIVariables):
         job_path = os.path.join(project_path, job_dir)
         return job_path
 
-    def build_log_file_path(self, job_name: str, type: str, prediction: str, db_preset: str, pipeline: str) -> str:
-        #job_dir = self.get_job_dir(job_name)
-        #job_path = self.get_job_path(project_path, job_dir)
+    def build_log_file_path(self, job_name: str, type: str, prediction: str, db_preset: str, pipeline: str, job_project_id: int) -> str:
         if type == 'prediction':
             if pipeline in screening_protocol_names:
-                log_file = os.path.join(f"{job_name}_{type}_batch_{prediction}.log")
+                log_file = os.path.join(f"{job_name}_{type}_batch_{prediction}_{job_project_id}.log")
             else:
-                log_file = os.path.join(f"{job_name}_{type}_{prediction}.log")
+                log_file = os.path.join(f"{job_name}_{type}_{prediction}_{job_project_id}.log")
         elif type == 'features':
             if pipeline == "batch_msas":
-                log_file = os.path.join(f"{job_name}_{type}_batch_{db_preset}.log")
+                log_file = os.path.join(f"{job_name}_{type}_batch_{db_preset}_{job_project_id}.log")
             else:
-                log_file = os.path.join(f"{job_name}_{type}_{db_preset}.log")
+                log_file = os.path.join(f"{job_name}_{type}_{db_preset}_{job_project_id}.log")
         elif type == 'full':
-            log_file = os.path.join(f"{job_name}_{type}_{db_preset}_{prediction}.log")
+            log_file = os.path.join(f"{job_name}_{type}_{db_preset}_{prediction}_{job_project_id}.log")
         elif type == 'relax':
-            log_file = os.path.join(f"{job_name}_{type}.log")
+            log_file = os.path.join(f"{job_name}_{type}_{job_project_id}.log")
         else:
             logger.error(f"Unknown type {type}")
+        return log_file
+
+    #Backward compatibility
+    def build_log_file_path_deprec(self, job_name: str, type: str) -> str:
+        log_file = os.path.join(f"{job_name}_{type}.log")
         return log_file
 
     def get_log_file(self, job_id: int, sess: sqlalchemy.orm.session.Session) -> str:
@@ -1944,11 +1968,19 @@ class Job(GUIVariables):
         job_name = result_jobparams.job_name
         project_id = result_job.project_id
         type = result_job.type
+        prediction = result_jobparams.prediction
+        db_preset = result_jobparams.db_preset
+        pipeline = result_jobparams.pipeline
+        job_project_id = result_job.job_project_id
         project_path = self.get_path_by_project_id(project_id, sess)
         #Path inside the project dir
-        project_log_path = os.path.join(job_name, f"{job_name}_{type}.log")
-        absolute_log_path = os.path.join(project_path, project_log_path)
-        return absolute_log_path
+        log_path = os.path.join(project_path, job_name, self.build_log_file_path(job_name, type, prediction, db_preset, pipeline, job_project_id))
+        #Backward compatibility
+        if not os.path.exists(log_path):
+            log_path = log_path.replace(f"_{job_project_id}", "")
+        if not os.path.exists(log_path):
+            log_path = os.path.join(project_path, job_name, self.build_log_file_path_deprec(job_name, type))
+        return log_path
 
     def get_queue_pid(self, log_file: str, job_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
         pid = None
@@ -2091,19 +2123,22 @@ class Job(GUIVariables):
                     existing_items[job_project_id] = sub_item
 
             jobs = self.get_jobs_by_project_id(project_id, sess)
+            jobparams = other.jobparams.get_params_by_job_id([job.id for job in jobs], sess)
+            jobparams = [row.__dict__ for row in jobparams]
             logger.debug("Existing items in job list")
             logger.debug(existing_items)
 
 
             # Iterate through the fetched job list
             for i, job in enumerate(jobs):
+                jobparams_row = [row for row in jobparams if row['id']==job.id][0]
                 job_id = job.id
                 job_name = job.name
                 job_type = job.type
-                jobparams_result = other.jobparams.get_params_by_job_id(job_id, sess=sess)
-                prediction = jobparams_result.prediction
-                db_preset = jobparams_result.db_preset
-                pipeline = jobparams_result.pipeline
+                #jobparams_result = other.jobparams.get_params_by_job_id(job_id, sess=sess)
+                prediction = jobparams_row['prediction']#jobparams_result.prediction
+                db_preset = jobparams_row['db_preset']
+                pipeline = jobparams_row['pipeline']
 
                 if job_type == 'prediction':
                     if pipeline in screening_protocol_names:
@@ -2127,7 +2162,7 @@ class Job(GUIVariables):
                     logger.debug(f"{job_project_id} in existing_items")
                     sub_item = existing_items[job_project_id]
                     current_status = sub_item.text(1)
-                    new_status = self.get_status(job_id, sess)
+                    new_status = job.status
                     
                     # Update status if it has changed
                     if current_status != new_status:
@@ -2147,7 +2182,7 @@ class Job(GUIVariables):
 
                     group_item = job_groups[job_name]
                     sub_item = QtWidgets.QTreeWidgetItem(group_item, [job_type, "", job_project_id])
-                    sub_item.setText(1, self.get_status(job_id, sess))
+                    sub_item.setText(1, job.status)
 
                     if i == jobs.count() - 1 or self.get_tree_item_expanded(job_name, project_id, sess):
                         if not group_item.isExpanded():
@@ -2219,12 +2254,21 @@ class Project(GUIVariables):
             sess.merge(row)
         sess.commit()
 
-    def check_if_exists(self, project_name: str, sess: sqlalchemy.orm.session.Session) -> bool:
+    def check_if_name_exists(self, project_name: str, sess: sqlalchemy.orm.session.Session) -> bool:
         """Checks if a project already exists in the database."""
         exists = False
         result = self.get_projects(sess)
         for row in result:
             if project_name == row.name:
+                exists = True
+        return exists
+    
+    def check_if_path_exists(self, project_path: str, sess: sqlalchemy.orm.session.Session) -> bool:
+        """Checks if a project path already exists in the database."""
+        exists = False
+        result = self.get_projects(sess)
+        for row in result:
+            if project_path == row.path:
                 exists = True
         return exists
 
@@ -2436,7 +2480,6 @@ class Settings(GUIVariables):
         result = sess.query(self.db.Settings).get(1)
         result.queue_account = account
         sess.commit()
-
 
     def update_from_global_config(self):
         msgs = []

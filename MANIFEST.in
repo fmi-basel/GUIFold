@@ -6,6 +6,6 @@ include guifold/templates/*.html
 include guifold/templates/*.js
 include guifold/templates/*.css
 include guifold/templates/*.pml
-include guifold/*.qss
+include guifold/ui/*.qss
 include guifold/images/*.png
 include alphafold/common/stereo_chemical_props.txt
