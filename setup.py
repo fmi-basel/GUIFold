@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
      name='guifold',
-     version='0.4',
+     version='0.5',
      author="Georg Kempf",
      zip_safe=False,
      packages=setuptools.find_packages(),

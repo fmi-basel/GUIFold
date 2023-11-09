@@ -29,29 +29,55 @@ cd guifold
 git clone --recurse-submodules https://github.com/fmi-basel/GUIFold
 ```
 
+It is important to clone with the `--recurse-submodules` option to include the modified alphafold and rosettafold modules.
+
 Before proceeding with the installation it is recommended to setup the [global configuration file](#setup-of-global-configuration-file) and [cluster submission script](#setup-of-cluster-submission-template) (if needed).
 
 If you have a separate initialization script for conda (if the initialization is not in your .bashrc) add
 ```
 source path/to/conda_init.sh
 ```
-to the beginning of `guifold/install.sh`.
+to the beginning of `GUIFold/install.sh`.
 
 Running the install.sh file will<br/>
 * create a conda environment in the same folder<br/>
-* install required packages (the packages are listed in the `conda_pkgs.yml` file) <br/>
+* install required packages (the packages are listed in the `_environment.yml` files, af=alphafold, rf=rosettafold, ff=fastfold) <br/>
 * install the modified alphafold package<br/>
 * install GUIFold<br/><br/>
 
-To start the setup run:
+To run the setup:
 ```
 bash GUIFold/install.sh
 ```
 `conda_env` will be the default name of the conda repository. The conda env will be installed with an absolute path (which is also needed for activation).
 
-If you encounter any error try to do the installation step by step.
+There is the option to skip installation of fastfold and/or rosettafold:
+`bash GUIFold/install.sh --no-rosettafold`
+`bash GUIFOLD/install.sh --no-fastfold`
+`bash GUIFOLD/install.sh --no-fastfold --no-rosettafold`
 
-(Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold protocol for MSA generation.
+(Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold* protocols for MSA generation.
+
+Test if the GUI opens (see Troubleshooting):
+```
+conda activate /path/to/conda_env
+afgui.py
+```
+
+#### Troubleshooting
+
+Issue: Package incompatibilities during conda installation
+Solution: Try to install with `bash GUIFOLD/install.sh --no-fastfold --no-rosettafold`
+
+Issue: Errors related to fastfold installation
+Solution: Try to install with `bash GUIFOLD/install.sh --no-fastfold`
+
+Issue: Errors related to rosettafold installation
+Solution: Try to install with `bash GUIFOLD/install.sh --no-rosettafold`
+
+Issue: When trying to run `afgui.py`: `ImportError: libXss.so.1: cannot open shared object file: No such file or directory`
+Solution: Add the following path to the LD_LIBRARY_PATH in the command prompt: `export LD_LIBRARY_PATH=/path/to/conda_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/:$LD_LIBRARY_PATH`
+
 
 ### Download of genetic databases and params
 

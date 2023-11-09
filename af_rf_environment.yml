@@ -6,15 +6,10 @@ channels:
 dependencies:
   - pip:
       - biopython==1.79
-      - PyYAML>5.4.1
       - requests==2.26.0
       - scipy==1.7.3
-      - tqdm==4.62.2
       - typing-extensions==4.3.0
-      - einops
-      - pyarrow
       - pandas
-      - colossalai
       - absl-py==1.0.0
       - chex==0.0.7
       - contextlib2==21.6.0
@@ -31,6 +26,10 @@ dependencies:
       - tensorflow-cpu==2.11.0
       - --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
       - jaxlib==0.3.25+cuda11.cudnn805
+      - e3nn==0.3.3
+      - wandb==0.12.0
+      - pynvml==11.0.0
+      - git+https://github.com/NVIDIA/dllogger#egg=dllogger
   - pytorch::pytorch=1.12
   - pytorch::torchvision
   - pytorch::torchaudio
@@ -48,3 +47,4 @@ dependencies:
   - pymol-open-source
   - libxscrnsaver-cos6-x86_64=1.2.2
   - sip=4.19.13
+  - dglteam/label/cu113::dgl=1.1.1.cu113

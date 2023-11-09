@@ -6,7 +6,7 @@ channels:
 dependencies:
   - pip:
       - biopython==1.79
-      - PyYAML==5.4.1
+      - PyYAML>5.4.1
       - requests==2.26.0
       - scipy==1.7.3
       - tqdm==4.62.2

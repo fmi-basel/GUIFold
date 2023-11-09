@@ -206,7 +206,7 @@ def center_on_screen(obj):
     new_y = center_y - (obj.height() / 2)
 
     # Move the window to the center
-    obj.move(new_x, new_y)
+    obj.move(int(new_x), int(new_y))
 
 class MainFrame(QtWidgets.QMainWindow):
     def __init__(self, shared_objects, db, sess, install_path, app):
@@ -319,6 +319,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.delete_prj_action = QtWidgets.QAction("Delete Project", self)
         self.change_prj_action = QtWidgets.QAction("Change Project", self)
         self.about_action = QtWidgets.QAction("About", self)
+        self.wiki_action = QtWidgets.QAction("Wiki", self)
 
         self.exit_action.setShortcut('Ctrl+Q')
         self.exit_action.setStatusTip('Exit application')
@@ -328,6 +329,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.project_menu.addAction(self.delete_prj_action)
         self.project_menu.addAction(self.change_prj_action)
         self.help_menu.addAction(self.about_action)
+        self.help_menu.addAction(self.wiki_action)
 
 
     def init_toolbar(self):
@@ -426,6 +428,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.delete_prj_action.triggered.connect(self.OnBtnPrjRemove)
         self.change_prj_action.triggered.connect(self.OnBtnPrjUpdate)
         self.about_action.triggered.connect(self.OnAbout)
+        self.wiki_action.triggered.connect(self.OnWiki)
         #Toolbar
         self.tb.actionTriggered[QtWidgets.QAction].connect(self.ToolbarSelected)
         #Buttons
@@ -585,6 +588,16 @@ class MainFrame(QtWidgets.QMainWindow):
         dlg = AboutDlg(self)
         dlg.exec_()
 
+    def OnWiki(self):
+        url = QUrl(f'https://github.com/fmi-basel/GUIFold/wiki')
+        try:
+            QDesktopServices.openUrl(url)
+        except:
+            error =  f"Could not open https://github.com/fmi-basel/GUIFold/wiki in an external browser. Maybe a default browser is not set."
+            logger.error(error)
+            message_dlg('Error', error)
+            logger.debug(traceback.print_exc())
+
     def OnBtnReadSequences(self):
         error_msgs = self.jobparams.read_sequences()
         for msg in error_msgs:
@@ -709,7 +722,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         job_params['pairwise_batch_prediction'] = False
 
                     #Adjust num cpus based on pipeline
-                    if job_params['db_preset'] == 'colabfold_local':
+                    if job_params['db_preset'] == 'colabfold*_local':
                         if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
                             job_params['num_cpu'] = job_params['max_cpus']
                             logger.debug(f"Switched CPUs to max {job_params['num_cpu']}")  
@@ -821,11 +834,11 @@ class MainFrame(QtWidgets.QMainWindow):
                         os.mkdir(job_params['job_path'])
 
                     #Check if mmseqs_api is selected and give warning notice
-                    if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
+                    if job_params['db_preset'] == 'colabfold*_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
                         if job_params['pipeline'] in self.screening_protocol_names:
-                            message = "You selected the colabfold_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
+                            message = "You selected the colabfold*_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
                         else:
-                            message = "You selected the colabfold_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
+                            message = "You selected the colabfold*_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
                         ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel)
                         if ret == QtWidgets.QMessageBox.Cancel:
@@ -1081,7 +1094,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""
                     #Do not use precomputed MSAs in case of colabfold batch mode
-                    if job_params['pipeline'] == 'batch_msas' and job_params['db_preset'] == 'colabfold_local':
+                    if job_params['pipeline'] == 'batch_msas' and job_params['db_preset'] == 'colabfold*_local':
                         if 'use_precomputed_msas' in cmd_dict:
                             del cmd_dict['use_precomputed_msas']
                         if 'precomputed_msas_path' in cmd_dict:
@@ -1104,10 +1117,10 @@ class MainFrame(QtWidgets.QMainWindow):
                         del cmd_dict['uniref30_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
                         del cmd_dict['colabfold_envdb_database_path']
-                    if job_params['db_preset'] == 'colabfold_local':
+                    if job_params['db_preset'] == 'colabfold*_local':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_database_path']
-                    if job_params['db_preset'] == 'colabfold_web':
+                    if job_params['db_preset'] == 'colabfold*_web':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
@@ -1301,7 +1314,7 @@ class MainFrame(QtWidgets.QMainWindow):
             dlg = FirstNSeqDlg(self)
             dlg.exec()
         if pipeline_name == 'batch_msas':
-            self.jobparams.db_preset.ctrl.setCurrentText('colabfold_web')
+            self.jobparams.db_preset.ctrl.setCurrentText('colabfold*_web')
 
     def OnCmbPrediction(self):
         prediction = self.jobparams.prediction.ctrl.currentText()
