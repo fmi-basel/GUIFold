@@ -32,3 +32,4 @@ testing/mmseqs_api.py
 testing/prepare_fastfold_memory.py
 scripts/make_heatmap.py
 joss/paper.md
+scripts/pae_viewer_test.js
