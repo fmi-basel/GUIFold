@@ -1036,6 +1036,15 @@ class JobParams(GUIVariables):
         self.prediction_dict = {0: 'alphafold',
                                 1: 'fastfold',
                                 2: 'rosettafold'}
+        #Remove fastfold and/or rosettafold option if the modules are not installed
+        # try:
+        #     import fastfold
+        # except ImportError:
+        #     del self.predict_dict[1]
+        # try:
+        #     import rosettafold
+        # except ImportError:
+        #     del self.predict_dict[2]
         self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict, cmd=True)
         #FastFold params
         self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)

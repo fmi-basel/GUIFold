@@ -351,6 +351,9 @@ class MainFrame(QtWidgets.QMainWindow):
         self.tb.addAction(self.tb_clear)
 
 
+
+
+
     def init_gui(self):
         logger.debug("=== Initializing GUI ===")
 
@@ -368,7 +371,7 @@ class MainFrame(QtWidgets.QMainWindow):
             self.jobparams.pipeline.ctrl.addItem(item)
         prediction_list = self.jobparams.prediction_dict.values()
         for item in prediction_list:
-            self.jobparams.prediction.ctrl.addItem(item)
+            self.jobparams.prediction.ctrl.addItem(item) 
         self.default_values = DefaultValues(self)
         self.jobparams.update_from_default(self.default_values)
         advanced_params_default = AdvancedParamsDefaultValues()
@@ -798,7 +801,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         #Backward compatibility
                         if not os.path.exists(job_params['results_path']):
                             job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_dir'])
-                    job_params['features_path'] = os.path.join(job_params['job_path'], "features")
+                    job_params['features_path'] = os.path.join(job_params['job_path'], "features", job_params['db_preset'])
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 
@@ -812,7 +815,11 @@ class MainFrame(QtWidgets.QMainWindow):
                         #Only show the warnings for the first step in case of split_job
                         if not split_job_step == 'gpu':
                             if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
-                                pc_msa_paths = self.jobparams.precomputed_msas_list.get_value().split(',') + [self.jobparams.precomputed_msas_path.get_value()]
+                                if not self.jobparams.precomputed_msas_list.get_value() is None:
+                                    precomputed_msas_list = self.jobparams.precomputed_msas_list.get_value().split(',')
+                                else:
+                                    precomputed_msas_list = [None]
+                                pc_msa_paths = precomputed_msas_list + [self.jobparams.precomputed_msas_path.get_value()]
                                 pc_msa_paths = [x for x in pc_msa_paths if not x is None]
                                 logger.debug(pc_msa_paths)
                                 if any([re.match(job_params['output_dir'], item) for item in pc_msa_paths if not re.search('batch_msas', item)]):

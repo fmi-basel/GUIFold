@@ -400,7 +400,8 @@ def predict_structure(
 
 
         # Write out features as a pickled dictionary.
-        if not FLAGS.pipeline == 'batch_features':
+        if not FLAGS.pipeline == 'batch_msas':
+            logging.info(f"Writing features to {features_output_path}")
             with open(features_output_path, 'wb') as f:
                 pickle.dump(feature_dict, f, protocol=4)
 
