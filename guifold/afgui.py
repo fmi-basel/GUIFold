@@ -866,15 +866,16 @@ class MainFrame(QtWidgets.QMainWindow):
                     self.jobparams.output_dir.set_value(job_params['job_path'])
 
                     #Get protein names from sequence names
-                    protein_names = self.jobparams.seq_names.get_value()
+                    protein_names = self.jobparams.seq_names.get_value().replace(',','_')
                     job_params['protein_names'] = protein_names
 
                     #Check if features.pkl exists when continue_from_features selected
                     if job_params['pipeline'] == 'continue_from_features' and not split_job_step == 'gpu':
-                        
-                        if not os.path.exists(os.path.join(job_params['features_path'], f'features_{protein_names}.pkl')) and not os.path.exists(os.path.join(job_params['results_path'], 'features.pkl')):
+                        feature_path_1 = os.path.join(job_params['features_path'], f'features_{protein_names}.pkl')
+                        feature_path_2 = os.path.join(job_params['results_path'], 'features.pkl')
+                        if not os.path.exists(feature_path_1) and not os.path.exists(feature_path_2):
                             message_dlg('error', 'continue_from_features requested but no features.pkl'
-                                                 ' file found in the current job directory. Either run a full or only_features job.')
+                                                 f' file found. Expected to find {feature_path_1} or {feature_path_2}. Either run a full or only_features job.')
                             raise NoFeaturesExist(f"No features.pkl found.")
 
                     #Process custom templates
