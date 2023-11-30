@@ -102,7 +102,7 @@ class ProjectDlg(QtWidgets.QDialog):
 
                 self.gui_params['project_id'] = project_id
                 logger.debug("init project from dialog")
-                self.gui_params = self.prj.init_gui(self.gui_params, self.sess)
+                self.gui_params = self.prj.init_gui(self.gui_params, sess=self.sess)
 
                 index = self.prj.list.ctrl.findText(prj_name, QtCore.Qt.MatchFixedString)
                 logger.debug(f"index in project combo is {index}, project name is {prj_name}")
