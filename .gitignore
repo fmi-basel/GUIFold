@@ -33,3 +33,6 @@ testing/prepare_fastfold_memory.py
 scripts/make_heatmap.py
 joss/paper.md
 scripts/pae_viewer_test.js
+scripts/batch_extract_metrics.py
+scripts/check_features.py
+scripts/pdockq2.py

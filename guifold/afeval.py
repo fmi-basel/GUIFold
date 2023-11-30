@@ -14,6 +14,7 @@
 #
 # Author: Georg Kempf, Friedrich Miescher Institute for Biomedical Research
 
+import copy
 import json
 import matplotlib.pyplot as plt
 import matplotlib
@@ -143,6 +144,8 @@ class EvaluationPipeline:
                             plddt_list.append((plddt, mdl_name))
                             iptm_list.append((iptm, mdl_name))
                             ptm_list.append((ptm, mdl_name))
+                        if not self.prediction == 'rosettafold':
+                            self.save_confidence_json(pkl_data, mdl.replace('.pkl', '.json'))
                 logging.debug(pae_list)
                 logging.debug("Check none:")
                 logging.debug(self.check_none(pae_list))
@@ -282,8 +285,6 @@ class EvaluationPipeline:
         html_path = os.path.join(self.results_dir, "results_model_viewer.html")
         with open(html_path, "w") as f_out:
             f_out.write(rendered)
-        if not self.prediction == 'rosettafold':
-            self.save_confidence_json(pkl_data)
         #plt.tight_layout()
         logging.info(f"Finished. Results written to {self.results_dir}.")
 
@@ -703,15 +704,21 @@ class EvaluationPipeline:
         max_ptm_model_name = self.ptm_list[0][1]
         return (protein_names, max_ptm, max_ptm_model_name)
     
-    def get_scores(self, scores: dict):
+
+    def find_index_by_protein_name(self, data_list, search_value):
+        for index, item in enumerate(data_list):
+            if 'protein_names' in item and item['protein_names'] == search_value:
+                return index
+        return -1
+
+    def get_scores(self, score: dict):
         protein_names_pae, min_pae, model_name_min_pae = self.get_min_inter_pae(self.get_pae_results_unsorted())
         if not self.prediction == 'rosettafold':
             protein_names_ptm, max_ptm, model_name_max_ptm = self.get_max_ptm()
             protein_names_iptm, max_iptm, model_name_max_iptm = self.get_max_iptm()
-            logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{scores[-1]['protein_names']}")
-            assert protein_names_pae == protein_names_ptm == protein_names_iptm == scores[-1]['protein_names']
+            logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{score['protein_names']}")
+            assert protein_names_pae == protein_names_ptm == protein_names_iptm == score['protein_names']
             logging.debug(f"model_name_max_ptm: {model_name_max_ptm}")
-        score = scores[-1].copy()
         logging.debug(f"model_name_min_pae: {model_name_min_pae}")
         score['min_pae_model_name'] = model_name_min_pae
         logging.debug(f"min_pae: {min_pae}")
@@ -724,10 +731,10 @@ class EvaluationPipeline:
             score['max_iptm_model_name'] = model_name_max_iptm
             logging.debug(f"max_iptm_value: {max_iptm}")
             score['max_iptm_value'] = max_iptm
-        scores[-1] = score
-        logging.debug(scores[-1]['min_pae_model_name'])
+        logging.debug(score['min_pae_model_name'])
         logging.debug("Updated scores dict")
-        logging.debug(scores)
+        logging.debug(score)
+        return score
 
     def get_pae_messages(self, results):
         best_result = float(results[0][1]['Overall'])
@@ -766,12 +773,18 @@ class EvaluationPipeline:
         else:
             return obj
     
-    def save_confidence_json(self, data):
-        keys = ['predicted_aligned_error', 'plddt', 'predicted_tm_score', 'ptm', 'iptm', 'predicted_lddt']
+    def save_confidence_json(self, data, file_name):
+        keys = ['predicted_aligned_error',
+                            'plddt',
+                            'predicted_tm_score',
+                            'ptm',
+                            'iptm',
+                            'predicted_lddt',
+                            'num_recycles']
         for key in keys:
             confidence_data = {key: data[key] for key in keys if key in data}
         confidence_data = self.convert_to_list(confidence_data)
-        with open(os.path.join(self.results_dir, 'confidence_metrics.json'), 'w') as f:
+        with open(os.path.join(self.results_dir, file_name), 'w') as f:
             json.dump(confidence_data, f)
 
 class EvaluationPipelineBatch:

@@ -1090,8 +1090,6 @@ class MainFrame(QtWidgets.QMainWindow):
                     if 'num_cpu' in cmd_dict:
                         cmd_dict['num_cpu'] = job_params['num_cpu']
                     if job_params['prediction'] == 'alphafold':
-                        if 'num_gpu' in cmd_dict:
-                            del cmd_dict['num_gpu']
                         if 'chunk_size' in cmd_dict:
                             del cmd_dict['chunk_size']
                         if 'inplace' in cmd_dict:

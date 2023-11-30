@@ -1765,8 +1765,11 @@ class Job(GUIVariables):
         #logger.debug(params)
         log_file = os.path.join(params['job_path'], params['log_file'])
         if params['log_file_lines']:
+            #Only lines added since last update
             lines = params['log_file_lines']
         elif os.path.exists(log_file):
+            #All lines read again, reset counter
+            task_status_dict['num_tasks_finished'] = 0
             logger.debug(f"Reading from {log_file}")
             with open(log_file, 'r') as f:
                 lines = f.readlines()
