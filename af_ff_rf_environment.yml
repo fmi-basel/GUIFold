@@ -14,7 +14,7 @@ dependencies:
       - einops
       - pyarrow
       - pandas
-      - colossalai
+      - colossalai==0.2.7
       - absl-py==1.0.0
       - chex==0.0.7
       - contextlib2==21.6.0
