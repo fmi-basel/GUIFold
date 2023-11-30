@@ -56,7 +56,7 @@ There is the option to skip installation of fastfold and/or rosettafold:
 `bash GUIFOLD/install.sh --no-fastfold`
 `bash GUIFOLD/install.sh --no-fastfold --no-rosettafold`
 
-(Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold* protocols for MSA generation.
+(Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold protocols for MSA generation.
 
 Test if the GUI opens (see Troubleshooting):
 ```

@@ -291,7 +291,7 @@
                     <item>
                      <widget class="QComboBox" name="cmb_jobparams_db_preset">
                       <property name="toolTip">
-                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DB preset:&lt;/p&gt;&lt;p&gt;full_dbs: Run HHblits on uniref30 and bfd databses, jackhmmer on uniref90 and mgnify databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;reduced_dbs: Run jackhmmer on smaller bfd, mgnify, and uniref90 databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;colabfold*_local: Run local MMseqs2 on uniref30 and colabfold_envdb, uniref90, uniprot databases. Pairing through default alphafold pipeline.&lt;/p&gt;&lt;p&gt;colabfold*_web: Run MMseqs2 through Colabfold API (https://www.colabfold.com) on uniref30 and colabfold_envdb, jackhmmer on uniref90 and uniprot databases. Pairing through default alphafold pipeline.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;DB preset:&lt;/p&gt;&lt;p&gt;full_dbs: Run HHblits on uniref30 and bfd databses, jackhmmer on uniref90 and mgnify databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;reduced_dbs: Run jackhmmer on smaller bfd, mgnify, and uniref90 databases.&lt;br/&gt;&lt;/p&gt;&lt;p&gt;colabfold_local: Run local MMseqs2 on uniref30 and colabfold_envdb, uniref90, uniprot databases. Pairing through default alphafold pipeline.&lt;/p&gt;&lt;p&gt;colabfold_web: Run MMseqs2 through Colabfold API (https://www.colabfold.com) on uniref30 and colabfold_envdb, jackhmmer on uniref90 and uniprot databases. Pairing through default alphafold pipeline.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                       </property>
                      </widget>
                     </item>
