@@ -51,23 +51,7 @@ from alphafold.relax import relax
 from alphafold.data import parsers
 from alphafold.model import data
 
-import torch
-import torch.multiprocessing as mp
-from fastfold.model.hub import AlphaFold
-import fastfold
-from fastfold.config import model_config as ff_model_config
-from fastfold.common import protein as ff_protein
-from fastfold.data import feature_pipeline
-from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
-from fastfold.model.fastnn import set_chunk_size
-from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
-from fastfold.utils.inject_fastnn import inject_fastnn
-from fastfold.utils.import_weights import import_jax_weights_
-from fastfold.utils.tensor_utils import tensor_tree_map
 
-from rosettafold.network import predict
-from collections import namedtuple
-from rosettafold.network.ffindex import read_index, read_data
 
 import numpy as np
 import gzip
@@ -75,8 +59,6 @@ import gzip
 
 # Internal import (7716).
 
-if int(torch.__version__.split(".")[0]) >= 1 and int(torch.__version__.split(".")[1]) > 11:
-    torch.backends.cuda.matmul.allow_tf32 = True
 
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "false"
 
@@ -221,6 +203,32 @@ RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
 BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
+
+
+
+def flag_specific_imports():
+    if FLAGS.prediction == 'fastfold':
+        import torch
+        import torch.multiprocessing as mp
+        from fastfold.model.hub import AlphaFold
+        import fastfold
+        from fastfold.config import model_config as ff_model_config
+        from fastfold.common import protein as ff_protein
+        from fastfold.data import feature_pipeline
+        from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
+        from fastfold.model.fastnn import set_chunk_size
+        from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
+        from fastfold.utils.inject_fastnn import inject_fastnn
+        from fastfold.utils.import_weights import import_jax_weights_
+        from fastfold.utils.tensor_utils import tensor_tree_map
+
+        if int(torch.__version__.split(".")[0]) >= 1 and int(torch.__version__.split(".")[1]) > 11:
+            torch.backends.cuda.matmul.allow_tf32 = True
+
+    if FLAGS.prediction == 'rosettafold':
+        from rosettafold.network import predict
+        from collections import namedtuple
+        from rosettafold.network.ffindex import read_index, read_data
 
 
 def _check_flag(flag_name: str,
@@ -728,6 +736,7 @@ def main(argv):
         logging.set_verbosity(logging.DEBUG)
     else:
         logging.set_verbosity(logging.INFO)
+    flag_specific_imports()
     logging.info("Alphafold pipeline starting...")
     if FLAGS.precomputed_msas_list is None:
         FLAGS.precomputed_msas_list = [FLAGS.precomputed_msas_list]
@@ -865,7 +874,8 @@ def main(argv):
         model_runners = {}
         model_names = config.MODEL_PRESETS[FLAGS.model_preset]
         for model_name in model_names:
-            index = re.match('^model_(\d{1})_.*', model_name).group(1)
+            logging.debug(f'Model name: {model_name}')
+            index = re.match('^model_(\d{1}).*', model_name).group(1)
             model_list = FLAGS.model_list
             if index in model_list:
                 model_config = config.model_config(model_name, FLAGS.num_recycle)
