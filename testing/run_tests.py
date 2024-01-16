@@ -64,6 +64,26 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
                                                             "PRECOMPUTED_MSAS_PATH": "None",
                                                             "PIPELINE": "full",
                                                             "PREDICTION": "alphafold"},
+                                        'simple_monomer_only_features': {'MODEL_PRESET': 'monomer_ptm',
+                                                            'FASTA_PATH': monomer_fasta,
+                                                            'PRECOMPUTED_MSAS_LIST': "None",
+                                                            'NO_MSA_LIST': "False",
+                                                            "NO_TEMPLATE_LIST": "False",
+                                                            "CUSTOM_TEMPLATE_LIST": "None",
+                                                            "DB_PRESET": "full",
+                                                            "PRECOMPUTED_MSAS_PATH": "None",
+                                                            "PIPELINE": "only_features",
+                                                            "PREDICTION": "alphafold"},
+                                        'simple_monomer_continue_from_features': {'MODEL_PRESET': 'monomer_ptm',
+                                                            'FASTA_PATH': monomer_fasta,
+                                                            'PRECOMPUTED_MSAS_LIST': "None",
+                                                            'NO_MSA_LIST': "False",
+                                                            "NO_TEMPLATE_LIST": "False",
+                                                            "CUSTOM_TEMPLATE_LIST": "None",
+                                                            "DB_PRESET": "full",
+                                                            "PRECOMPUTED_MSAS_PATH": "None",
+                                                            "PIPELINE": "continue_from_features",
+                                                            "PREDICTION": "alphafold"},
                                         'simple_multimer': {'MODEL_PRESET': 'multimer',
                                                             'FASTA_PATH': multimer_fasta,
                                                             'PRECOMPUTED_MSAS_LIST': "None,None",
@@ -179,7 +199,8 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--nproc', default=1, type=int, help='Number of parallel processes.')
-parser.add_argument('--tests', default=None, help=f'List of tests to run. Available tests are {test_jobs.keys()}.')
+parser.add_argument('--tests', default=None, help=f'Comma separated list of tests to run. Available tests are {test_jobs.keys()}.')
+parser.add_argument('--gpu', action='store_true', default=False)
 args = parser.parse_args()
 
 if not args.tests:
@@ -238,6 +259,9 @@ cmd = """export CUDA_VISIBLE_DEVICES=""; run_prediction.py\\
  --model_list 1\\
  --debug &> {OUTPUT_DIR}/testing.log
  """
+
+if args.gpu:
+    cmd = cmd.replace('export CUDA_VISIBLE_DEVICES=""; ', '')
 
 cmd_list = []
 for title, params in test_jobs.items():
@@ -298,11 +322,13 @@ for cmd, title in cmd_list:
 def run_cmd(cmd, title):
     print("Formatted cmd is:")
     print(cmd)
+    basedir = os.getcwd()
+    os.chdir(title)
     p = Popen(cmd, shell=True)
     p.communicate()
+    os.chdir(basedir)
 
 print(f"Running with {args.nproc} processes.")
 with closing(Pool(args.nproc)) as pool:
-    
     p = pool.starmap(run_cmd, cmd_list)
 
