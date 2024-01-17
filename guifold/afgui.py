@@ -790,18 +790,28 @@ class MainFrame(QtWidgets.QMainWindow):
                         copyfile(log_path, log_path_bkp)
 
 
+                    params_hash = self.jobparams.get_params_hash()
+                    job_params['params_hash'] = params_hash
+
                     #Full path to results folder created by AF inside job folder
                     if job_params['pairwise_batch_prediction']:
-                        job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", job_params['prediction'])
+                        job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", f"{job_params['prediction']}-{job_params['db_preset']}-{params_hash}")
+                        self.jobparams.predictions_dir.set_value(f"{job_params['prediction']}-{job_params['db_preset']}-{params_hash}")
                         #Backward compatibility
                         if not os.path.exists(job_params['results_path']):
-                            job_params['results_path'] = job_params['job_path']
+                            job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", job_params['prediction'])
+                            if not os.path.exists(job_params['results_path']):
+                                job_params['results_path'] = job_params['job_path']
                     else:
-                        job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", job_params['prediction'])
+                        job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", f"{job_params['prediction']}-{job_params['db_preset']}-{params_hash}")
+                        self.jobparams.predictions_dir.set_value(f"{job_params['prediction']}-{job_params['db_preset']}-{params_hash}")
                         #Backward compatibility
                         if not os.path.exists(job_params['results_path']):
-                            job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_dir'])
+                            job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", job_params['prediction'])
+                            if not os.path.exists(job_params['results_path']):
+                                job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_dir'])
                     job_params['features_path'] = os.path.join(job_params['job_path'], "features", job_params['db_preset'])
+                    self.jobparams.features_dir.set_value(job_params['db_preset'])
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 

@@ -214,6 +214,8 @@ flags.DEFINE_integer('num_gpu', 1, 'Number of GPUs.')
 flags.DEFINE_integer('chunk_size', None, 'Chunk size.')
 flags.DEFINE_boolean('inplace', False, 'Inplace.')
 flags.DEFINE_list('model_list', '1,2,3,4,5', 'List of indices defining which Alphafold models to use.')
+flags.DEFINE_string('predictions_dir', None, 'Name of predictions output dir.')
+flags.DEFINE_string('features_dir', None, 'Name of features output dir.')
 
 FLAGS = flags.FLAGS
 
@@ -405,8 +407,14 @@ def predict_structure(
     logging.info('Predicting %s', protein_names)
     fasta_name = os.path.splitext(os.path.basename(fasta_path))[0]
     timings = {}
-    predictions_output_dir = os.path.join(output_dir_base, "predictions", prediction_pipeline)
-    features_output_dir = os.path.join(output_dir_base, "features", feature_pipeline)
+    if flags['predictions_dir']:
+        predictions_output_dir = os.path.join(output_dir_base, "predictions", flags['predictions_dir'])
+    else:
+        predictions_output_dir = os.path.join(output_dir_base, "predictions", prediction_pipeline)
+    if flags['features_dir']:
+        features_output_dir = os.path.join(output_dir_base, "features", flags['features_dir'])
+    else:
+        features_output_dir = os.path.join(output_dir_base, "features", feature_pipeline)
     results_dir = os.path.join(predictions_output_dir, protein_names)
     msa_output_dir = features_output_dir
     if not os.path.exists(results_dir):

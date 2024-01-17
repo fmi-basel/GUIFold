@@ -141,6 +141,8 @@ class LoadJob(QObject):
                 while self.paused:
                     time.sleep(1) 
                 self._parent.gui_params['prediction'] = self._parent.jobparams.prediction.get_value()
+                self._parent.gui_params['db_preset'] = self._parent.jobparams.db_preset.get_value()
+                self._parent.gui_params['params_hash'] = self._parent.jobparams.get_params_hash()
                 self._parent.gui_params['job_name'] = self._parent.jobparams.job_name.get_value()
                 self._parent.gui_params['job_dir'] = self._parent.job.get_job_dir(self._parent.gui_params['job_name'])
                 self._parent.gui_params['job_path'] = self._parent.job.get_job_path(self._parent.gui_params['project_path'],
@@ -151,15 +153,19 @@ class LoadJob(QObject):
                 self._parent.gui_params['pairwise_batch_prediction'] = self._parent.jobparams.pairwise_batch_prediction.get_value()
                 self._parent.gui_params['protein_names'] = self._parent.jobparams.get_protein_names()
                 if self._parent.gui_params['pairwise_batch_prediction']:
-                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
+                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset']}-{self._parent.gui_params['params_hash']}")
                     #Backward compatibility
                     if not os.path.exists(self._parent.gui_params['results_path']):
-                        self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']
+                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
+                        if not os.path.exists(self._parent.gui_params['results_path']):
+                            self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']
                 else:
-                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
+                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset']}-{self._parent.gui_params['params_hash']}", self._parent.gui_params['protein_names'])
                     #Backward compatibility
                     if not os.path.exists(self._parent.gui_params['results_path']):
-                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
+                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
+                        if not os.path.exists(self._parent.gui_params['results_path']):
+                            self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
                 self._parent.gui_params['self._parent_settings_changed'] = True
 
                 #Reads log file

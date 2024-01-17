@@ -16,6 +16,7 @@
 
 from __future__ import absolute_import
 from copy import deepcopy
+import hashlib
 import pkg_resources
 import datetime
 import sys
@@ -1058,6 +1059,8 @@ class JobParams(GUIVariables):
         self.use_model_5 = Variable('use_model_5', 'bool', ctrl_type='chk')
         self.model_list = Variable('model_list', 'str', cmd=True)
         self.first_n_seq = Variable('first_n_seq', 'int', ctrl_type='sbo', cmd=True)
+        self.features_dir = Variable('features_dir', 'str', db=False, cmd=True)
+        self.predictions_dir = Variable('predictions_dir', 'str', db=False, cmd=True)
 
     def set_db(self, db: DBHelper) -> None:
         """Set database helper object."""
@@ -1101,6 +1104,25 @@ class JobParams(GUIVariables):
         seq_names = self.seq_names.get_value()
         protein_names = seq_names.replace(',', '_')
         return protein_names
+
+    def get_params_hash(self) -> str:
+        #Get hash for all params that affect the prediction
+        params_list = []
+        params_list.append(self.no_msa_list.get_value())
+        params_list.append(self.no_template_list.get_value())
+        params_list.append(self.custom_template_list.get_value())
+        params_list.append(self.num_recycle.get_value())
+        params_list.append(self.max_template_date.get_value())
+        params_list.append(self.random_seed.get_value())
+        params_list.append(self.precomputed_msas_list.get_value())
+        params_list.append(self.precomputed_msas_path.get_value())
+        params_list.append(self.db_preset.get_value())
+        params_list.append(self.model_preset.get_value())
+        params_list = [str(x) for x in params_list]
+        params_str = ''.join(params_list)
+        md5_hash = hashlib.md5(params_str.encode()).hexdigest()
+
+        return md5_hash[:5]
 
     def parse_fasta(self, fasta_file: str) -> List[str]:
         """Parse fasta file."""
