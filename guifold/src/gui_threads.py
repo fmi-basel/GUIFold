@@ -210,6 +210,9 @@ class LoadJob(QObject):
                     num_jobs = len_seqs
                 elif self._parent.jobparams.pipeline.get_value() == 'batch_msas':
                     num_jobs = len(sequences)
+                elif self._parent.jobparams.pipeline.get_value() == 'grouped':
+                    #TODO: Add proper calculation
+                    num_jobs = len(sequences)
                 #Change progress display
                 if self._parent.jobparams.pipeline.get_value() in self._parent.screening_protocol_names:
                     for item in [self._parent.lbl_status_2,

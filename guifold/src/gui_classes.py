@@ -83,7 +83,7 @@ ctrl_type_dict = {'dsb': QtWidgets.QDoubleSpinBox,
 
 install_path = os.path.dirname(os.path.realpath(sys.argv[0]))
 
-screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
+screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']
 
 class Variable:
     """
@@ -1032,7 +1032,8 @@ class JobParams(GUIVariables):
                               4: 'all_vs_all',
                               5: 'first_vs_all',
                               6: 'first_n_vs_rest',
-                              7: 'only_relax'}
+                              7: 'grouped',
+                              8: 'only_relax'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
         self.prediction_dict = {0: 'alphafold',
                                 1: 'fastfold',
@@ -1374,7 +1375,7 @@ class Job(GUIVariables):
         return result
 
     def get_type(self, job_params):
-        if job_params['pipeline'] in ['continue_from_features', 'first_vs_all', 'all_vs_all']:
+        if job_params['pipeline'] in ['continue_from_features', 'first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']:
             type = "prediction"
         elif job_params['pipeline'] in ['only_features', 'batch_msas']:
             type = "features"

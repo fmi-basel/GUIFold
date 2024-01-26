@@ -21,6 +21,7 @@
 import json
 import multiprocessing
 from multiprocessing.managers import ListProxy
+from operator import itemgetter
 import os
 import pathlib
 import pickle
@@ -200,7 +201,7 @@ flags.DEFINE_integer('num_cpu', 1, 'Number of CPUs to use for feature generation
 flags.DEFINE_string('precomputed_msas_path', None, 'Path to a directory with precomputed MSAs (job_dir/msas)')
 #flags.DEFINE_boolean('batch_msas', False, 'Runs the monomer feature pipeline for all sequences in the input MSA file.')
 flags.DEFINE_enum('pipeline', 'full', [
-                'full', 'only_features', 'batch_msas', 'continue_from_features', 'all_vs_all', 'first_vs_all', 'first_n_vs_rest', 'only_relax'],
+                'full', 'only_features', 'batch_msas', 'continue_from_features', 'all_vs_all', 'first_vs_all', 'first_n_vs_rest', 'grouped', 'only_relax'],
                 'Choose preset pipeline configuration - '
                 'full pipeline or '
                 'stop after feature generation (only features) or '
@@ -225,7 +226,7 @@ RELAX_ENERGY_TOLERANCE = 2.39
 RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
-BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest']
+BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']
 
 
 
@@ -404,24 +405,26 @@ def predict_structure(
     results_queue: multiprocessing.Queue = None,
     score_dict: Optional[dict] = None):
     """Predicts structure using AlphaFold for the given sequence."""
-    logging.info('Predicting %s', protein_names)
+    logging.info('Generating input features')
     fasta_name = os.path.splitext(os.path.basename(fasta_path))[0]
     timings = {}
-    if flags['predictions_dir']:
-        predictions_output_dir = os.path.join(output_dir_base, "predictions", flags['predictions_dir'])
-    else:
-        predictions_output_dir = os.path.join(output_dir_base, "predictions", prediction_pipeline)
+    if not flags['pipeline'] == 'only_features' and not flags['pipeline'] == 'batch_msas':
+        if flags['predictions_dir']:
+            predictions_output_dir = os.path.join(output_dir_base, "predictions", flags['predictions_dir'])
+        else:
+            predictions_output_dir = os.path.join(output_dir_base, "predictions", prediction_pipeline)
+        results_dir = os.path.join(predictions_output_dir, protein_names)
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir, exist_ok=True)   
     if flags['features_dir']:
         features_output_dir = os.path.join(output_dir_base, "features", flags['features_dir'])
     else:
         features_output_dir = os.path.join(output_dir_base, "features", feature_pipeline)
-    results_dir = os.path.join(predictions_output_dir, protein_names)
+
     msa_output_dir = features_output_dir
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir, exist_ok=True)    
     if not os.path.exists(msa_output_dir):
         os.makedirs(msa_output_dir, exist_ok=True)
-    features_output_path = os.path.join(features_output_dir, f'features_{protein_names}.pkl')
+
     # Get features.
     if not flags['pipeline'] == 'continue_from_features':
         if batch_mmseqs:
@@ -447,12 +450,14 @@ def predict_structure(
 
         # Write out features as a pickled dictionary.
         if not flags['pipeline'] == 'batch_msas':
+            features_output_path = os.path.join(features_output_dir, f'features_{protein_names}.pkl')
             logging.info(f"Writing features to {features_output_path}")
             with open(features_output_path, 'wb') as f:
                 pickle.dump(feature_dict, f, protocol=4)
 
     #Stop here if only_msa flag is set
     if not flags['pipeline'] == 'only_features' and not flags['pipeline'] == 'batch_msas':
+        logging.info('Predicting %s', protein_names)
         if flags['pipeline'] == 'continue_from_features':
             #Backward compatibility
             if not os.path.exists(features_output_path) and not os.path.exists(f"{features_output_path}.gz"):
@@ -752,7 +757,8 @@ def get_prediction_results(scores, results_file):
             values = line.split(',')
             values = [None if value == 'None' else value for value in values]
             dict_ = {key: value for (key, value) in zip(keys, values)}
-            scores.append(dict_)
+            if not dict_['protein_names'] is None:
+                scores.append(dict_)
     return scores
 
 def find_index(list_of_dicts, value):
@@ -791,19 +797,23 @@ def check_batch_prediction_task(description_1, description_2, combinations, scor
         scores.append(score_dict)
         return True
     
-def create_input_fasta(description_1, description_2, sequence_1, sequence_2, description_sequence_dict, first_n_seq):
+def create_input_fasta(description_1, description_2, sequence_1, sequence_2):
     #Create input FASTA file
-    protein_names = f"{description_1}_{description_2}"
-    fasta_path = os.path.join(FLAGS.output_dir, f"{description_1}_{description_2}.fasta")
+    if isinstance(description_1, list):
+        joined_description_1 = '_'.join(description_1)
+        protein_names = f"{joined_description_1}_{description_2}"
+        fasta_path = os.path.join(FLAGS.output_dir, f"{joined_description_1}_{description_2}.fasta")
+    else:
+        protein_names = f"{description_1}_{description_2}"
+        fasta_path = os.path.join(FLAGS.output_dir, f"{description_1}_{description_2}.fasta")
     logging.debug(f"Writing input fasta: {fasta_path}")
-    if not first_n_seq is None:
-        first_n_desc_list = list(description_sequence_dict.keys())[:first_n_seq]
+    if isinstance(description_1, list):
         with open(fasta_path, 'w') as f:
-            for desc_1 in first_n_desc_list:
+            for i, desc_1 in enumerate(description_1):
                 f.write(f">{desc_1}\n")
-                seq_1 = description_sequence_dict[desc_1]
+                seq_1 = sequence_1[i]
                 f.write(f"{seq_1}\n\n")
-            f.write(f"{description_2}\n")
+            f.write(f">{description_2}\n")
             f.write(sequence_2)
     else:
         with open(fasta_path, 'w') as f:
@@ -888,9 +898,9 @@ def get_num_available_gpus():
             num_gpus = 0
     else:
         raise SystemExit(f"{FLAGS.prediction} pipeline unknown.")
-
-    if os.environ['CUDA_VISIBLE_DEVICES'] == "":
-        num_gpus = 0
+    if 'CUDA_VISIBLE_DEVICES' in os.environ:
+        if os.environ['CUDA_VISIBLE_DEVICES'] == "":
+            num_gpus = 0
     return int(num_gpus)
 
     
@@ -1204,7 +1214,7 @@ def main(argv):
                 kwargs['custom_template_list'] = [custom_template_list[i], custom_template_list[o]]
                 kwargs['precomputed_msas_list'] = [precomputed_msas_list[i], precomputed_msas_list[o]]
                 if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
-                    kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2, description_sequence_dict, first_n_seq)
+                    kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
                     index = find_index(scores, kwargs['protein_names'])
                     kwargs['score_dict'] = scores[index]
                     tasks.append(kwargs)
@@ -1225,10 +1235,57 @@ def main(argv):
             kwargs['custom_template_list'] = [custom_template_list[i], custom_template_list[o]]
             kwargs['precomputed_msas_list'] = [precomputed_msas_list[i], precomputed_msas_list[o]]
             if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
-                kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2, description_sequence_dict, first_n_seq)
+                kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
                 index = find_index(scores, kwargs['protein_names'])
                 kwargs['score_dict'] = scores[index]
                 tasks.append(kwargs)
+
+    elif FLAGS.pipeline == 'grouped':
+        prediction_groups_mapping = {}
+        no_msa_list_full = no_msa_list.copy()
+        no_template_list_full = no_template_list.copy()
+        custom_template_list_full = custom_template_list.copy()
+        precomputed_msas_list_full = precomputed_msas_list.copy()
+        for index, (desc, seq) in enumerate(description_sequence_dict.items()):
+            regex_bait = r'bait_id(\d+)'
+            regex_prey = r'prey_id(\d+)'
+            if re.search(regex_bait, desc):
+                id = re.search(regex_bait, desc).groups(1)[0]
+                desc = desc.replace(f'_bait_id{id}', '')
+                if not id in prediction_groups_mapping:
+                    prediction_groups_mapping[id] = {'baits': {desc: (seq, index)}, 'preys': {}}
+                prediction_groups_mapping[id]['baits'][desc] = (seq, index)
+            elif re.search(regex_prey, desc):
+                id = re.search(regex_prey, desc).groups(1)[0]
+                desc = desc.replace(f'_prey_id{id}', '')
+                if not id in prediction_groups_mapping:
+                    prediction_groups_mapping[id] = {'baits': {}, 'preys': {desc: (seq, index)}}
+                prediction_groups_mapping[id]['preys'][desc] = (seq, index)
+        
+        logging.info(prediction_groups_mapping)
+        for id, group in prediction_groups_mapping.items():
+            first_n_desc_list = list(group['baits'].keys())
+            first_n_seq_list, first_n_index_list = zip(*list(group['baits'].values()))
+            for desc_2, (seq_2, index_2) in group['preys'].items():
+                kwargs = {k: v for (k,v) in kwargs_common.items()}
+                desc_1 = '_'.join(first_n_desc_list)
+                if desc_1 == desc_2:
+                    desc_1 = f"{desc_1}_1"
+                    desc_2 = f"{desc_2}_2"
+                no_msa_list = [no_msa_list_full[i] for i in first_n_index_list] + [no_msa_list_full[index_2]]
+                no_template_list = [no_template_list_full[i] for i in first_n_index_list] + [no_template_list_full[index_2]]
+                custom_template_list = [custom_template_list_full[i] for i in first_n_index_list] + [custom_template_list_full[index_2]]
+                precomputed_msas_list = [precomputed_msas_list_full[i] for i in first_n_index_list] + [precomputed_msas_list_full[index_2]]
+                kwargs['no_msa_list'] = no_msa_list
+                kwargs['no_template_list'] =  no_template_list
+                kwargs['custom_template_list'] = custom_template_list
+                kwargs['precomputed_msas_list'] = precomputed_msas_list
+                if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
+                    kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(first_n_desc_list, desc_2, first_n_seq_list, seq_2)
+                    index = find_index(scores, kwargs['protein_names'])
+                    kwargs['score_dict'] = scores[index]
+                    tasks.append(kwargs)
+
 
     #First N sequences get fixed and predicted against all remaining sequences
     elif FLAGS.pipeline == 'first_n_vs_rest':
@@ -1239,6 +1296,7 @@ def main(argv):
         i = first_n_seq
         #min_inter_pae_list, max_iptm_list, max_ptm_list = manager.list(), manager.list(), manager.list()
         first_n_desc_list = list(description_sequence_dict.keys())[:first_n_seq]
+        first_n_seq_list = list(description_sequence_dict.values())[:first_n_seq]
         for o, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
             kwargs = {k: v for (k,v) in kwargs_common.items()}
             desc_1 = '_'.join(first_n_desc_list)
@@ -1254,7 +1312,7 @@ def main(argv):
             kwargs['custom_template_list'] = custom_template_list
             kwargs['precomputed_msas_list'] = precomputed_msas_list
             if o > first_n_seq and check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
-                kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2, description_sequence_dict, first_n_seq)
+                kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(first_n_desc_list, desc_2, first_n_seq_list, seq_2)
                 index = find_index(scores, kwargs['protein_names'])
                 kwargs['score_dict'] = scores[index]
                 tasks.append(kwargs)
@@ -1286,91 +1344,90 @@ def main(argv):
             batch_mmseqs=FLAGS.db_preset=='colabfold_local',
             flags=flag_dict)
 
+    if FLAGS.pipeline in BATCH_PREDICTION_MODES:
+        logging.info("Starting batch predictions")
+        #To run prediction tasks in parallel, multiprocessing is used to avoid cuda errors and memory leaks
+        active_processes = []
 
-    #To run prediction tasks in parallel, multiprocessing is used to avoid cuda errors and memory leaks
-    active_processes = []
-
-    available_gpus = get_num_available_gpus()
-    if available_gpus == 0:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        FLAGS.num_gpu = 0
-        gpu_available = False
-        max_tasks = FLAGS.num_cpu
-        logging.warning(f"No GPUs found. Switching to CPU.")
-    elif available_gpus < FLAGS.num_gpu:
-        FLAGS.num_gpus = available_gpus
-        logging.warning(f"{FLAGS.num_gpu} GPUs requested but only {available_gpus} found. Adjusting number.")
-        max_tasks = available_gpus
-        gpu_available = True
-    else:
-        max_tasks = FLAGS.num_gpu
-        gpu_available = True
-        logging.info(f"Using {FLAGS.num_gpu} GPUs.")
-
-
-    results_with_error = 0
-    for kwargs in tasks:
-        task_queue.put(kwargs)
-
-    while task_queue.qsize() > 0:
-        #In case of Fastfold only start one process at a time since parallelisation is managed at a later stage
-        if prediction_pipeline == 'fastfold':
-            kwargs = task_queue.get()
-            kwargs['results_queue'] = results_queue
-            logging.info("Starting FastFold in a new process.")
-            process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
-            process.start()
-            process.join()
-
-            #Write prediction results in case the job crashes
-            while results_queue.qsize() > 0:
-                result = results_queue.get()
-                value = result['protein_names']
-                index = find_index(scores, value)
-                scores[index] = result
-            write_prediction_results(scores, results_file_pairwise_predictions)
+        available_gpus = get_num_available_gpus()
+        if available_gpus == 0:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+            FLAGS.num_gpu = 0
+            gpu_available = False
+            max_tasks = FLAGS.num_cpu
+            logging.warning(f"No GPUs found. Switching to CPU.")
+        elif available_gpus < FLAGS.num_gpu:
+            FLAGS.num_gpus = available_gpus
+            logging.warning(f"{FLAGS.num_gpu} GPUs requested but only {available_gpus} found. Adjusting number.")
+            max_tasks = available_gpus
+            gpu_available = True
         else:
-            #Start processes in parallel
-            active_processes = []
-            for _ in range(max_tasks):
-                if task_queue.qsize() > 0:
-                    kwargs = task_queue.get()
-                    kwargs['results_queue'] = results_queue
-                    logging.debug(f'active processes {len(active_processes)} < max_tasks {max_tasks}')
-                    if gpu_available:
-                        gpu_id = len(active_processes)
-                    else:
-                        gpu_id = None
-                    logging.debug(f"Current GPU ID: {gpu_id}")
-                    if prediction_pipeline == 'rosettafold':
-                        p = torch.multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
-                    else:
-                        p = multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
-                    p.start()
-                    active_processes.append(p)
-                else:
-                    break
-            logging.debug(f'active processes {len(active_processes)} >= max_tasks {max_tasks}')
-            for p in active_processes:
-                p.join()
-            
-            #Collect results
-            while results_queue.qsize() > 0:
-                result = results_queue.get()
-                if None in list(result.values()):
-                    logging.error(f'Got None for {result["protein_names"]}')
-                    results_with_error += 1
-                value = result['protein_names']
-                index = find_index(scores, value)
-                scores[index] = result
-                logging.debug(f'Index for {value} is {index}')
-                logging.debug(scores[index])              
-            write_prediction_results(scores, results_file_pairwise_predictions)
-        if results_with_error > 0:
-            logging.warning(f"{results_with_error} results with failed evaluation.")
+            max_tasks = FLAGS.num_gpu
+            gpu_available = True
+            logging.info(f"Using {FLAGS.num_gpu} GPUs.")
 
 
-    if FLAGS.prediction in BATCH_PREDICTION_MODES:
+        results_with_error = 0
+        for kwargs in tasks:
+            task_queue.put(kwargs)
+
+        while task_queue.qsize() > 0:
+            #In case of Fastfold only start one process at a time since parallelisation is managed at a later stage
+            if prediction_pipeline == 'fastfold':
+                kwargs = task_queue.get()
+                kwargs['results_queue'] = results_queue
+                logging.info("Starting FastFold in a new process.")
+                process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
+                process.start()
+                process.join()
+
+                #Write prediction results in case the job crashes
+                while results_queue.qsize() > 0:
+                    result = results_queue.get()
+                    value = result['protein_names']
+                    index = find_index(scores, value)
+                    scores[index] = result
+                write_prediction_results(scores, results_file_pairwise_predictions)
+            else:
+                #Start processes in parallel
+                active_processes = []
+                for _ in range(max_tasks):
+                    if task_queue.qsize() > 0:
+                        kwargs = task_queue.get()
+                        kwargs['results_queue'] = results_queue
+                        logging.debug(f'active processes {len(active_processes)} < max_tasks {max_tasks}')
+                        if gpu_available:
+                            gpu_id = len(active_processes)
+                        else:
+                            gpu_id = None
+                        logging.debug(f"Current GPU ID: {gpu_id}")
+                        if prediction_pipeline == 'rosettafold':
+                            p = torch.multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
+                        else:
+                            p = multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
+                        p.start()
+                        active_processes.append(p)
+                    else:
+                        break
+                logging.debug(f'active processes {len(active_processes)} >= max_tasks {max_tasks}')
+                for p in active_processes:
+                    p.join()
+                
+                #Collect results
+                while results_queue.qsize() > 0:
+                    result = results_queue.get()
+                    if None in list(result.values()):
+                        logging.error(f'Got None for {result["protein_names"]}')
+                        results_with_error += 1
+                    value = result['protein_names']
+                    index = find_index(scores, value)
+                    scores[index] = result
+                    logging.debug(f'Index for {value} is {index}')
+                    logging.debug(scores[index])              
+                write_prediction_results(scores, results_file_pairwise_predictions)
+            if results_with_error > 0:
+                logging.warning(f"{results_with_error} results with failed evaluation.")
+        
         #Run minimization if requested
         if FLAGS.run_relax:
             batch_minimization(FLAGS.output_dir, FLAGS.use_gpu_relax)
@@ -1379,6 +1436,8 @@ def main(argv):
         evaluation_batch = EvaluationPipelineBatch(FLAGS.output_dir, scores)
         evaluation_batch.run()
         logging.info("Alphafold pipeline completed. Exit code 0")
+    else:
+        logging.info("Finished without running predictions.")
 
 def sigterm_handler(_signo, _stack_frame):
     raise KeyboardInterrupt
