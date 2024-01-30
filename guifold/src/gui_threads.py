@@ -210,7 +210,7 @@ class LoadJob(QObject):
                     num_jobs = len_seqs
                 elif self._parent.jobparams.pipeline.get_value() == 'batch_msas':
                     num_jobs = len(sequences)
-                elif self._parent.jobparams.pipeline.get_value() == 'grouped':
+                elif self._parent.jobparams.pipeline.get_value() in ['grouped_bait_vs_preys', 'grouped_all_vs_all']:
                     #TODO: Add proper calculation
                     num_jobs = len(sequences)
                 #Change progress display

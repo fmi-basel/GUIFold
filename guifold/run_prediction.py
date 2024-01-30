@@ -18,6 +18,7 @@
 # Parts from https://github.com/hpcaitech/FastFold
 
 """Full AlphaFold protein structure prediction script."""
+from copy import deepcopy
 import json
 import multiprocessing
 from multiprocessing.managers import ListProxy
@@ -33,6 +34,7 @@ import sys
 import time
 import traceback
 from typing import Dict, Union, Optional
+from alphafold.data import msa_identifiers
 import nvidia_smi
 
 from absl import app
@@ -201,7 +203,7 @@ flags.DEFINE_integer('num_cpu', 1, 'Number of CPUs to use for feature generation
 flags.DEFINE_string('precomputed_msas_path', None, 'Path to a directory with precomputed MSAs (job_dir/msas)')
 #flags.DEFINE_boolean('batch_msas', False, 'Runs the monomer feature pipeline for all sequences in the input MSA file.')
 flags.DEFINE_enum('pipeline', 'full', [
-                'full', 'only_features', 'batch_msas', 'continue_from_features', 'all_vs_all', 'first_vs_all', 'first_n_vs_rest', 'grouped', 'only_relax'],
+                'full', 'only_features', 'batch_msas', 'continue_from_features', 'all_vs_all', 'first_vs_all', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all', 'only_relax'],
                 'Choose preset pipeline configuration - '
                 'full pipeline or '
                 'stop after feature generation (only features) or '
@@ -226,7 +228,7 @@ RELAX_ENERGY_TOLERANCE = 2.39
 RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
-BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']
+BATCH_PREDICTION_MODES = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']
 
 
 
@@ -422,6 +424,7 @@ def predict_structure(
         features_output_dir = os.path.join(output_dir_base, "features", feature_pipeline)
 
     msa_output_dir = features_output_dir
+    features_output_path = os.path.join(features_output_dir, f'features_{protein_names}.pkl')
     if not os.path.exists(msa_output_dir):
         os.makedirs(msa_output_dir, exist_ok=True)
 
@@ -496,6 +499,7 @@ def predict_structure(
             logging.debug(f"Model exists: {os.path.exists(unrelaxed_pdb_path)}")
             if not os.path.exists(unrelaxed_pdb_path) or not os.path.exists(result_output_path):
                 logging.info(feature_dict.keys())
+                logging.info(f"Final MSA size: {len(feature_dict['num_alignments'])}")
                 if prediction_pipeline == 'rosettafold':
                     logging.info("Starting prediction pipeline for rosettafold2")
 
@@ -996,6 +1000,11 @@ def main(argv):
         custom_tempdir=FLAGS.custom_tempdir,
         strict_error_check=True)
 
+    if FLAGS.db_preset in ['colabfold_local', 'colabfold_web']:
+        accession_seq_id_mapping = msa_identifiers.create_accession_seq_id_mapping(FLAGS.uniprot_database_path)
+    else:
+        accession_seq_id_mapping = None
+
     monomer_data_pipeline = pipeline.DataPipeline(
         jackhmmer_binary_path=FLAGS.jackhmmer_binary_path,
         hhblits_binary_path=FLAGS.hhblits_binary_path,
@@ -1018,7 +1027,9 @@ def main(argv):
         use_precomputed_msas=FLAGS.use_precomputed_msas,
         custom_tempdir=FLAGS.custom_tempdir,
         precomputed_msas_path=FLAGS.precomputed_msas_path,
+        accession_seq_id_mapping=accession_seq_id_mapping,
         multimer=False)
+    
 
     #Calculates all MSAs needed for monomer or multimer pipeline
     if FLAGS.pipeline == 'batch_msas':
@@ -1171,7 +1182,7 @@ def main(argv):
         logging.warning("Precomputed MSAs will not be copied when running batch features.")
 
     #Batch predictions
-    results_file_pairwise_predictions = f"pairwise_prediction_results_{FLAGS.prediction}.csv"
+    results_file_pairwise_predictions = os.path.join(FLAGS.output_dir, "predictions", FLAGS.predictions_dir, "pairwise_prediction_results.csv")
     if FLAGS.pipeline == 'first_n_vs_rest':
         first_n_seq = FLAGS.first_n_seq
     else:
@@ -1240,15 +1251,15 @@ def main(argv):
                 kwargs['score_dict'] = scores[index]
                 tasks.append(kwargs)
 
-    elif FLAGS.pipeline == 'grouped':
+    elif FLAGS.pipeline in ['grouped_bait_vs_preys', 'grouped_all_vs_all']:
         prediction_groups_mapping = {}
         no_msa_list_full = no_msa_list.copy()
         no_template_list_full = no_template_list.copy()
         custom_template_list_full = custom_template_list.copy()
         precomputed_msas_list_full = precomputed_msas_list.copy()
         for index, (desc, seq) in enumerate(description_sequence_dict.items()):
-            regex_bait = r'bait_id(\d+)'
-            regex_prey = r'prey_id(\d+)'
+            regex_bait = r'bait_(.*)'
+            regex_prey = r'prey_(.*)'
             if re.search(regex_bait, desc):
                 id = re.search(regex_bait, desc).groups(1)[0]
                 desc = desc.replace(f'_bait_id{id}', '')
@@ -1261,6 +1272,8 @@ def main(argv):
                 if not id in prediction_groups_mapping:
                     prediction_groups_mapping[id] = {'baits': {}, 'preys': {desc: (seq, index)}}
                 prediction_groups_mapping[id]['preys'][desc] = (seq, index)
+            else:
+                logging.error(f"{desc} has the wrong format for grouped workflow. Expected format: ProteinName_[bait|prey]_unique_identifier")
         
         logging.info(prediction_groups_mapping)
         for id, group in prediction_groups_mapping.items():
@@ -1285,6 +1298,35 @@ def main(argv):
                     index = find_index(scores, kwargs['protein_names'])
                     kwargs['score_dict'] = scores[index]
                     tasks.append(kwargs)
+        
+        if FLAGS.pipeline == 'grouped_all_vs_all':
+            for id, group in prediction_groups_mapping.items():
+                merged_dict = deepcopy(group['baits'])
+                merged_dict.update(group['preys'])
+                for desc_1, (seq_1, index_1) in merged_dict.items():
+                    kwargs = {k: v for (k,v) in kwargs_common.items()}
+                    desc_1_prev = desc_1
+                    for desc_2, (seq_2, index_2) in merged_dict.items():
+                        if desc_1 == desc_2:
+                            desc_1 = f"{desc_1}_1"
+                            desc_2 = f"{desc_2}_2"
+                        no_msa_list = [no_msa_list_full[index_1]] + [no_msa_list_full[index_2]]
+                        no_template_list = [no_template_list_full[index_1]] + [no_template_list_full[index_2]]
+                        custom_template_list = [custom_template_list_full[index_1]] + [custom_template_list_full[index_2]]
+                        precomputed_msas_list = [precomputed_msas_list_full[index_1]] + [precomputed_msas_list_full[index_2]]
+                        kwargs['no_msa_list'] = no_msa_list
+                        kwargs['no_template_list'] =  no_template_list
+                        kwargs['custom_template_list'] = custom_template_list
+                        kwargs['precomputed_msas_list'] = precomputed_msas_list                            
+                        if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
+                            kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
+                            index = find_index(scores, kwargs['protein_names'])
+                            kwargs['score_dict'] = scores[index]
+                            tasks.append(kwargs)
+                        desc_1 = desc_1_prev
+
+
+
 
 
     #First N sequences get fixed and predicted against all remaining sequences

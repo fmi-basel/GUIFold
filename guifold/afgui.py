@@ -238,7 +238,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.files_selected_item = None
         self.db = db
         self.sess = sess
-        self.screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']
+        self.screening_protocol_names = ['first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']
 
         self.init_frame()
         #self.init_dialogs()
@@ -933,7 +933,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         #        self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
                     #Change Log display for batch jobs
-                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all', 'batch_msas', 'first_n_vs_rest', 'grouped']:
+                    if job_params['pipeline'] in ['all_vs_all', 'first_vs_all', 'batch_msas', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']:
                         if job_params['pipeline'] == 'all_vs_all':
                             len_seqs = len(sequences)
                             num_jobs = (len_seqs * (len_seqs -1)) / 2 + len_seqs
@@ -945,7 +945,7 @@ class MainFrame(QtWidgets.QMainWindow):
                             num_jobs = len_seqs
                         elif self.jobparams.pipeline.get_value() == 'batch_msas':
                             num_jobs = len(sequences)
-                        elif self.jobparams.pipeline.get_value() == 'grouped':
+                        elif self.jobparams.pipeline.get_value() in ['grouped_bait_vs_preys', 'grouped_all_vs_all']:
                             #TODO: Implement proper calculation
                             num_jobs = len(sequences)
                         num_jobs = int(num_jobs)
@@ -1059,7 +1059,7 @@ class MainFrame(QtWidgets.QMainWindow):
                                 len_seq = len(seq)
                                 seq_len_list.append(len_seq + len_seq1)
                         job_params['total_seqlen'] = max(seq_len_list)
-                    elif job_params['pipeline'] in 'grouped' or 'first_n_vs_rest':
+                    elif job_params['pipeline'] in ['grouped_bait_vs_preys', 'grouped_all_vs_all', 'first_n_vs_rest']:
                         #TODO: correct calculation
                         seq_len_list = []
                         for i, seq in enumerate(sequences):
@@ -1336,7 +1336,7 @@ class MainFrame(QtWidgets.QMainWindow):
             #self.jobparams.num_recycle.ctrl.setCurrentText('3')
             self.jobparams.num_recycle.set_value('3')
             #self.jobparams.num_gpu.set_value('1')
-        if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped']:
+        if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']:
             #self.jobparams.force_cpu.ctrl.setChecked(False)
             self.jobparams.force_cpu.set_value(False)
         if pipeline_name == 'first_n_vs_rest':
