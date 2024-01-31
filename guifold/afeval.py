@@ -39,11 +39,18 @@ import typing
 import jax
 import jax.numpy as jnp
 
+PKL_KEYS_TO_KEEP = ['predicted_aligned_error',
+                    'plddt',
+                    'predicted_tm_score',
+                    'ptm',
+                    'iptm',
+                    'predicted_lddt',
+                    'num_recycles']
 
 
 class EvaluationPipeline:
     def __init__(self, fasta_path: str = None, results_dir: str = None, features_dir: str = None, continue_from_existing_results: bool = False, custom_spacing: bool = False,
-                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch_prediction: str = False, prediction_pipeline: str = 'alphafold'):
+                 custom_start_residue_list: str = None, custom_axis_label_list: str = None, batch_prediction: bool = False, prediction_pipeline: str = 'alphafold'):
         self.sequence_file = fasta_path
         self.continue_from_existing_results = continue_from_existing_results
         self.output_dir_base = os.path.split(os.path.realpath(self.sequence_file))[0]
@@ -146,6 +153,8 @@ class EvaluationPipeline:
                             ptm_list.append((ptm, mdl_name))
                         if not self.prediction == 'rosettafold':
                             self.save_confidence_json(pkl_data, mdl.replace('.pkl', '.json'))
+                            if self.batch:
+                                self.remove_raw_data_from_pkl(pkl_data, mdl)
                 logging.debug(pae_list)
                 logging.debug("Check none:")
                 logging.debug(self.check_none(pae_list))
@@ -245,6 +254,12 @@ class EvaluationPipeline:
 
         ### Make MSA coverage plot
         msa_coverage_path = self.msa_coverage()
+
+        ### Retrieve MSA sizes for subunits
+        msa_sizes = self.get_msa_stats()
+        msa_sizes_subunits = {k: v for k, v in msa_sizes.items() if not k == 'msa_size_paired_merged'}
+        print(msa_sizes)
+        msa_names = list(msa_sizes[list(msa_sizes.keys())[0]].keys())
         
         ### Render template
         env = Environment(loader=FileSystemLoader(templates_path))
@@ -264,6 +279,8 @@ class EvaluationPipeline:
                                    pae_examples_path=pae_examples_path,
                                    msa_coverage_path=msa_coverage_path,
                                    use_model_viewer=False,
+                                   msa_names=msa_names,
+                                   msa_sizes=msa_sizes_subunits,
                                    )
 
         html_path = os.path.join(self.results_dir, "results.html")
@@ -281,12 +298,26 @@ class EvaluationPipeline:
                                    multimer=multimer,
                                    pae_examples_path=pae_examples_path,
                                    msa_coverage_path=msa_coverage_path,
-                                   use_model_viewer=True)
+                                   use_model_viewer=True,
+                                   msa_names=msa_names,
+                                   msa_sizes=msa_sizes_subunits,
+                                   )
         html_path = os.path.join(self.results_dir, "results_model_viewer.html")
         with open(html_path, "w") as f_out:
             f_out.write(rendered)
         #plt.tight_layout()
         logging.info(f"Finished. Results written to {self.results_dir}.")
+
+    def get_msa_stats(self):
+        msa_json = os.path.join(self.features_dir, 'msa_statistics.json')
+        if os.path.exists(msa_json):
+            with open(msa_json, 'r') as f:
+                msa_stats = json.load(f)
+        else:
+            logging.warning(f"MSA statistics json not found in {msa_json}")
+            msa_stats = {}
+        return msa_stats
+
 
     def msa_coverage(self):
         """Adapted from https://github.com/sokrypton/ColabFold/blob/0d63cbd596fe938e3c6724761497d739820508eb/colabfold/colabfold.py 
@@ -761,7 +792,6 @@ class EvaluationPipeline:
         chains = [str(c.get_id()) for c in pdb.get_chains()]
         return list(zip(chains,
             ["lime","cyan","magenta","yellow","salmon","white","blue","orange"]))
-    
 
     def convert_to_list(self, obj):
         if isinstance(obj, dict):
@@ -772,18 +802,22 @@ class EvaluationPipeline:
             return obj.tolist()
         else:
             return obj
+        
+    def remove_raw_data_from_pkl(self, data, pkl_file):
+        """To reduce file size of results pkl only confidence metrics are kept"""
+        reduced_pkl_file = pkl_file.replace("result", "result_reduced")
+        for key in PKL_KEYS_TO_KEEP:
+            reduced_data = {key: data[key] for key in PKL_KEYS_TO_KEEP if key in data}
+        with open (reduced_pkl_file, "wb") as f:
+            pickle.dump(reduced_data, f)
+        if os.path.exists(reduced_pkl_file):
+            os.remove(pkl_file)
     
     def save_confidence_json(self, data, file_name):
-        keys = ['predicted_aligned_error',
-                            'plddt',
-                            'predicted_tm_score',
-                            'ptm',
-                            'iptm',
-                            'predicted_lddt',
-                            'num_recycles']
-        for key in keys:
-            confidence_data = {key: data[key] for key in keys if key in data}
+        for key in PKL_KEYS_TO_KEEP:
+            confidence_data = {key: data[key] for key in PKL_KEYS_TO_KEEP if key in data}
         confidence_data = self.convert_to_list(confidence_data)
+        file_name = os.path.basename(file_name)
         with open(os.path.join(self.results_dir, file_name), 'w') as f:
             json.dump(confidence_data, f)
 
@@ -812,7 +846,7 @@ class EvaluationPipelineBatch:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=".")
     parser.add_argument('--fasta_path', default=None, required=True, help='Path to input FASTA file (must be located below the results folder).')
-    parser.add_argument('--results_dir', default=None, required=True, help='Path to results.')
+    parser.add_argument('--results_dir', default=None, required=True, help='Path to results (predictions).')
     parser.add_argument('--features_dir', default=None, required=True, help='Path to features.')
     parser.add_argument('--prediction_pipeline', default='alphafold', help='(Optional) Prediciton pipeline')
     parser.add_argument('--debug', default=False, action='store_true', help='(Optional) Debug mode.')
