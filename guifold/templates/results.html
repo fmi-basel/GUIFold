@@ -38,6 +38,10 @@
                 {% include 'pae.html' %}
                 {% endif %}
                 <br />
+                {% if not multimer_score_list is none %}
+                {% include 'multimer_score.html' %}
+                {% endif %}
+                <br />
                 {% if not ptm_list is none %}
                 {% include 'ptm.html' %}
                 {% endif %}

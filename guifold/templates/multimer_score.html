@@ -1,0 +1,19 @@
+<a name="multimer_score">
+    <h2>Multimer score</h2>
+    <p>The table below lists for each predicted model the multimer score (0.2 * pTM + 0.8 * ipTM).</p>
+
+    <table border = "1">
+        {% for score, name in multimer_score_list %}
+        {% if loop.index == 1 %}
+        <tr>
+            <th>Model number</th>
+            <th>Overall</th>
+        </tr>
+        {% endif %}
+
+        <tr id="multimer_score-table-{{loop.index}}">
+            <td>{{name}}</td>
+            <td>{{score}}</td>
+        </tr>
+        {% endfor %}
+    </table>

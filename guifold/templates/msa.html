@@ -2,5 +2,24 @@
     <h2>MSA coverage</h2>
 
     <img src="{{msa_coverage_path}}" width="70%" /><br /><br />
+    {% if not msa_names is none %}
+    <h2>Raw MSA sizes by subunit</h2>
+    <table border = "1">
+        <tr>
+            <th>MSA name</th>
+            {% for subunit_name in msa_sizes.keys() %}
+            <th>{{subunit_name}}</th>
+            {% endfor %}
+        </tr>
+        {% for msa_name in msa_names %}
+        <tr>
+            <td>{{msa_name}}</td>
+            {% for subunit_name, _ in msa_sizes.items() %}
+            <td>{{msa_sizes[subunit_name][msa_name]}}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        
     </table>
+    {% endif %}
 

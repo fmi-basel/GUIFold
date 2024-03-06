@@ -1,6 +1,7 @@
 {% if not multimer %}<a href="#plddt_summary">pLDDT</a><br />{% endif %}
 <a href="#pae_summary">PAE summary</a><br />
 {% if not pae_results is none %}<a href="#pae_plots">PAE plots</a><br />{% endif %}
+{% if not ptm is none %}<a href="#pmultimer_score">Multimer score</a><br />{% endif %}
 {% if not ptm is none %}<a href="#ptm">pTM</a><br />{% endif %}
 {% if not iptm is none %}<a href="#iptm">ipTM</a><br />{% endif %}
 {% if use_model_viewer %}<a href="#models">Models</a><br />{% endif %}
