@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 from copy import deepcopy
 import hashlib
+from io import StringIO
 import pkg_resources
 import datetime
 import sys
@@ -850,8 +851,7 @@ class Evaluation(GUIVariables):
         project_id = result_job.project_id
         project_path = sess.query(self.db.Project.path).filter_by(id=project_id).one()
         #Path inside the project dir
-        project_results_path = os.path.join(job_name, job_name)
-        absolute_results_path = os.path.join(project_path, project_log_path)
+        absolute_results_path = os.path.join(project_path, job_name, results_path)
         return absolute_results_path
 
     def print_page_info(self, ok) -> None:
@@ -876,7 +876,10 @@ class Evaluation(GUIVariables):
         logger.debug(results_folder)
         folders = [f for f in os.listdir(results_folder) if os.path.isdir(os.path.join(results_folder, f))]
         logger.debug(folders)
-        if os.path.exists(os.path.join(results_folder, "batch_summary.html")) and not "summary" in combination_names:
+        batch_summary_path = os.path.join(results_folder, "batch_summary.html")
+        if not os.path.exists(batch_summary_path):
+            logger.debug(f"{batch_summary_path} does not exist")
+        if os.path.exists(batch_summary_path) and not "summary" in combination_names:
             combination_names.append("summary")
         for f in folders:
             if 'results.html' in os.listdir(os.path.join(results_folder, f)):
@@ -924,8 +927,10 @@ class Evaluation(GUIVariables):
                     if gui_params['selected_combination_name'] is None:
                         if len(combinations_list) > 0:
                             results_path = self.get_combination_results_path(results_path, combinations_list[0])
+                            gui_params['results_path_combination'] = os.path.join(gui_params['results_path'],  combinations_list[0])
                     else:
                         results_path = self.get_combination_results_path(results_path, gui_params['selected_combination_name'])
+                        gui_params['results_path_combination'] = os.path.join(gui_params['results_path'],  gui_params['selected_combination_name'])
                 logger.debug(results_path)
                 self.results.ctrl.settings().setAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled, False)
                 logger.debug(f"WebGL enabled: {self.results.ctrl.settings().testAttribute(QtWebEngineWidgets.QWebEngineSettings.WebGLEnabled)}")
@@ -1061,8 +1066,12 @@ class JobParams(GUIVariables):
         self.use_model_5 = Variable('use_model_5', 'bool', ctrl_type='chk')
         self.model_list = Variable('model_list', 'str', cmd=True)
         self.first_n_seq = Variable('first_n_seq', 'int', ctrl_type='sbo', cmd=True)
-        self.features_dir = Variable('features_dir', 'str', db=False, cmd=True)
-        self.predictions_dir = Variable('predictions_dir', 'str', db=False, cmd=True)
+        self.features_dir = Variable('features_dir', 'str', db=True, cmd=True)
+        self.predictions_dir = Variable('predictions_dir', 'str', db=True, cmd=True)
+        self.batch_max_sequence_length = Variable('batch_max_sequence_length', 'int', ctrl_type='sbo', cmd=True)
+        self.msa_pairing_dict = {0: 'paired',
+                             1: 'paired+unpaired'}
+        self.msa_pairing = Variable('msa_pairing', ctrl_type='cmb', cmb_dict=self.msa_pairing_dict, cmd=True)
 
     def set_db(self, db: DBHelper) -> None:
         """Set database helper object."""
@@ -1121,6 +1130,8 @@ class JobParams(GUIVariables):
         params_list.append(self.db_preset.get_value())
         params_list.append(self.model_preset.get_value())
         params_list = [str(x) for x in params_list]
+        logger.debug("Generating hash for the following params:")
+        logger.debug(params_list)
         params_str = ''.join(params_list)
         md5_hash = hashlib.md5(params_str.encode()).hexdigest()
 
@@ -1129,6 +1140,7 @@ class JobParams(GUIVariables):
     def parse_fasta(self, fasta_file: str) -> List[str]:
         """Parse fasta file."""
         sequences = []
+        descriptions = []
         if fasta_file is None:
             raise ValueError("No fasta file defined!")
         elif not os.path.exists(fasta_file):
@@ -1137,10 +1149,21 @@ class JobParams(GUIVariables):
             record_dict = SeqIO.index(fasta_file, "fasta")
             for record in record_dict.values():
                 sequences.append(record.seq)
-        return sequences
+                descriptions.append(record.id)
+        return sequences, descriptions
+    
+    def parse_fasta_string(self, fasta_string: str)-> List[str]:
+        """Parse fasta string."""
+        sequences = []
+        descriptions = []
+        records = SeqIO.parse(StringIO(fasta_string), "fasta")
+        for record in records:
+            sequences.append(str(record.seq))
+            descriptions.append(record.id)
+        return sequences, descriptions
 
     def read_sequences(self) -> list:
-        """Read sequences from fasta file."""
+        """Read sequences from fasta input."""
         logger.debug(self.sequences.__dict__)
         logger.debug(self.sequence_params.__dict__)
         seq_names, error_msgs = self.sequence_params.read_sequences(self.sequences.ctrl)
@@ -1158,6 +1181,36 @@ class JobParams(GUIVariables):
         self.job_name.ctrl.setText(job_name)
         self.job_name.set_value(job_name)
         return error_msgs
+    
+    def split_and_read_sequences(self) -> list:
+        self.split_sequences()
+        self.read_sequences()
+
+    def split_into_subsequences(self, input_string, max_length):
+        """Split into equally sized chunks"""
+        num_parts = (len(input_string) + max_length - 1) // max_length
+        part_size = len(input_string) // num_parts
+        parts = [input_string[i * part_size:(i + 1) * part_size] for i in range(num_parts - 1)]
+        parts.append(input_string[(num_parts - 1) * part_size:])
+        logging.info(f"Splitted {input_string} into:")
+        logging.info(parts)
+        return parts
+
+    def split_sequences(self):
+        sequences, descriptions = self.parse_fasta_string(self.sequences.ctrl.toPlainText())
+        split_sequence_list = []
+        split_description_list = []
+        for i, sequence in enumerate(sequences):
+            split_sequences = self.split_into_subsequences(sequence, self.batch_max_sequence_length.get_value())
+            split_descriptions = [f"{descriptions[i]}_split{o}" for o in range(len(split_sequences))]
+            split_sequence_list.extend(split_sequences)
+            split_description_list.extend(split_descriptions)
+        fasta_list = []
+        for i, seq in enumerate(split_sequence_list):
+            fasta_list.append(f">{split_description_list[i]}\n{seq}\n\n")
+        fasta_string = ''.join(fasta_list)
+        self.sequences.ctrl.setPlainText(fasta_string)
+
 
     def process_single_template(self, template: str, msgs: list, output_folder: str, index: int) -> bool:
         """Process single template.
@@ -1304,6 +1357,7 @@ class Job(GUIVariables):
         self.timestamp = Variable('timestamp', 'str')
         self.log = Variable('log', 'str', db=False, ctrl_type='pte')
         self.log_file = Variable('log_file', 'str', db=True)
+        self.job_status_log_file = Variable('job_status_log_file', 'str', db=True, cmd=True)
         self.status = Variable('status', 'str', db=True)
         self.pid = Variable('pid', 'str', db=True)
         self.host = Variable('host', 'str', db=True)
@@ -1637,6 +1691,9 @@ class Job(GUIVariables):
         logger.debug(cmd_dict)
         job_args = []
         log_file = os.path.join(job_params['job_path'], job_params['log_file'])
+        job_status_log_file = job_params['job_status_log_file']
+        job_status_log_file = os.path.join(job_params['job_path'], job_status_log_file)
+        cmd_dict['job_status_log_file'] = job_status_log_file
 
         #Estimate memory
         #In case of FastFold also chunk_size needs to be adjusted
@@ -1705,7 +1762,7 @@ class Job(GUIVariables):
                     estimated_gpu_mem is None,
                     job_params['force_cpu'],
                     job_params['pipeline'] in ['only_features', 'batch_msas']]):
-            logger.debug(f"\n\n\n\n\n==============Estimated GPU MEP {estimated_gpu_mem} Max GPU mem {gpu_mem}")
+            logger.debug(f"\n\n\n\n\n==============Estimated GPU MEM {estimated_gpu_mem} Max GPU mem {gpu_mem}")
             if estimated_gpu_mem > gpu_mem:
                 if estimated_gpu_mem > job_params['max_ram']:
                     error_msgs.append(f"The estimated memory of {estimated_gpu_mem} GB for a total sequence length of {job_params['total_seqlen']}"
@@ -1788,19 +1845,28 @@ class Job(GUIVariables):
         lines = []
         #logger.debug(params)
         log_file = os.path.join(params['job_path'], params['log_file'])
-        if params['log_file_lines']:
-            #Only lines added since last update
-            lines = params['log_file_lines']
-        elif os.path.exists(log_file):
-            #All lines read again, reset counter
+        job_status_log_file = os.path.join(params['job_path'], params['job_status_log_file'])
+        if os.path.exists(job_status_log_file):
             task_status_dict['num_tasks_finished'] = 0
             logger.debug(f"Reading from {log_file}")
             with open(log_file, 'r') as f:
                 lines = f.readlines()
         else:
-            msg = f'Log file {log_file} does not exist'
+            msg = f"Job status file {params['job_status_log_file']} does not exist."
             params['errors'].append(msg)
-            return params
+            if params['log_file_lines']:
+                #Only lines added since last update
+                lines = params['log_file_lines']
+            elif os.path.exists(log_file):
+                #All lines read again, reset counter
+                task_status_dict['num_tasks_finished'] = 0
+                logger.debug(f"Reading from {log_file}")
+                with open(log_file, 'r') as f:
+                    lines = f.readlines()
+            else:
+                msg = f'Log file {log_file} does not exist'
+                params['errors'].append(msg)
+                return params
 
         for line in lines:
             pattern_exit_code_script = re.compile(r'Exit\scode\s(\d+)')
@@ -1815,7 +1881,12 @@ class Job(GUIVariables):
             pattern_model_5 =  re.compile(r"Running\smodel\smodel_5")
             pattern_task_finished = re.compile(r'Task finished')
             pattern_finished =  re.compile(r"Alphafold pipeline completed")
-            if re.search(pattern_task_finished, line):
+            pattern_tasks_done = re.compile(r"(\d+)/(\d+) tasks finished.")
+            if re.search(pattern_tasks_done, line):
+                g = re.search(pattern_tasks_done, line)
+                task_status_dict['num_tasks_finished'] = g.groups(1)
+                params['num_jobs'] = g.groups(2)
+            elif re.search(pattern_task_finished, line):
                 task_status_dict['num_tasks_finished'] += 1
                 logger.debug(f"Task finished found. Current number: {task_status_dict['num_tasks_finished']}")
             if re.search(pattern_exit_code_script, line):
@@ -2010,13 +2081,18 @@ class Job(GUIVariables):
         job_project_id = result_job.job_project_id
         project_path = self.get_path_by_project_id(project_id, sess)
         #Path inside the project dir
-        log_path = os.path.join(project_path, job_name, self.build_log_file_path(job_name, type, prediction, db_preset, pipeline, job_project_id))
+        log_file = self.build_log_file_path(job_name, type, prediction, db_preset, pipeline, job_project_id)
+        log_path = os.path.join(project_path, job_name, log_file)
         #Backward compatibility
         if not os.path.exists(log_path):
             log_path = log_path.replace(f"_{job_project_id}", "")
         if not os.path.exists(log_path):
             log_path = os.path.join(project_path, job_name, self.build_log_file_path_deprec(job_name, type))
         return log_path
+    
+    def get_job_status_log_file(self, log_file: str) -> str:
+        job_status_log_path = "job_status_" + log_file
+        return job_status_log_path
 
     def get_queue_pid(self, log_file: str, job_id: int, sess: sqlalchemy.orm.session.Session) -> Union[str, None]:
         pid = None
@@ -2066,6 +2142,7 @@ class Job(GUIVariables):
                                  'status': job.status,
                                  'job_path': job.path,
                                  'job_name': jobparams.job_name,
+                                 'job_status_log_file': self.get_job_status_log_file(self.get_log_file(job.id, sess)),
                                  'log_file': self.get_log_file(job.id, sess),
                                  'pid': job.pid,
                                  'time_started': job.timestamp})

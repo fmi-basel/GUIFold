@@ -64,9 +64,6 @@ class ProgressDialog(QtWidgets.QDialog):
         text = f"The following errors occured:\n{text}"
         self.label.setText(text)
 
-        
-
-
 class LoadDialog(QtWidgets.QMessageBox):
     def __init__(self, parent=None, text=None):
         super(LoadDialog, self).__init__(parent)

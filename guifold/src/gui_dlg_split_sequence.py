@@ -20,39 +20,19 @@ import logging
 from datetime import date
 
 logger = logging.getLogger("guifold")
-
 class DefaultValues:
     def __init__(self):
-        self.benchmark = False
-        self.random_seed = None
-        self.max_template_date = str(date.today())
-        self.model_preset = 'automatic'
-        self.force_cpu = False
-        self.num_recycle = 20
-        self.num_multimer_predictions_per_model = 1
-        self.num_gpu = 1
-        self.chunk_size = 0
-        self.inplace = True
-        self.use_model_1 = True
-        self.use_model_2 = True
-        self.use_model_3 = True
-        self.use_model_4 = True
-        self.use_model_5 = True
-        self.first_n_seq = 2
         self.batch_max_sequence_length = 5000
-        self.msa_pairing = 'paired'
 
-
-
-class AdvancedParamsDlg(QtWidgets.QDialog):
+class SplitSeqDlg(QtWidgets.QDialog):
     def __init__(self, _parent):
-        super(AdvancedParamsDlg, self).__init__()
+        super(SplitSeqDlg, self).__init__()
         self.sess = _parent.sess
         self.jobparams = _parent.jobparams
         self.gui_params = _parent.gui_params
-        uic.loadUi(pkg_resources.resource_filename('guifold.ui', 'advanced_params.ui'), self)
+        uic.loadUi(pkg_resources.resource_filename('guifold.ui', 'split_seq.ui'), self)
         self.jobparams.set_controls(self, self.jobparams.db_table)
-        self.button_box = self.findChild(QtWidgets.QDialogButtonBox, "btn_jobparams_button_box")
+        self.button_box = self.findChild(QtWidgets.QDialogButtonBox, "btn_split_seq_button_box")
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         self.init()
@@ -62,10 +42,6 @@ class AdvancedParamsDlg(QtWidgets.QDialog):
 
     def init(self):
         default_values = DefaultValues()
-        for item in self.jobparams.model_preset_dict.values():
-            self.jobparams.model_preset.ctrl.addItem(item)
-        for item in self.jobparams.msa_pairing_dict.values():
-            self.jobparams.msa_pairing.ctrl.addItem(item)
         if not self.gui_params['other_settings_changed']:
             if self.gui_params['job_id'] is None:
                 logger.debug("Other params not changed and job_id is None. Update from default values.")

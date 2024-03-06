@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 10
+DB_REVISION = 11
 
 def get_type(type):
     types = {'str': String,
@@ -285,12 +285,17 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN use_model_5 BOOLEAN DEFAULT TRUE']
         stmts += ['ALTER TABLE jobparams ADD COLUMN model_list VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE job ADD COLUMN active BOOLEAN DEFAULT FALSE']
-        stmts += ['ALTER TABLE settings ADD min_cpus INTEGER DEFAULT NULL']
-        stmts += ['ALTER TABLE settings ADD max_cpus INTEGER DEFAULT NULL']
-        stmts += ['ALTER TABLE settings ADD uniref90_mmseqs_database_path INTEGER DEFAULT NULL']
-        stmts += ['ALTER TABLE settings ADD uniprot_mmseqs_database_path INTEGER DEFAULT NULL']
-        stmts += ['ALTER TABLE settings ADD pdb100_database_path INTEGER DEFAULT NULL']
-        stmts += ['ALTER TABLE jobparams ADD first_n_seq INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN min_cpus INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN max_cpus INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN uniref90_mmseqs_database_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN uniprot_mmseqs_database_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN pdb100_database_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN first_n_seq INTEGER DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN batch_max_sequence_length INTEGER DEFAULT(5000)']
+        stmts += ['ALTER TABLE job ADD COLUMN job_status_log_file VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN msa_pairing VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN predictions_dir VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN features_dir VARCHAR DEFAULT NULL']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

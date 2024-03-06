@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>405</width>
-    <height>722</height>
+    <width>410</width>
+    <height>843</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -48,23 +48,30 @@
           <x>10</x>
           <y>40</y>
           <width>361</width>
-          <height>354</height>
+          <height>421</height>
          </rect>
         </property>
-        <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0,0,0,0,0" rowminimumheight="0,0,0,0,0,0,0,0,0">
+        <layout class="QGridLayout" name="gridLayout_2" rowstretch="0,0,0,0,0,0,0,0,0,0,0">
          <property name="sizeConstraint">
           <enum>QLayout::SetDefaultConstraint</enum>
          </property>
-         <item row="1" column="1">
-          <widget class="QComboBox" name="cmb_jobparams_model_preset"/>
+         <item row="10" column="0">
+          <widget class="QLabel" name="label_6">
+           <property name="text">
+            <string>Max sequence length (batch)</string>
+           </property>
+          </widget>
          </item>
-         <item row="3" column="1">
-          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
-         </item>
-         <item row="4" column="1">
-          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
-           <property name="value">
+         <item row="10" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_batch_max_sequence_length">
+           <property name="minimum">
             <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>10000</number>
+           </property>
+           <property name="value">
+            <number>5000</number>
            </property>
           </widget>
          </item>
@@ -75,6 +82,13 @@
            </property>
           </widget>
          </item>
+         <item row="6" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_num_recycle">
+           <property name="value">
+            <number>3</number>
+           </property>
+          </widget>
+         </item>
          <item row="3" column="0">
           <widget class="QLabel" name="label_13">
            <property name="text">
@@ -82,12 +96,18 @@
            </property>
           </widget>
          </item>
-         <item row="6" column="1">
-          <widget class="QSpinBox" name="sbo_jobparams_num_recycle">
+         <item row="1" column="1">
+          <widget class="QComboBox" name="cmb_jobparams_model_preset"/>
+         </item>
+         <item row="4" column="1">
+          <widget class="QSpinBox" name="sbo_jobparams_num_multimer_predictions_per_model">
            <property name="value">
-            <number>3</number>
+            <number>1</number>
            </property>
           </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLineEdit" name="lei_jobparams_random_seed"/>
          </item>
          <item row="5" column="0">
           <widget class="QLabel" name="label_15">
@@ -103,6 +123,13 @@
           <widget class="QLabel" name="label_14">
            <property name="text">
             <string>Benchmark</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="chk_jobparams_benchmark">
+           <property name="text">
+            <string/>
            </property>
           </widget>
          </item>
@@ -144,13 +171,6 @@
             </widget>
            </item>
           </layout>
-         </item>
-         <item row="2" column="1">
-          <widget class="QCheckBox" name="chk_jobparams_benchmark">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
          </item>
          <item row="0" column="1">
           <widget class="QCheckBox" name="chk_jobparams_force_cpu">
@@ -204,6 +224,16 @@
           <widget class="QLabel" name="label_5">
            <property name="text">
             <string>First N sequences</string>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="1">
+          <widget class="QComboBox" name="cmb_jobparams_msa_pairing"/>
+         </item>
+         <item row="9" column="0">
+          <widget class="QLabel" name="label_7">
+           <property name="text">
+            <string>MSA Pairing</string>
            </property>
           </widget>
          </item>

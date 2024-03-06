@@ -26,6 +26,7 @@ from guifold.src.gui_dlg_project import ProjectDlg
 from guifold.src.gui_dlg_queue_submit import QueueSubmitDlg
 from guifold.src.gui_dlg_advanced_params import AdvancedParamsDlg
 from guifold.src.gui_dlg_first_n_seq import FirstNSeqDlg
+from guifold.src.gui_dlg_split_sequence import SplitSeqDlg
 import signal
 import socket
 from subprocess import Popen
@@ -227,10 +228,13 @@ class MainFrame(QtWidgets.QMainWindow):
                            'job_project_id': None,
                            'project_id': None,
                            'log_file_lines': None,
+                           'job_status_log_file': None,
                            'results_path': None,
                            'queue': None,
                            'errors': [],
+                           'task_status': None,
                            'selected_combination_name': None,
+                           'results_path_combination': None,
                            'pairwise_batch_prediction': False,
                            'prediction': 'alphafold'}
         self.gui_params['settings_locked'] = check_settings_locked()
@@ -281,6 +285,7 @@ class MainFrame(QtWidgets.QMainWindow):
         #self.panel.SetScrollRate(20,20)
         self.log_panel = self.findChild(QtWidgets.QPushButton, 'LogPanel')
         self.btn_read_sequences = self.findChild(QtWidgets.QPushButton, 'btn_read_sequences')
+        self.btn_split_sequences = self.findChild(QtWidgets.QPushButton, 'btn_split_sequences')
         self.btn_jobparams_advanced_settings = self.findChild(QtWidgets.QPushButton, 'btn_jobparams_advanced_settings')
         self.btn_evaluation_open_results_folder = self.findChild(QtWidgets.QPushButton, 'btn_evaluation_open_results_folder')
         self.btn_evaluation_open_pymol = self.findChild(QtWidgets.QPushButton, 'btn_evaluation_open_pymol')
@@ -439,6 +444,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.btn_prj_update.clicked.connect(self.OnBtnPrjUpdate)
         self.btn_prj_remove.clicked.connect(self.OnBtnPrjRemove)
         self.btn_read_sequences.clicked.connect(self.OnBtnReadSequences)
+        self.btn_split_sequences.clicked.connect(self.OnBtnSplitSequences)
         self.btn_evaluation_open_pymol.clicked.connect(lambda checked, x='pymol': self.OnOpenModelViewer(x))
         self.btn_open_browser.clicked.connect(self.OnOpenBrowser)
         self.btn_evaluation_open_results_folder.clicked.connect(self.OnOpenResultsFolder)
@@ -612,6 +618,12 @@ class MainFrame(QtWidgets.QMainWindow):
             self.btn_jobparams_advanced_settings.setEnabled(False)
             self.tb_run.setEnabled(False)
 
+    def OnBtnSplitSequences(self):
+        dlg = SplitSeqDlg(self)
+        dlg.exec()
+        self.jobparams.split_sequences()
+
+
     def start_thread(self, job_params, cmd):
         #Start  process thread
         self.process_thread = QThread()
@@ -782,12 +794,91 @@ class MainFrame(QtWidgets.QMainWindow):
                                                                    job_params['job_dir'])
                     job_params['log_file'] = self.job.build_log_file_path(job_params['job_name'], job_params['type'], job_params['prediction'], job_params['db_preset'], job_params['pipeline'], job_params['job_project_id'])
                     log_path = os.path.join(job_params['output_dir'], job_params['log_file'])
+                    job_params['job_status_log_file'] = self.job.get_job_status_log_file(job_params['log_file'])
                     
                     if os.path.exists(log_path):
                         modification_time = os.path.getmtime(log_path)
                         modification_time_formatted = datetime.datetime.fromtimestamp(modification_time).strftime("%Y-%m-%d_%H-%M-%S")
                         log_path_bkp = log_path.replace('.log', f'_backup_{modification_time_formatted}.log')
                         copyfile(log_path, log_path_bkp)
+
+                    #Check existing job dir
+                    if os.path.exists(job_params['job_path']):
+                        #Only show the warnings for the first step in case of split_job
+                        # if not split_job_step == 'gpu':
+                        #     if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
+                        #         if not self.jobparams.precomputed_msas_list.get_value() is None:
+                        #             precomputed_msas_list = self.jobparams.precomputed_msas_list.get_value().split(',')
+                        #         else:
+                        #             precomputed_msas_list = [None]
+                        #         pc_msa_paths = precomputed_msas_list + [self.jobparams.precomputed_msas_path.get_value()]
+                        #         pc_msa_paths = [x for x in pc_msa_paths if not x is None]
+                        #         logger.debug(pc_msa_paths)
+                        #         if any([re.match(job_params['output_dir'], item) for item in pc_msa_paths if not re.search('batch_msas', item)]):
+                        #             message_dlg('error', 'One or more precomputed MSAs are from the current folder.'
+                        #                                  ' Please select a new Job Name.')
+                        #             raise PrecomputedMSAConflict("One or more precomputed MSAs are from the current folder.")
+                        #     else:
+                        if not split_job_step == 'gpu':
+                            message = "Output directory already exists. Click \"Yes\" if you want to continue from existing MSAs or \"No\" " \
+                                        "if existing MSAs should be recalculated."
+                            ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                                                                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
+                            if ret == QtWidgets.QMessageBox.Cancel:
+                                raise JobSubmissionCancelledByUser
+                            elif ret == QtWidgets.QMessageBox.Yes:
+                                job_params['use_precomputed_msas'] = True
+                            else:
+                                job_params['use_precomputed_msas'] = False
+                    else:
+                        os.mkdir(job_params['job_path'])
+
+                    #Process sequences
+                    self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
+                    job_params['fasta_path'] = self.jobparams.fasta_path.get_value()
+                    self.jobparams.write_fasta()
+                    logger.debug(f"Fasta path {self.jobparams.fasta_path.get_value()}")
+
+                    job_params['features_path'] = os.path.join(job_params['job_path'], "features", job_params['db_preset'])
+                    self.jobparams.features_dir.set_value(job_params['db_preset'])
+                    sequences, seq_descriptions = self.jobparams.parse_fasta(self.jobparams.fasta_path.get_value())
+
+                    #Check input for pairwise prediction protocols
+                    if job_params['pipeline'] in self.screening_protocol_names:
+                        batch_msas_path = job_params["features_path"]
+                        dirs = []
+                        missing_msa_list = []
+                        if os.path.exists(batch_msas_path) and not self.jobparams.precomputed_msas_path.is_set():
+                            dirs = [d for d in os.listdir(batch_msas_path) if os.path.isdir(os.path.join(batch_msas_path, d))]
+                            logger.debug(f"batch msa folder found: {batch_msas_path} ")
+                            self.jobparams.precomputed_msas_path.set_value(batch_msas_path)
+                            self.jobparams.precomputed_msas_path.ctrl.setText(batch_msas_path)
+                        else:
+                            logger.debug(f"No batch msa folder found: {batch_msas_path}")
+                        if not self.jobparams.precomputed_msas_path.is_set():
+                            msg =  'Pairwise combinatorial prediction requires precomputed MSAs (e.g. from batch_msas job).'
+                            message_dlg('error', msg) 
+                            raise InputError(msg)
+                        else:
+                            dirs = [d for d in os.listdir(self.jobparams.precomputed_msas_path.get_value()) if os.path.isdir(os.path.join(self.jobparams.precomputed_msas_path.get_value(), d))]
+                        for desc in seq_descriptions:
+                            if not desc in dirs:
+                                missing_msa_list.append(desc)
+                        if len(missing_msa_list) > 0:
+                            missing_msa_string = ', '.join(missing_msa_list)
+                            msg = f'MSA for {missing_msa_string} not found in {self.jobparams.precomputed_msas_path.get_value()}'
+                            message_dlg('error', msg) 
+                            raise InputError(msg)      
+                        #if not job_params['prediction'] == 'fastfold':
+                        #    message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
+                        #    ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
+                        #                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
+                        #    if ret == QtWidgets.QMessageBox.Cancel:
+                        #        raise JobSubmissionCancelledByUser
+                        #    elif ret == QtWidgets.QMessageBox.Yes:
+                        #        job_params['prediction'] = "fastfold"
+                        #        self.jobparams.prediction.set_value("fastfold")
+                        #        self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
 
                     params_hash = self.jobparams.get_params_hash()
@@ -810,8 +901,7 @@ class MainFrame(QtWidgets.QMainWindow):
                             job_params['results_path'] = os.path.join(job_params['job_path'], "predictions", job_params['prediction'])
                             if not os.path.exists(job_params['results_path']):
                                 job_params['results_path'] = os.path.join(job_params['job_path'], job_params['job_dir'])
-                    job_params['features_path'] = os.path.join(job_params['job_path'], "features", job_params['db_preset'])
-                    self.jobparams.features_dir.set_value(job_params['db_preset'])
+
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
 
@@ -821,34 +911,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         message_dlg('error', msg)
                         raise InputError(msg)
 
-                    if os.path.exists(job_params['job_path']):
-                        #Only show the warnings for the first step in case of split_job
-                        if not split_job_step == 'gpu':
-                            if self.jobparams.precomputed_msas_list.list_like_str_not_all_none() or self.jobparams.precomputed_msas_path.is_set():
-                                if not self.jobparams.precomputed_msas_list.get_value() is None:
-                                    precomputed_msas_list = self.jobparams.precomputed_msas_list.get_value().split(',')
-                                else:
-                                    precomputed_msas_list = [None]
-                                pc_msa_paths = precomputed_msas_list + [self.jobparams.precomputed_msas_path.get_value()]
-                                pc_msa_paths = [x for x in pc_msa_paths if not x is None]
-                                logger.debug(pc_msa_paths)
-                                if any([re.match(job_params['output_dir'], item) for item in pc_msa_paths if not re.search('batch_msas', item)]):
-                                    message_dlg('error', 'One or more precomputed MSAs are from the current folder.'
-                                                         ' Please select a new Job Name.')
-                                    raise PrecomputedMSAConflict("One or more precomputed MSAs are from the current folder.")
-                            else:
-                                message = "Output directory already exists. Click \"Yes\" if you want to continue from existing MSAs or \"No\" " \
-                                          "if existing MSAs should be recalculated."
-                                ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                                                                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
-                                if ret == QtWidgets.QMessageBox.Cancel:
-                                    raise JobSubmissionCancelledByUser
-                                elif ret == QtWidgets.QMessageBox.Yes:
-                                    job_params['use_precomputed_msas'] = True
-                                else:
-                                    job_params['use_precomputed_msas'] = False
-                    else:
-                        os.mkdir(job_params['job_path'])
+
 
                     #Check if mmseqs_api is selected and give warning notice
                     if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
@@ -871,6 +934,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         self.tb_run.setEnabled(False)
                         raise SequenceFormatError(error_msgs_str)
                     self.job.log_file.set_value(job_params['log_file'])
+                    self.job.job_status_log_file.set_value(job_params['job_status_log_file'])
                     self.job.path.set_value(job_params['job_path'])
                     self.job.name.set_value(job_params['job_name'])
                     self.jobparams.output_dir.set_value(job_params['job_path'])
@@ -887,6 +951,11 @@ class MainFrame(QtWidgets.QMainWindow):
                             message_dlg('error', 'continue_from_features requested but no features.pkl'
                                                  f' file found. Expected to find {feature_path_1} or {feature_path_2}. Either run a full or only_features job.')
                             raise NoFeaturesExist(f"No features.pkl found.")
+                        
+
+                    #Check if precomputed msas set
+                    if self.jobparams.precomputed_msas_path.is_set() or self.jobparams.precomputed_msas_list.list_like_str_not_all_none():
+                        job_params['use_precomputed_msas'] = True
 
                     #Process custom templates
                     if self.jobparams.custom_template_list.is_set():
@@ -897,40 +966,6 @@ class MainFrame(QtWidgets.QMainWindow):
                             message_dlg('Error', msg)
                             raise ProcessCustomTemplateError(msg)
 
-                    #Process sequences
-                    if self.jobparams.precomputed_msas_path.is_set() or self.jobparams.precomputed_msas_list.list_like_str_not_all_none():
-                        job_params['use_precomputed_msas'] = True
-                    self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
-                    job_params['fasta_path'] = self.jobparams.fasta_path.get_value()
-                    self.jobparams.write_fasta()
-                    logger.debug(f"Fasta path {self.jobparams.fasta_path.get_value()}")
-                    sequences = self.jobparams.parse_fasta(self.jobparams.fasta_path.get_value())
-
-
-
-                    #Check input for pairwise prediction protocols
-                    if job_params['pipeline'] in self.screening_protocol_names:
-                        batch_msas_path = os.path.join(job_params['project_path'], job_params['job_name'], job_params['job_name'], 'batch_msas')
-                        if os.path.exists(batch_msas_path) and not self.jobparams.precomputed_msas_path.is_set():
-                            logger.debug(f"batch msa folder found: {batch_msas_path} ")
-                            self.jobparams.precomputed_msas_path.set_value(batch_msas_path)
-                            self.jobparams.precomputed_msas_path.ctrl.setText(batch_msas_path)
-                        else:
-                            logger.debug(f"No batch msa folder found: {batch_msas_path}")
-                        if not self.jobparams.precomputed_msas_path.is_set():
-                            msg =  'Pairwise combinatorial prediction requires precomputed MSAs (e.g. from batch_msas job).'
-                            message_dlg('error', msg) 
-                            raise InputError(msg)
-                        #if not job_params['prediction'] == 'fastfold':
-                        #    message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
-                        #    ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                        #                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
-                        #    if ret == QtWidgets.QMessageBox.Cancel:
-                        #        raise JobSubmissionCancelledByUser
-                        #    elif ret == QtWidgets.QMessageBox.Yes:
-                        #        job_params['prediction'] = "fastfold"
-                        #        self.jobparams.prediction.set_value("fastfold")
-                        #        self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
                     #Change Log display for batch jobs
                     if job_params['pipeline'] in ['all_vs_all', 'first_vs_all', 'batch_msas', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']:
@@ -1049,6 +1084,7 @@ class MainFrame(QtWidgets.QMainWindow):
                             raise QueueSubmitError("Queue submit command not found")
                         else:
                             job_params['queue_submit'] = settings.queue_submit
+                    batch_max_sequence_length = self.jobparams.batch_max_sequence_length.get_value()
                     if job_params['pipeline'] == 'first_vs_all':
                         seq_len_list = []
                         for i, seq in enumerate(sequences):
@@ -1058,24 +1094,85 @@ class MainFrame(QtWidgets.QMainWindow):
                             else:
                                 len_seq = len(seq)
                                 seq_len_list.append(len_seq + len_seq1)
-                        job_params['total_seqlen'] = max(seq_len_list)
-                    elif job_params['pipeline'] in ['grouped_bait_vs_preys', 'grouped_all_vs_all', 'first_n_vs_rest']:
-                        #TODO: correct calculation
-                        seq_len_list = []
-                        for i, seq in enumerate(sequences):
-                            if i == 0:
-                                len_seq1 = len(seq)
-                                seq_len_list.append(len_seq1 + len_seq1)
+                        max_seq_len = max(seq_len_list)
+                        if max_seq_len > batch_max_sequence_length:
+                            job_params['total_seqlen'] = batch_max_sequence_length
+                        else:
+                            job_params['total_seqlen'] =  max_seq_len
+                    elif job_params['pipeline'] in ['grouped_bait_vs_preys', 'grouped_all_vs_all']:
+                        groups = {}
+                        for i, desc in enumerate(seq_descriptions):
+                            regex_bait = r'bait_([^_]+)(?:_split\d+)?'
+                            regex_prey = r'prey_([^_]+)(?:_split\d+)?'
+                            if re.search(regex_bait, desc):
+                                id = re.search(regex_bait, desc).group(1)
+                                if not id in groups:
+                                    groups[id] = {'baits': [], 'preys': []}
+                                groups[id]['baits'].append(sequences[i])
+                            if re.search(regex_prey, desc):
+                                id = re.search(regex_prey, desc).group(1)
+                                if not id in groups:
+                                    groups[id] = {'baits': [], 'preys': []}
+                                groups[id]['preys'].append(sequences[i])
+                        logger.info(groups)
+                        if job_params['pipeline'] == 'grouped_bait_vs_preys':
+                            max_seq_len_group_list = []
+                            for id, group in groups.items():
+                                total_bait_seq_len = sum([len(seq) for seq in group['baits']])
+                                total_seq_len_list = []
+                                for prey_seq in group['preys']:
+                                    total_seq_len = total_bait_seq_len + len(prey_seq)
+                                    total_seq_len_list.append(total_seq_len)
+                                if len(total_seq_len_list) > 0:
+                                    max_seq_len_group_list.append(max(total_seq_len_list))
+                            if len(max_seq_len_group_list) > 0:
+                                max_seq_len = max(max_seq_len_group_list)
+                            logger.info(max_seq_len_group_list)
+                            if max_seq_len > batch_max_sequence_length:
+                                job_params['total_seqlen'] = batch_max_sequence_length
                             else:
-                                len_seq = len(seq)
-                                seq_len_list.append(len_seq + len_seq1)
-                        job_params['total_seqlen'] = max(seq_len_list)
+                                job_params['total_seqlen'] =  max_seq_len
+                        if job_params['pipeline'] == 'grouped_all_vs_all':
+                            max_group_len = []
+                            for id, group in groups.items():
+                                all_seqs = group['baits'] + group['preys']
+                                pair_len = []
+                                for seq1 in all_seqs:
+                                    for seq2 in all_seqs:
+                                        pair_len.append(len(seq1) + len(seq2))
+                                if len(pair_len) > 0:
+                                    max_pair_len = max(pair_len)
+                                max_group_len.append(max_pair_len)
+                            if len(max_group_len) > 0:
+                                max_seq_len = max(max_group_len) 
+                            if max_seq_len > batch_max_sequence_length:
+                                job_params['total_seqlen'] = batch_max_sequence_length
+                            else:
+                                job_params['total_seqlen'] =  max_seq_len
+                    elif job_params['pipeline'] == 'first_n_vs_rest':
+                        len_baits = []
+                        len_seqs_list = []
+                        for i, seq in enumerate(sequences):
+                            if i < int(job_params['first_n_seq']):
+                                len_baits.append(len(seq))
+                            else:
+                                len_seqs = sum(len_baits) + len(seq)
+                                len_seqs_list.append(len_seqs)
+                        max_seq_len = max(len_seqs_list)
+                        if max_seq_len > batch_max_sequence_length:
+                            job_params['total_seqlen'] = batch_max_sequence_length
+                        else:
+                            job_params['total_seqlen'] =  max_seq_len
                     elif job_params['pipeline'] == 'all_vs_all':
                         seq_len_list = []
                         for seq1 in sequences:
                             for seq2 in sequences:
                                 seq_len_list.append(len(seq1) + len(seq2))
-                        job_params['total_seqlen'] = max(seq_len_list)
+                        max_seq_len = max(seq_len_list)
+                        if max_seq_len > batch_max_sequence_length:
+                            job_params['total_seqlen'] = batch_max_sequence_length
+                        else:
+                            job_params['total_seqlen'] =  max_seq_len
                     elif job_params['pipeline'] == 'only_relax':
                         #Dummy sequence length to calculate memory
                         job_params['total_seqlen'] = 2000
@@ -1327,6 +1424,7 @@ class MainFrame(QtWidgets.QMainWindow):
         logger.debug(f"Combination name: {self.gui_params['selected_combination_name']}")
         self.gui_params = self.evaluation.init_gui(self.gui_params, self.sess)
         self.evaluation.pairwise_combinations_list.ctrl.setCurrentText(combination_name)
+        self.gui_params['results_path_combinaton'] = os.path.join(self.gui_params['results_path'], combination_name)
 
     def OnCmbPipeline(self):
         pipeline_name = self.jobparams.pipeline.ctrl.currentText()
@@ -1497,23 +1595,31 @@ class MainFrame(QtWidgets.QMainWindow):
         self.jobparams.precomputed_msas_path.ctrl.setText(path)
 
     def OnOpenModelViewer(self, model_viewer):
-        if 'results_path' in self.gui_params:
-            pdb_files = glob(os.path.join(self.gui_params['results_path'], "*.pdb"))
-            pdb_files = ' '.join(pdb_files)
-            logger.debug(f"PDB files {pdb_files}")
-            pymol_pml = pkg_resources.resource_filename("guifold.templates", "pymol.pml")
-            try:
-                if model_viewer == 'pymol':
-                    Popen(f'{model_viewer} {pdb_files} {pymol_pml}', shell=True)
-                else:
-                    Popen(f'{model_viewer} {pdb_files}', shell=True)
-            except:
-                error = f"Could not open {model_viewer}. Check if it is in your PATH."
-                logger.error(error)
-                message_dlg('Error', error)
-                logger.debug(traceback.print_exc())
+        if self.gui_params['results_path_combination']:
+            results_path = self.gui_params['results_path_combination']
+            logger.debug(f'Using results path for combination: {results_path}')
+        elif 'results_path' in self.gui_params:
+            results_path = self.gui_params['results_path']
+            logger.debug(f'Using results path: {results_path}')
         else:
             logger.debug('results_path not in gui_params')
+            return
+
+        pdb_files = glob(os.path.join(results_path, "*.pdb"))
+        pdb_files = ' '.join(pdb_files)
+        logger.debug(f"PDB files {pdb_files}")
+        pymol_pml = pkg_resources.resource_filename("guifold.templates", "pymol.pml")
+        try:
+            if model_viewer == 'pymol':
+                Popen(f'{model_viewer} {pdb_files} {pymol_pml}', shell=True)
+            else:
+                Popen(f'{model_viewer} {pdb_files}', shell=True)
+        except:
+            error = f"Could not open {model_viewer}. Check if it is in your PATH."
+            logger.error(error)
+            message_dlg('Error', error)
+            logger.debug(traceback.print_exc())
+            
 
     def OnOpenBrowser(self):
         if 'results_html' in self.gui_params:
