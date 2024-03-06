@@ -27,7 +27,7 @@ def get_msa_path_by_sequence(input_file):
             continue
         else:
             for path_, sequence in path_sequence_dict.items():
-                if line.strip('\n') == sequence:
+                if re.search(line.strip('\n'), sequence):
                     print(f"Line {line} == {sequence}: path {path_}")
 
                     path_list.append(path_)

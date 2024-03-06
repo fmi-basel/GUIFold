@@ -18,6 +18,7 @@ test_data_dir = config['TESTING']['TEST_DATA_DIR']
 
 monomer_fasta = os.path.join(test_data_dir, "monomer.fasta")
 multimer_fasta = os.path.join(test_data_dir, "multimer.fasta")
+multimer_grouped_fasta = os.path.join(test_data_dir, "multimer_grouped.fasta")
 no_msa_list_multimer = "False,True"
 no_template_list_multimer = "False,True"
 precomputed_msas_list_multimer = f"None,{os.path.join(test_data_dir, 'calculated/SRP14')}"
@@ -70,7 +71,7 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
                                                             'NO_MSA_LIST': "False",
                                                             "NO_TEMPLATE_LIST": "False",
                                                             "CUSTOM_TEMPLATE_LIST": "None",
-                                                            "DB_PRESET": "full",
+                                                            "DB_PRESET": "full_dbs",
                                                             "PRECOMPUTED_MSAS_PATH": "None",
                                                             "PIPELINE": "only_features",
                                                             "PREDICTION": "alphafold"},
@@ -80,7 +81,7 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
                                                             'NO_MSA_LIST': "False",
                                                             "NO_TEMPLATE_LIST": "False",
                                                             "CUSTOM_TEMPLATE_LIST": "None",
-                                                            "DB_PRESET": "full",
+                                                            "DB_PRESET": "full_dbs",
                                                             "PRECOMPUTED_MSAS_PATH": "None",
                                                             "PIPELINE": "continue_from_features",
                                                             "PREDICTION": "alphafold"},
@@ -195,6 +196,16 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
                                                             "FIRST_N": "2",
                                                             "PIPELINE": "first_n_vs_rest",
                                                             "PREDICTION": "alphafold"},
+                                        'multimer_grouped_bait_vs_preys': {'MODEL_PRESET': 'multimer',
+                                                            'FASTA_PATH': multimer_grouped_fasta,
+                                                            'PRECOMPUTED_MSAS_LIST': "None,None,None,None,None",
+                                                            'NO_MSA_LIST': "False,False,False,False,False",
+                                                            "NO_TEMPLATE_LIST": "False,False,False,False,False",
+                                                            "CUSTOM_TEMPLATE_LIST": "None,None,None,None,None",
+                                                            "DB_PRESET": "full_dbs",
+                                                            "PRECOMPUTED_MSAS_PATH": "None,None,None,None,None",
+                                                            "PIPELINE": "grouped_bait_vs_preys",
+                                                            "PREDICTION": "alphafold"},
 }
 
 parser = argparse.ArgumentParser()
@@ -218,6 +229,8 @@ config_keys = config.keys()
 cmd = """export CUDA_VISIBLE_DEVICES=""; run_prediction.py\\
  --model_preset {MODEL_PRESET}\\
  --output_dir {OUTPUT_DIR}\\
+ --predictions_dir {PREDICTIONS_DIR}\\
+ --features_dir {FEATURES_DIR}\\
  --fasta_path {FASTA_PATH}\\
  --no_msa_list {NO_MSA_LIST}\\
  --no_template_list {NO_TEMPLATE_LIST}\\
@@ -273,6 +286,8 @@ for title, params in test_jobs.items():
             rmtree(output_dir)
         os.mkdir(output_dir)
         copyfile(params['FASTA_PATH'], os.path.join(output_dir, os.path.basename(params['FASTA_PATH'])))
+        if params['PIPELINE'] == 'simple_monomer_continue_from_features':
+            copyfile('calculated/features_SRP9_bait_id1_SRP14_bait_id1.pkl', '')
         fasta_path = os.path.join(output_dir, os.path.basename(params['FASTA_PATH']))
         if not 'FIRST_N' in params:
             params['FIRST_N'] = 2
@@ -288,6 +303,8 @@ for title, params in test_jobs.items():
                 PIPELINE=params['PIPELINE'],
                 PREDICTION=params['PREDICTION'],
                 FIRST_N=params['FIRST_N'],
+                PREDICTIONS_DIR=params['DB_PRESET'],
+                FEATURES_DIR=params['DB_PRESET'],
                 JACKHMMER_BINARY_PATH=config['TESTING']['jackhmmer_binary_path'],
                 HHBLITS_BINARY_PATH=config['TESTING']['hhblits_binary_path'],
                 MMSEQS_BINARY_PATH=config['TESTING']['mmseqs_binary_path'],
