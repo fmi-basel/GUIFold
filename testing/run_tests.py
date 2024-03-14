@@ -287,7 +287,8 @@ for title, params in test_jobs.items():
         os.mkdir(output_dir)
         copyfile(params['FASTA_PATH'], os.path.join(output_dir, os.path.basename(params['FASTA_PATH'])))
         if params['PIPELINE'] == 'simple_monomer_continue_from_features':
-            copyfile('calculated/features_SRP9_bait_id1_SRP14_bait_id1.pkl', '')
+            copyfile('calculated/features_SRP9_bait_id1_SRP14_bait_id1.pkl', os.path.join(output_dir, params['DB_PRESET'], 'features_SRP9_bait_id1_SRP14_bait_id1.pkl'))
+            copyfile('calculated/features_SRP9_bait_id1.pkl', os.path.join(output_dir, params['DB_PRESET'], 'features_SRP9_bait_id1.pkl'))
         fasta_path = os.path.join(output_dir, os.path.basename(params['FASTA_PATH']))
         if not 'FIRST_N' in params:
             params['FIRST_N'] = 2
