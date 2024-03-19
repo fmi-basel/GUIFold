@@ -297,6 +297,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.btn_prj_update = self.findChild(QtWidgets.QToolButton, 'btn_prj_update')
         self.btn_prj_update.setIcon(QIcon(pkg_resources.resource_filename('guifold.icons', 'gtk-edit.png')))
         self.btn_precomputed_msas_path = self.findChild(QtWidgets.QToolButton, 'btn_precomputed_msas_path')
+        self.btn_multichain_template_path = self.findChild(QtWidgets.QToolButton, 'btn_multichain_template_path')
         self.lbl_status_1 = self.findChild(QtWidgets.QLabel, 'lbl_status_1')
         self.lbl_status_2 = self.findChild(QtWidgets.QLabel, 'lbl_status_2')
         self.lbl_status_3 = self.findChild(QtWidgets.QLabel, 'lbl_status_3')
@@ -453,6 +454,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.btn_jobparams_advanced_settings.clicked.connect(self.OnBtnAdvancedParams)
         self.btn_jobparams_advanced_settings.setEnabled(False)
         self.btn_precomputed_msas_path.clicked.connect(self.OnBtnPrecomputedMSAsPath)
+        self.btn_multichain_template_path.clicked.connect(self.OnBtnMultichainTemplatePath)
         #Combos
         self.prj.list.ctrl.activated.connect(self.OnCmbProjects)
         self.job.list.ctrl.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -1593,6 +1595,11 @@ class MainFrame(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
         self.jobparams.precomputed_msas_path.set_value(path)
         self.jobparams.precomputed_msas_path.ctrl.setText(path)
+
+    def OnBtnMultichainTemplatePath(self):
+        path = QtWidgets.QFileDialog.getOpenFileName(self, 'Select CIF file', filter='CIF Files (*.cif)')
+        self.jobparams.multichain_template_path.set_value(path[0])
+        self.jobparams.multichain_template_path.ctrl.setText(path[0])
 
     def OnOpenModelViewer(self, model_viewer):
         if self.gui_params['results_path_combination']:

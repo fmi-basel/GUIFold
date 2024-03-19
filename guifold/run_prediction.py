@@ -231,6 +231,7 @@ flags.DEFINE_string('features_dir', None, 'Name of features output dir.')
 flags.DEFINE_string('job_status_log_file', 'job_status.txt', 'Job status log path')
 flags.DEFINE_integer('batch_max_sequence_length', 5000, 'Maximum total sequence length for a pairwise prediction')
 flags.DEFINE_enum('msa_pairing', 'paired', ['paired', 'paired+unpaired'], 'Choose pairing strategy. paired = default AF protocol. paired+unpaired = all sequences are added again below the paired sequences')
+flags.DEFINE_string('multichain_template_path', None, 'Path to a multichain template')
 
 FLAGS = flags.FLAGS
 
@@ -446,7 +447,16 @@ def batch_minimization(output_dir, gpu_relax):
 def custom_sort(item):
     return item[1]      
 
-
+def plot_multichain_mask(mask):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    im = ax.imshow(mask, cmap='binary', interpolation='nearest')
+    ax.set_title("Multichain mask")
+    ax.set_xlabel('Chain Index')
+    ax.set_ylabel('Chain Index')
+    ax.grid(True, which='both', linestyle='-', linewidth=0.5, color='gray')
+    plt.savefig(f'multichain_mask.png')
+    plt.close('all')
 
 def predict_structure(
     fasta_path: str,
@@ -471,7 +481,8 @@ def predict_structure(
     results_queue: multiprocessing.Queue = None,
     score_dict: Optional[dict] = None,
     file_lock: Optional[Lock] = None,
-    use_existing_features: bool = False):
+    use_existing_features: bool = False,
+    multichain_template_list: list = None):
     """Predicts structure using AlphaFold for the given sequence."""
     logging.info('Generating input features')
     load_existing_features = False
@@ -679,6 +690,35 @@ def predict_structure(
                     #if flags['multimer_template']:
                     #    feature_dict['no_multichain_mask'] = True
                     t_0 = time.time()
+                    if multichain_template_list:
+                        logging.info(f"Multichain template list: {', '.join([str(item) for item in multichain_template_list])}")
+                        multichain_mask = processed_feature_dict['asym_id'][:, None] == processed_feature_dict['asym_id'][None, :]
+                        #Make a pairwise matrix for aysm_id pairs
+                        asym_id_pairwise_matrix = pairwise_matrix = np.empty((len(processed_feature_dict['asym_id']), len(processed_feature_dict['asym_id'])), dtype=object)
+                        for i in range(len(processed_feature_dict['asym_id'])):
+                            for j in range(len(processed_feature_dict['asym_id'])):
+                                asym_id_pairwise_matrix[i, j] = (processed_feature_dict['asym_id'][i], processed_feature_dict['asym_id'][j])
+                        # Update the mask based on the multichain_template_list which indicates which templates belong to a multichain template
+                        allowed_pairs = []
+                        for i, i_allowed in enumerate(multichain_template_list):
+                            for j, j_allowed in enumerate(multichain_template_list):
+                                if i_allowed and j_allowed:
+                                    if not (i+1,j+1) in allowed_pairs:
+                                        allowed_pairs.append((i+1,j+1))
+                                    if not (j+1,i+1) in allowed_pairs:
+                                        allowed_pairs.append((j+1,i+1))
+                        indices = []
+
+                        for i in range(len(asym_id_pairwise_matrix)):
+                            for j in range(len(asym_id_pairwise_matrix[i])):
+                                if asym_id_pairwise_matrix[i, j] in allowed_pairs:
+                                    indices.append((i, j))
+                        # Update corresponding positions in multichain_mask
+                        multichain_mask[indices] = True
+                        plot_multichain_mask(multichain_mask)
+                        logging.info("Multichain mask was adapted to provided multichain template to allow interchain contacts. The mask was saved to multichain_mask.png for inspection.")
+                        processed_feature_dict['multichain_mask'] = multichain_mask
+
                     prediction_result = model_runner.predict(processed_feature_dict,
                                                             random_seed=model_random_seed)
                     t_diff = time.time() - t_0
@@ -1297,6 +1337,20 @@ def main(argv):
     else:
         custom_template_list = [None] * len(description_sequence_dict)
 
+    #Split multichain template into individual files for feature processing. The features will be combined into a single template before prediction
+    multichain_template_list = [False] * len(description_sequence_dict)
+    if FLAGS.multichain_template_path:
+        logging.info("Found multichain_template. This will overwrite any other custom templates")
+        multichain_custom_template_list = templates.split_multichain_template(description_sequence_dict.values(), FLAGS.multichain_template_path, FLAGS.kalign_binary_path, FLAGS.custom_tempdir)
+        logging.info("Updated custom_template_list:")
+        #Merge with singlechain custom templates:
+        for i, sc_template in enumerate(custom_template_list):
+            if not multichain_custom_template_list[i] is None:
+                custom_template_list[i] = multichain_custom_template_list[i]
+                multichain_template_list[i] = True
+
+        logging.info(custom_template_list)
+
     if FLAGS.no_template_list:
         if len(FLAGS.no_template_list) != len(description_sequence_dict):
             raise ValueError('--no_template_list must either be omitted or match '
@@ -1341,7 +1395,10 @@ def main(argv):
                 logging.warning("Found more than one precomputed MSA for given sequence. Will use the first one in the list.")
                 precomputed_msas_list = list(pcmsa_map.values())[0]
     elif FLAGS.pipeline == 'batch_msas' and FLAGS.precomputed_msas_path:
-        logging.warning("Precomputed MSAs will not be copied when running batch features.")
+        pcmsa_map = pipeline.get_pcmsa_map(FLAGS.precomputed_msas_path,
+                                                        description_sequence_dict,
+                                                        FLAGS.db_preset)
+        precomputed_msas_list = list(pcmsa_map.values())
 
     #Batch predictions
     results_file_pairwise_predictions = os.path.join(FLAGS.output_dir, "predictions", FLAGS.predictions_dir, "pairwise_prediction_results.csv")
@@ -1401,6 +1458,7 @@ def main(argv):
     no_template_list_full = no_template_list.copy()
     custom_template_list_full = custom_template_list.copy()
     precomputed_msas_list_full = precomputed_msas_list.copy()
+    multichain_template_list_full = multichain_template_list.copy()
     if FLAGS.pipeline in ['first_vs_all', 'first_n_vs_rest', 'all_vs_all']:
         prediction_groups_mapping = {'group1': {}}
         if FLAGS.pipeline == 'first_vs_all':
@@ -1488,10 +1546,12 @@ def main(argv):
                     no_template_list = [no_template_list_full[index_1]] + [no_template_list_full[index_2]]
                     custom_template_list = [custom_template_list_full[index_1]] + [custom_template_list_full[index_2]]
                     precomputed_msas_list = [precomputed_msas_list_full[index_1]] + [precomputed_msas_list_full[index_2]]
+                    multichain_template_list = [multichain_template_list_full[index_1]] + [multichain_template_list_full[index_2]]
                     kwargs['no_msa_list'] = no_msa_list
                     kwargs['no_template_list'] =  no_template_list
                     kwargs['custom_template_list'] = custom_template_list
                     kwargs['precomputed_msas_list'] = precomputed_msas_list
+                    kwargs['multichain_template_list'] = multichain_template_list
                     if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline, FLAGS):
                         kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
                         index = find_index(scores, kwargs['protein_names'])
@@ -1528,10 +1588,12 @@ def main(argv):
                     no_template_list = [no_template_list_full[index_1]] + [no_template_list_full[index_2]]
                     custom_template_list = [custom_template_list_full[index_1]] + [custom_template_list_full[index_2]]
                     precomputed_msas_list = [precomputed_msas_list_full[index_1]] + [precomputed_msas_list_full[index_2]]
+                    multichain_template_list = [multichain_template_list_full[index_1]] + [multichain_template_list_full[index_2]]
                     kwargs['no_msa_list'] = no_msa_list
                     kwargs['no_template_list'] =  no_template_list
                     kwargs['custom_template_list'] = custom_template_list
-                    kwargs['precomputed_msas_list'] = precomputed_msas_list                            
+                    kwargs['precomputed_msas_list'] = precomputed_msas_list        
+                    kwargs['multichain_template_list'] = multichain_template_list                    
                     if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline, FLAGS):
                         kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
                         index = find_index(scores, kwargs['protein_names'])
@@ -1576,6 +1638,7 @@ def main(argv):
             prediction_pipeline=prediction_pipeline,
             feature_pipeline=feature_pipeline,
             batch_mmseqs=FLAGS.db_preset=='colabfold_local',
+            multichain_template_list=multichain_template_list,
             flags=flag_dict)
 
     if FLAGS.pipeline in BATCH_PREDICTION_MODES:

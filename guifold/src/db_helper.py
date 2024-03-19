@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 11
+DB_REVISION = 12
 
 def get_type(type):
     types = {'str': String,
@@ -296,6 +296,7 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN msa_pairing VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN predictions_dir VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN features_dir VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE jobparams ADD COLUMN multichain_template_path VARCHAR DEFAULT NULL']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

@@ -1071,7 +1071,8 @@ class JobParams(GUIVariables):
         self.batch_max_sequence_length = Variable('batch_max_sequence_length', 'int', ctrl_type='sbo', cmd=True)
         self.msa_pairing_dict = {0: 'paired',
                              1: 'paired+unpaired'}
-        self.msa_pairing = Variable('msa_pairing', ctrl_type='cmb', cmb_dict=self.msa_pairing_dict, cmd=True)
+        self.msa_pairing = Variable('msa_pairing', 'str', ctrl_type='cmb', cmb_dict=self.msa_pairing_dict, cmd=True)
+        self.multichain_template_path = Variable('multichain_template_path', 'str', ctrl_type='lei', cmd=True)
 
     def set_db(self, db: DBHelper) -> None:
         """Set database helper object."""

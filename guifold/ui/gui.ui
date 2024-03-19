@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1210</width>
-    <height>853</height>
+    <height>869</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -251,6 +251,43 @@
                      <size>
                       <width>0</width>
                       <height>0</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item row="2" column="1">
+                   <widget class="QLineEdit" name="lei_jobparams_multichain_template_path">
+                    <property name="toolTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Optional) Template CIF file containing coordinates of a (sub)complex. The file must contain only chains that can be mapped to input sequences. The coordinates will be split into chains mapped to input sequences based on sequence identity and saved as individual templates. Before prediction all templates are processed with the default pipeline and inter-chain interactions are allowed for the templates derived from the multichain CIF.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Optional) Template CIF file containing coordinates of a (sub)complex. The file must contain only chains that can be mapped to input sequences. The coordinates will be split into chains mapped to input sequences based on sequence identity and saved as individual templates. Before prediction all templates are processed with the default pipeline and inter-chain interactions are allowed for the templates derived from the multichain CIF.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="0">
+                   <widget class="QLabel" name="label_6">
+                    <property name="text">
+                     <string>Multichain template path</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="2">
+                   <widget class="QToolButton" name="btn_multichain_template_path">
+                    <property name="text">
+                     <string>...</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item row="2" column="3">
+                   <spacer name="horizontalSpacer_7">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
                      </size>
                     </property>
                    </spacer>
