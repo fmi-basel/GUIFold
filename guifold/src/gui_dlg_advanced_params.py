@@ -31,8 +31,6 @@ class DefaultValues:
         self.num_recycle = 20
         self.num_multimer_predictions_per_model = 1
         self.num_gpu = 1
-        self.chunk_size = 0
-        self.inplace = True
         self.use_model_1 = True
         self.use_model_2 = True
         self.use_model_3 = True

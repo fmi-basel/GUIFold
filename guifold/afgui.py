@@ -286,6 +286,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.log_panel = self.findChild(QtWidgets.QPushButton, 'LogPanel')
         self.btn_read_sequences = self.findChild(QtWidgets.QPushButton, 'btn_read_sequences')
         self.btn_split_sequences = self.findChild(QtWidgets.QPushButton, 'btn_split_sequences')
+        #Only enable when batch_msas selected
+        self.btn_split_sequences.setEnabled(False)
         self.btn_jobparams_advanced_settings = self.findChild(QtWidgets.QPushButton, 'btn_jobparams_advanced_settings')
         self.btn_evaluation_open_results_folder = self.findChild(QtWidgets.QPushButton, 'btn_evaluation_open_results_folder')
         self.btn_evaluation_open_pymol = self.findChild(QtWidgets.QPushButton, 'btn_evaluation_open_pymol')
@@ -833,7 +835,13 @@ class MainFrame(QtWidgets.QMainWindow):
                             else:
                                 job_params['use_precomputed_msas'] = False
                     else:
-                        os.mkdir(job_params['job_path'])
+                        #Check if job name is too long
+                        if len(job_params['job_name']) > 100:
+                            msg = 'Job name is too long. Please choose a shorter one.'
+                            message_dlg('error', msg)
+                            raise InputError(msg)
+                        else:
+                            os.mkdir(job_params['job_path'])
 
                     #Process sequences
                     self.jobparams.set_fasta_paths(job_params['job_path'], job_params['job_name'])
@@ -871,16 +879,6 @@ class MainFrame(QtWidgets.QMainWindow):
                             msg = f'MSA for {missing_msa_string} not found in {self.jobparams.precomputed_msas_path.get_value()}'
                             message_dlg('error', msg) 
                             raise InputError(msg)      
-                        #if not job_params['prediction'] == 'fastfold':
-                        #    message = 'It is recommended to run pairwise combinatorial prediction with FastFold for speed reasons. Switch prediction pipeline to FastFold?'
-                        #    ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
-                        #                                             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No | QtWidgets.QMessageBox.Cancel)
-                        #    if ret == QtWidgets.QMessageBox.Cancel:
-                        #        raise JobSubmissionCancelledByUser
-                        #    elif ret == QtWidgets.QMessageBox.Yes:
-                        #        job_params['prediction'] = "fastfold"
-                        #        self.jobparams.prediction.set_value("fastfold")
-                        #        self.jobparams.prediction.ctrl.setCurrentText('fastfold')
 
 
                     params_hash = self.jobparams.get_params_hash()
@@ -906,14 +904,6 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     logger.debug(f"job path {job_params['job_path']}")
                     logger.debug(f"Log file {job_params['log_file']}")
-
-                    #Check if job name is too long
-                    if len(job_params['job_name']) > 100:
-                        msg = 'Job name is too long. Please choose a shorter one.'
-                        message_dlg('error', msg)
-                        raise InputError(msg)
-
-
 
                     #Check if mmseqs_api is selected and give warning notice
                     if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
@@ -961,8 +951,10 @@ class MainFrame(QtWidgets.QMainWindow):
 
                     #Process custom templates
                     if self.jobparams.custom_template_list.is_set():
-                        new_custom_template_list, msgs = self.jobparams.process_custom_template_files(job_params['job_path'])
+                        new_custom_template_list, multichain_template_path, msgs = self.jobparams.process_custom_template_files(job_params['job_path'])
                         self.jobparams.custom_template_list.set_value(new_custom_template_list)
+                        if multichain_template_path:
+                            self.jobparams.multichain_template_path.set_value(multichain_template_path)
                         for msg in msgs:
                             logger.debug(msg)
                             message_dlg('Error', msg)
@@ -1212,13 +1204,6 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Backward compatibility
                     if 'num_cpu' in cmd_dict:
                         cmd_dict['num_cpu'] = job_params['num_cpu']
-                    if job_params['prediction'] == 'alphafold':
-                        if 'chunk_size' in cmd_dict:
-                            del cmd_dict['chunk_size']
-                        if 'inplace' in cmd_dict:
-                            del cmd_dict['inplace']
-                    #if job_params['prediction'] == 'fastfold' and int(cmd_dict['chunk_size']) == 0:
-                    #    del cmd_dict['chunk_size']
                     if 'use_precomputed_msas' in job_params:
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""
@@ -1232,11 +1217,6 @@ class MainFrame(QtWidgets.QMainWindow):
                             del cmd_dict['precomputed_msas_list']
                     if job_params['force_cpu']:
                        del cmd_dict['use_gpu_relax']
-                    #if job_params['multimer'] is True:
-                    #    del cmd_dict['pdb70_database_path']
-                    #else:
-                    #    del cmd_dict['pdb_seqres_database_path']
-                    #    del cmd_dict['uniprot_database_path']
                     if job_params['db_preset'] == 'full_dbs':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
@@ -1272,9 +1252,9 @@ class MainFrame(QtWidgets.QMainWindow):
                     #Prepare command to run alphafold
                     self.job_params = job_params
                     if job_params['split_job'] and job_params['queue']:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict, split_job_step=split_job_step)
                     else:
-                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'], self.job_params['chunk_size'] = self.job.prepare_cmd(self.job_params, cmd_dict)
+                        cmd, error_msgs, warn_msgs, self.job_params['calculated_mem'] = self.job.prepare_cmd(self.job_params, cmd_dict)
 
                     for msg in error_msgs:
                         logger.debug(msg)
@@ -1431,27 +1411,22 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnCmbPipeline(self):
         pipeline_name = self.jobparams.pipeline.ctrl.currentText()
         if pipeline_name in self.screening_protocol_names:
-            #self.jobparams.prediction.ctrl.setCurrentText('fastfold')
-            #self.jobparams.prediction.set_value('fastfold')
-            #self.jobparams.num_recycle.ctrl.setCurrentText('3')
             self.jobparams.num_recycle.set_value('3')
-            #self.jobparams.num_gpu.set_value('1')
         if pipeline_name in ['full', 'continue_from_features', 'first_vs_all', 'all_vs_all', 'first_n_vs_rest', 'grouped_bait_vs_preys', 'grouped_all_vs_all']:
-            #self.jobparams.force_cpu.ctrl.setChecked(False)
             self.jobparams.force_cpu.set_value(False)
         if pipeline_name == 'first_n_vs_rest':
             self.jobparams.update_from_gui()
             dlg = FirstNSeqDlg(self)
             dlg.exec()
         if pipeline_name == 'batch_msas':
-            self.jobparams.db_preset.ctrl.setCurrentText('colabfold_web')
+            self.btn_split_sequences.setEnabled(True)
+        else:
+            self.btn_split_sequences.setEnabled(False)
 
     def OnCmbPrediction(self):
         prediction = self.jobparams.prediction.ctrl.currentText()
         if prediction == 'alphafold':
             self.jobparams.num_gpu.set_value(1)
-        elif prediction == 'fastfold':
-            self.jobparams.chunk_size.set_value(0)
 
     def update_from_db_slot(self, params, thread):
         self.jobparams.update_from_db(params)

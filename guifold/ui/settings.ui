@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>932</width>
-    <height>722</height>
+    <height>946</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -32,7 +32,7 @@
       <number>5</number>
      </property>
      <item row="0" column="0">
-      <layout class="QVBoxLayout" name="verticalLayout" stretch="3,0,2">
+      <layout class="QVBoxLayout" name="verticalLayout" stretch="3,0,0,2">
        <property name="leftMargin">
         <number>0</number>
        </property>
@@ -364,6 +364,19 @@
           </layout>
          </widget>
         </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
        <item>
         <spacer name="verticalSpacer">
@@ -1066,7 +1079,7 @@
               <string/>
              </property>
              <property name="placeholderText">
-              <string>/path/to/pdb70/pdb70</string>
+              <string>/path/to/pdb100/pdb100</string>
              </property>
             </widget>
            </item>

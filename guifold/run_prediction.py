@@ -15,7 +15,6 @@
 # limitations under the License.
 
 # Modified by Georg Kempf, Friedrich Miescher Institute for Biomedical Research
-# Parts from https://github.com/hpcaitech/FastFold
 
 """Full AlphaFold protein structure prediction script."""
 from copy import deepcopy
@@ -58,21 +57,6 @@ from alphafold.relax import relax
 from alphafold.data import parsers
 
 import tensorflow as tf
-
-try:
-    import torch
-    from rosettafold.network import predict
-    from collections import namedtuple
-    from rosettafold.network.ffindex import read_index, read_data
-    torch.multiprocessing.set_start_method('spawn')
-except:
-    pass
-
-try:
-    if not torch.cuda.is_available():
-        torch.device('cpu')
-except:
-    pass
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 import numpy as np
@@ -218,13 +202,11 @@ flags.DEFINE_enum('pipeline', 'full', [
                 'stop after feature generation (only features) or '
                 'calculate MSAs and find templates for given batch of sequences, uses template search based on monomer/multimer preset or'
                 'continue from features.pkl file (continue_from_features)')
-flags.DEFINE_enum('prediction', 'alphafold', ['alphafold', 'fastfold', 'rosettafold'],
-                  'Choose preset prediction configuration - AlphaFold or FastFold implementation.')
+flags.DEFINE_enum('prediction', 'alphafold', ['alphafold'],
+                  'Choose preset prediction configuration - AlphaFold.')
 flags.DEFINE_boolean('debug', False, 'Enable debugging output.')
 flags.DEFINE_integer('first_n_seq', None, 'Parameter needed for first_n_vs_rest protocol to define the first N sequences that will be kept constant in a screening.')
 flags.DEFINE_integer('num_gpu', 1, 'Number of GPUs.')
-flags.DEFINE_integer('chunk_size', None, 'Chunk size.')
-flags.DEFINE_boolean('inplace', False, 'Inplace.')
 flags.DEFINE_list('model_list', '1,2,3,4,5', 'List of indices defining which Alphafold models to use.')
 flags.DEFINE_string('predictions_dir', None, 'Name of predictions output dir.')
 flags.DEFINE_string('features_dir', None, 'Name of features output dir.')
@@ -249,32 +231,6 @@ class AccessionSpeciesDB(Base):
     accession_id = Column(String)
     species_id = Column(String)
 
-def flag_specific_imports():
-    if FLAGS.prediction == 'fastfold':
-        import torch
-        import torch.multiprocessing as mp
-        from fastfold.model.hub import AlphaFold
-        import fastfold
-        from fastfold.config import model_config as ff_model_config
-        from fastfold.common import protein as ff_protein
-        from fastfold.data import feature_pipeline
-        from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
-        from fastfold.model.fastnn import set_chunk_size
-        from fastfold.model.nn.triangular_multiplicative_update import set_fused_triangle_multiplication
-        from fastfold.utils.inject_fastnn import inject_fastnn
-        from fastfold.utils.import_weights import import_jax_weights_
-        from fastfold.utils.tensor_utils import tensor_tree_map
-
-        if int(torch.__version__.split(".")[0]) >= 1 and int(torch.__version__.split(".")[1]) > 11:
-            torch.backends.cuda.matmul.allow_tf32 = True
-
-    if FLAGS.prediction == 'rosettafold':
-        logging.info("Importing packages for rosetta")
-        import torch
-        from rosettafold.network import predict
-        from collections import namedtuple
-        from rosettafold.network.ffindex import read_index, read_data
-
 
 def _check_flag(flag_name: str,
                 other_flag_name: str,
@@ -288,48 +244,6 @@ def _write_job_status_log(path, msg):
     with open(path, 'w+') as f:
         f.write(f'{msg}\n')
 
-
-def inference_model(rank, world_size, result_q, batch, model_name, chunk_size, inplace, model_preset, data_dir):
-    os.environ['RANK'] = str(rank)
-    os.environ['LOCAL_RANK'] = str(rank)
-    os.environ['WORLD_SIZE'] = str(world_size)
-    # init distributed for Dynamic Axial Parallelism
-    fastfold.distributed.init_dap()
-
-    torch.cuda.set_device(rank)
-    config = ff_model_config(model_name)
-    if chunk_size:
-        if chunk_size > 0:
-          config.globals.chunk_size = chunk_size
-    config.globals.inplace = inplace
-    config.globals.is_multimer = model_preset == 'multimer'
-    set_fused_triangle_multiplication()
-    set_fused_triangle_multiplication()
-    model = AlphaFold(config)
-    import_jax_weights_(model, data_dir, version=model_name)
-
-    model = inject_fastnn(model)
-    model = model.eval()
-    model = model.cuda()
-
-    set_chunk_size(model.globals.chunk_size)
-
-    with torch.no_grad():
-        batch = {k: torch.as_tensor(v).cuda() for k, v in batch.items()}
-
-        t = time.perf_counter()
-        out = model(batch)
-        logging.info(f"Inference time: {time.perf_counter() - t}")
-
-    out = tensor_tree_map(lambda x: np.array(x.cpu()), out)
-
-    result_q.put(out)
-
-    torch.distributed.barrier()
-    torch.cuda.synchronize()
-    del os.environ['RANK']
-    del os.environ['LOCAL_RANK']
-    del os.environ['WORLD_SIZE']
 
 def create_accession_species_db(uniprot_db, db_session, output_path):
     """Maps uniprot accession ids to species ids and stores it in a database file"""
@@ -372,43 +286,7 @@ def create_accession_species_db(uniprot_db, db_session, output_path):
         traceback.print_exc()
         os.remove(output_path)
         raise SystemExit
-
-
-def reextract_msa(msa, sequences, msa_output_path):
-    """Re-extract the final MSA from the feature dict for rosettafold2"""
-    ID_TO_HHBLITS_AA = residue_constants.ID_TO_HHBLITS_AA
-    new_order_list = residue_constants.MAP_HHBLITS_AATYPE_TO_OUR_AATYPE
-    reversed_msa = np.argsort(np.array(new_order_list))[msa]
-    new_rows = [[ID_TO_HHBLITS_AA[aa] for aa in row] for row in reversed_msa]
-
-    positions_to_insert = []
-    msa_query_seq = list(new_rows[0])
-    for seq in sequences:
-        if re.search(seq, ''.join(msa_query_seq)):
-            m = re.search(seq, ''.join(msa_query_seq))
-            pos = m.end()
-            msa_query_seq.insert(pos, "/")
-            positions_to_insert.append(pos)
-        else:
-            logging.error(f"Mismatch between input sequences and MSAs. Cannot continue.\n{seq} not found in {msa_query_seq}")
-            raise SystemExit
-
-    rows = new_rows
-    new_rows = []
-    for row in rows:
-        if row:
-            row = list(row)
-            for pos in positions_to_insert[:-1]:
-                row.insert(pos, '/')
-            new_rows.append(''.join(row))
-
-    msa_output_path = os.path.join(msa_output_path, 'paired_concatenated_msas.a3m')
-    with open(msa_output_path, 'w') as f:
-        for i, row in enumerate(new_rows):
-            f.write(f">{i}\n")
-            f.write(f"{row}\n")
-
-    return msa_output_path
+    
 
 def batch_minimization(output_dir, gpu_relax):
     unrelaxed_pdbs, relaxed_pdbs = [], []
@@ -579,8 +457,6 @@ def predict_structure(
             
             t_0 = time.time()
             model_random_seed = model_index + random_seed * num_models
-            if prediction_pipeline == 'fastfold':
-               model_name = re.match('(model_\d{1}(_ptm|_multimer){0,1}).*', model_name).group(1)
             model_name = model_name.replace("_pred_0", "")
             unrelaxed_pdb_path = os.path.join(results_dir, f'unrelaxed_{model_name}.pdb')
 
@@ -591,158 +467,65 @@ def predict_structure(
             if not os.path.exists(unrelaxed_pdb_path):
                 logging.info(feature_dict.keys())
                 logging.info(f"Final MSA size: {feature_dict['num_alignments']}")
-                if prediction_pipeline == 'rosettafold':
-                    logging.info("Starting prediction pipeline for rosettafold2")
+                t_0 = time.time()
+                model_random_seed = model_index + random_seed * num_models
+                processed_feature_dict = model_runner.process_features(
+                    feature_dict, random_seed=model_random_seed)
+                timings[f'process_features_{model_name}'] = time.time() - t_0
+                #if flags['multimer_template']:
+                #    feature_dict['no_multichain_mask'] = True
+                t_0 = time.time()
+                if multichain_template_list:
+                    logging.info(f"Multichain template list: {', '.join([str(item) for item in multichain_template_list])}")
+                    multichain_mask = processed_feature_dict['asym_id'][:, None] == processed_feature_dict['asym_id'][None, :]
+                    #Make a pairwise matrix for aysm_id pairs
+                    asym_id_pairwise_matrix = pairwise_matrix = np.empty((len(processed_feature_dict['asym_id']), len(processed_feature_dict['asym_id'])), dtype=object)
+                    for i in range(len(processed_feature_dict['asym_id'])):
+                        for j in range(len(processed_feature_dict['asym_id'])):
+                            asym_id_pairwise_matrix[i, j] = (processed_feature_dict['asym_id'][i], processed_feature_dict['asym_id'][j])
+                    # Update the mask based on the multichain_template_list which indicates which templates belong to a multichain template
+                    allowed_pairs = []
+                    for i, i_allowed in enumerate(multichain_template_list):
+                        for j, j_allowed in enumerate(multichain_template_list):
+                            if i_allowed and j_allowed:
+                                if not (i+1,j+1) in allowed_pairs:
+                                    allowed_pairs.append((i+1,j+1))
+                                if not (j+1,i+1) in allowed_pairs:
+                                    allowed_pairs.append((j+1,i+1))
+                    indices = []
 
-                    pred = model_runners['model_0']
+                    for i in range(len(asym_id_pairwise_matrix)):
+                        for j in range(len(asym_id_pairwise_matrix[i])):
+                            if asym_id_pairwise_matrix[i, j] in allowed_pairs:
+                                indices.append((i, j))
+                    # Update corresponding positions in multichain_mask
+                    multichain_mask[indices] = True
+                    plot_multichain_mask(multichain_mask)
+                    logging.info("Multichain mask was adapted to provided multichain template to allow interchain contacts. The mask was saved to multichain_mask.png for inspection.")
+                    processed_feature_dict['multichain_mask'] = multichain_mask
 
-                    with open(fasta_path) as f:
-                        input_fasta_str = f.read()
-                    input_seqs, input_descs = parsers.parse_fasta(input_fasta_str)
-                    msa_path = reextract_msa(feature_dict['msa'], input_seqs, msa_output_dir)
-                    logging.info(f"Reextracted MSA path: {msa_path}")
+                prediction_result = model_runner.predict(processed_feature_dict,
+                                                        random_seed=model_random_seed)
+                t_diff = time.time() - t_0
+                timings[f'predict_and_compile_{model_name}'] = t_diff
+                logging.info(
+                    'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
+                    model_name, protein_names, t_diff)
 
-                    inputs = msa_path
-                    FFDB = flags['pdb100_database_path']
-                    FFindexDB = namedtuple("FFindexDB", "index, data")
-                    ffdb = FFindexDB(read_index(FFDB+'_pdb.ffindex'),
-                                    read_data(FFDB+'_pdb.ffdata'))
-                    logging.info(f"Inputs from run_prediciton {inputs}")
-                    logging.info(f"Running prediction")
-                    prediction_result = pred.predict(
-                                            inputs=inputs,
-                                            output_dir=results_dir, 
-                                            symm='C1', 
-                                            n_recycles=flags['num_recycle'], 
-                                            n_models=1, 
-                                            subcrop=1, 
-                                            nseqs=256, 
-                                            nseqs_full=2048, 
-                                            ffdb=ffdb)
-                    assert len(prediction_result) == 1
-                    prediction_result = prediction_result[0]
-                    model_output_path = os.path.join(results_dir, f"unrelaxed_model_{model_index}.pdb")
-                    if not os.path.exists(model_output_path):
-                        logging.error("No output model found!")
-                        raise SystemExit
-                    with open(model_output_path, 'r') as f:
-                        content = f.read()
-                        unrelaxed_pdbs[model_name] = content 
-                    
-                    
-
-                elif prediction_pipeline == 'fastfold':
-                    feature_dict = {}
-                    #Fix some differences between openfold and alphafold feature_dict
-                    for k, v in feature_dict_initial.items():
-                        if k == 'template_all_atom_masks':
-                            feature_dict['template_all_atom_mask'] = v
-                        elif k == 'seq_length' and is_multimer:
-                            feature_dict['seq_length'] = [v*v]
-                        else:
-                            feature_dict[k] = v
-                    
-                    ff_config = ff_model_config(model_name)
-                    feature_processor = feature_pipeline.FeaturePipeline(ff_config.data)
-                    processed_feature_dict = feature_processor.process_features(
-                        feature_dict, mode='predict', is_multimer=is_multimer,
-                    )
-                    timings[f'process_features_{model_name}'] = time.time() - t_0
-
-
+                if benchmark:
                     t_0 = time.time()
-                    batch = processed_feature_dict
-
-                
-                    with mp.Manager() as manager:
-                        result_q = manager.Queue()
-                        chunk_size = flags['chunk_size']
-                        inplace = flags['inplace']
-                        num_gpu = flags['num_gpu']
-
-                        if is_multimer:
-                            params_file = f"params_{model_name}_v3.npz"
-                        else:
-                            params_file = f"params_{model_name}.npz"
-                        params_path = os.path.join(flags['data_dir'], "params", params_file)
-                        print(params_path)
-                        model_preset = flags['model_preset']
-                        torch.multiprocessing.spawn(inference_model, nprocs=num_gpu, args=(num_gpu, result_q, batch, model_name, chunk_size, inplace, model_preset, params_path))
-
-                        prediction_result = result_q.get()
-
-                        batch = tensor_tree_map(lambda x: np.array(x[..., -1].cpu()), batch)
-
-                        t_diff = time.time() - t_0
-                        timings[f'predict_and_compile_{model_name}'] = t_diff
-                        logging.info(
-                            'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
-                            model_name, protein_names, t_diff)
-
-                        if benchmark:
-                            pass
-                elif prediction_pipeline == 'alphafold':
-                    t_0 = time.time()
-                    model_random_seed = model_index + random_seed * num_models
-                    processed_feature_dict = model_runner.process_features(
-                        feature_dict, random_seed=model_random_seed)
-                    timings[f'process_features_{model_name}'] = time.time() - t_0
-                    #if flags['multimer_template']:
-                    #    feature_dict['no_multichain_mask'] = True
-                    t_0 = time.time()
-                    if multichain_template_list:
-                        logging.info(f"Multichain template list: {', '.join([str(item) for item in multichain_template_list])}")
-                        multichain_mask = processed_feature_dict['asym_id'][:, None] == processed_feature_dict['asym_id'][None, :]
-                        #Make a pairwise matrix for aysm_id pairs
-                        asym_id_pairwise_matrix = pairwise_matrix = np.empty((len(processed_feature_dict['asym_id']), len(processed_feature_dict['asym_id'])), dtype=object)
-                        for i in range(len(processed_feature_dict['asym_id'])):
-                            for j in range(len(processed_feature_dict['asym_id'])):
-                                asym_id_pairwise_matrix[i, j] = (processed_feature_dict['asym_id'][i], processed_feature_dict['asym_id'][j])
-                        # Update the mask based on the multichain_template_list which indicates which templates belong to a multichain template
-                        allowed_pairs = []
-                        for i, i_allowed in enumerate(multichain_template_list):
-                            for j, j_allowed in enumerate(multichain_template_list):
-                                if i_allowed and j_allowed:
-                                    if not (i+1,j+1) in allowed_pairs:
-                                        allowed_pairs.append((i+1,j+1))
-                                    if not (j+1,i+1) in allowed_pairs:
-                                        allowed_pairs.append((j+1,i+1))
-                        indices = []
-
-                        for i in range(len(asym_id_pairwise_matrix)):
-                            for j in range(len(asym_id_pairwise_matrix[i])):
-                                if asym_id_pairwise_matrix[i, j] in allowed_pairs:
-                                    indices.append((i, j))
-                        # Update corresponding positions in multichain_mask
-                        multichain_mask[indices] = True
-                        plot_multichain_mask(multichain_mask)
-                        logging.info("Multichain mask was adapted to provided multichain template to allow interchain contacts. The mask was saved to multichain_mask.png for inspection.")
-                        processed_feature_dict['multichain_mask'] = multichain_mask
-
-                    prediction_result = model_runner.predict(processed_feature_dict,
-                                                            random_seed=model_random_seed)
+                    model_runner.predict(processed_feature_dict,
+                                        random_seed=model_random_seed)
                     t_diff = time.time() - t_0
-                    timings[f'predict_and_compile_{model_name}'] = t_diff
+                    timings[f'predict_benchmark_{model_name}'] = t_diff
                     logging.info(
-                        'Total JAX model %s on %s predict time (includes compilation time, see --benchmark): %.1fs',
+                        'Total JAX model %s on %s predict time (excludes compilation time): %.1fs',
                         model_name, protein_names, t_diff)
 
-                    if benchmark:
-                        t_0 = time.time()
-                        model_runner.predict(processed_feature_dict,
-                                            random_seed=model_random_seed)
-                        t_diff = time.time() - t_0
-                        timings[f'predict_benchmark_{model_name}'] = t_diff
-                        logging.info(
-                            'Total JAX model %s on %s predict time (excludes compilation time): %.1fs',
-                            model_name, protein_names, t_diff)
-
                 plddt = prediction_result['plddt']
-                if prediction_pipeline == 'alphafold':
-                    ranking_confidences[model_name] = prediction_result['ranking_confidence']
+                ranking_confidences[model_name] = prediction_result['ranking_confidence']
 
                 # Save the model outputs.
-                
                 with open(result_output_path, 'wb') as f:
                     pickle.dump(prediction_result, f, protocol=4)
 
@@ -750,19 +533,13 @@ def predict_structure(
                 # Note that higher predicted LDDT value means higher model confidence.
                 plddt_b_factors = np.repeat(
                     plddt[:, None], residue_constants.atom_type_num, axis=-1)
-                
-                if prediction_pipeline == 'fastfold':
-                    unrelaxed_protein = ff_protein.from_prediction(features=batch,
-                                                        result=prediction_result,
-                                                        b_factors=plddt_b_factors)
-                    unrelaxed_pdbs[model_name] = ff_protein.to_pdb(unrelaxed_protein)
-                elif prediction_pipeline == 'alphafold':
-                    unrelaxed_protein = protein.from_prediction(
-                        features=processed_feature_dict,
-                        result=prediction_result,
-                        b_factors=plddt_b_factors,
-                        remove_leading_feature_dimension=not model_runner.multimer_mode)
-                    unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
+
+                unrelaxed_protein = protein.from_prediction(
+                    features=processed_feature_dict,
+                    result=prediction_result,
+                    b_factors=plddt_b_factors,
+                    remove_leading_feature_dimension=not model_runner.multimer_mode)
+                unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
 
                 unrelaxed_pdb_path = os.path.join(results_dir, f'unrelaxed_{model_name}.pdb')
                 with open(unrelaxed_pdb_path, 'w') as f:
@@ -774,12 +551,7 @@ def predict_structure(
                     prediction_result = pickle.load(f)
                 logging.info(f"Skipping prediction because {unrelaxed_pdb_path} already exists.")
                 with open(unrelaxed_pdb_path, 'r') as f:
-                    if prediction_pipeline == 'fastfold':
-                        unrelaxed_protein = ff_protein.from_pdb_string(f.read())
-                    elif prediction_pipeline == 'alphafold':
-                        unrelaxed_protein = protein.from_pdb_string(f.read())
-                    elif prediction_pipeline == 'rosettafold':
-                        unrelaxed_protein = protein.from_pdb_string(f.read())
+                    unrelaxed_protein = protein.from_pdb_string(f.read())
 
             if amber_relaxer:
                 relaxed_output_path = os.path.join(
@@ -809,22 +581,21 @@ def predict_structure(
 
 
         # Rank by model confidence and write out relaxed PDBs in rank order.
-        if not prediction_pipeline == 'fastfold':
-            ranked_order = []
-            for idx, (model_name, _) in enumerate(
-                sorted(ranking_confidences.items(), key=custom_sort, reverse=True)):
-                ranked_order.append(model_name)
-                ranked_output_path = os.path.join(results_dir, f'ranked_by_plddt_{idx}.pdb')
-                with open(ranked_output_path, 'w') as f:
-                    if amber_relaxer:
-                        f.write(relaxed_pdbs[model_name])
-                    else:
-                        f.write(unrelaxed_pdbs[model_name])
-            ranking_output_path = os.path.join(results_dir, 'ranking_debug.json')
-            with open(ranking_output_path, 'w') as f:
-                label = 'iptm+ptm' if 'iptm' in prediction_result else 'plddts'
-                f.write(json.dumps(
-                    {label: ranking_confidences, 'order': ranked_order}, indent=4))
+        ranked_order = []
+        for idx, (model_name, _) in enumerate(
+            sorted(ranking_confidences.items(), key=custom_sort, reverse=True)):
+            ranked_order.append(model_name)
+            ranked_output_path = os.path.join(results_dir, f'ranked_by_plddt_{idx}.pdb')
+            with open(ranked_output_path, 'w') as f:
+                if amber_relaxer:
+                    f.write(relaxed_pdbs[model_name])
+                else:
+                    f.write(unrelaxed_pdbs[model_name])
+        ranking_output_path = os.path.join(results_dir, 'ranking_debug.json')
+        with open(ranking_output_path, 'w') as f:
+            label = 'iptm+ptm' if 'iptm' in prediction_result else 'plddts'
+            f.write(json.dumps(
+                {label: ranking_confidences, 'order': ranked_order}, indent=4))
 
         logging.info('Final timings for %s: %s', protein_names, timings)
 
@@ -919,15 +690,11 @@ def check_batch_prediction_task(description_1, description_2, combinations, scor
             return True
     else:
         logging.info(f"Prediction pair {protein_names} not found in score list. Adding to task list.")
-        if prediction_pipeline == 'rosettafold':
-            score_dict = {'protein_names': protein_names,
-                            'min_pae_value': None, 'min_pae_model_name': None}
-        else:
-            score_dict = {'protein_names': protein_names,
-                                'min_pae_value': None, 'min_pae_model_name': None,
-                                'max_ptm_value': None, 'max_ptm_model_name': None,
-                                'max_iptm_value': None, 'max_iptm_model_name': None,
-                                'max_multimer_score_value': None, 'max_multimer_score_model_name': None}
+        score_dict = {'protein_names': protein_names,
+                            'min_pae_value': None, 'min_pae_model_name': None,
+                            'max_ptm_value': None, 'max_ptm_model_name': None,
+                            'max_iptm_value': None, 'max_iptm_model_name': None,
+                            'max_multimer_score_value': None, 'max_multimer_score_model_name': None}
         scores.append(score_dict)
         return True
     
@@ -996,15 +763,6 @@ def predict_structure_wrapper(kwargs, flags, gpu_id) -> bool:
         logging.info('Found %d models: %s', len(model_runners),
                     list(model_runners.keys()))
         kwargs['model_runners'] = model_runners
-
-    elif kwargs['prediction_pipeline'] == 'rosettafold':
-        params_path = os.path.join(flags['data_dir'], "params", "RF2_apr23.pt")
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-        pred = predict.Predictor(params_path, torch.device(device, gpu_id))
-        kwargs['model_runners'] = {'model_0': pred}
     else:
         kwargs['model_runners'] = {}
 
@@ -1025,11 +783,6 @@ def get_num_available_gpus():
         else:
             num_gpus = 0
         logging.info(f'Found {devices} GPUs')
-    elif FLAGS.prediction in ['rosettafold', 'fastfold']:
-        if torch.cuda.is_available():
-            num_gpus = torch.cuda.device_count()
-        else:
-            num_gpus = 0
     else:
         raise SystemExit(f"{FLAGS.prediction} pipeline unknown.")
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
@@ -1259,9 +1012,7 @@ def main(argv):
         num_predictions_per_model = 1
         data_pipeline = monomer_data_pipeline
 
-    if prediction_pipeline == 'rosettafold':
-        model_runners = {'model_0': ""}
-    elif not FLAGS.pipeline in BATCH_PREDICTION_MODES:
+    if not FLAGS.pipeline in BATCH_PREDICTION_MODES:
         model_runners = {}
         model_names = config.MODEL_PRESETS[FLAGS.model_preset]
         for model_name in model_names:
@@ -1339,7 +1090,7 @@ def main(argv):
 
     #Split multichain template into individual files for feature processing. The features will be combined into a single template before prediction
     multichain_template_list = [False] * len(description_sequence_dict)
-    if FLAGS.multichain_template_path:
+    if not FLAGS.multichain_template_path in ["None", None]:
         logging.info("Found multichain_template. This will overwrite any other custom templates")
         multichain_custom_template_list = templates.split_multichain_template(description_sequence_dict.values(), FLAGS.multichain_template_path, FLAGS.kalign_binary_path, FLAGS.custom_tempdir)
         logging.info("Updated custom_template_list:")
@@ -1683,66 +1434,46 @@ def main(argv):
 
             while task_queue.qsize() > 0:
                 logging.info(f"{task_queue.qsize()} tasks left.")
-                #In case of Fastfold only start one process at a time since parallelisation is managed at a later stage
-                if prediction_pipeline == 'fastfold':
-                    kwargs = task_queue.get()
-                    kwargs['results_queue'] = results_queue
-                    logging.info("Starting FastFold in a new process.")
-                    process = multiprocessing.Process(target=predict_structure, kwargs=kwargs)
-                    process.start()
-                    process.join()
-
-                    #Write prediction results in case the job crashes
-                    while results_queue.qsize() > 0:
-                        result = results_queue.get()
-                        value = result['protein_names']
-                        index = find_index(scores, value)
-                        scores[index] = result
-                    write_prediction_results(scores, results_file_pairwise_predictions)
-                else:
-                    #Start processes in parallel
-                    active_processes = []
-                    for _ in range(max_tasks):
-                        logging.info(f"Max tasks: {max_tasks}")
-                        if task_queue.qsize() > 0:
-                            kwargs = task_queue.get()
-                            logging.info(f"{task_queue.qsize()} tasks left.")
-                            kwargs['results_queue'] = results_queue
-                            logging.debug(f'active processes {len(active_processes)} < max_tasks {max_tasks}')
-                            if gpu_available:
-                                gpu_id = len(active_processes)
-                            else:
-                                gpu_id = None
-                            logging.debug(f"Current GPU ID: {gpu_id}")
-                            if prediction_pipeline == 'rosettafold':
-                                p = torch.multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
-                            else:
-                                p = multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
-                            logging.info("Starting new process")
-                            if not gpu_id is None:
-                                os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-                            else:
-                                os.environ["CUDA_VISIBLE_DEVICES"] = ""
-                            p.start()
-                            active_processes.append(p)
+                #Start processes in parallel
+                active_processes = []
+                for _ in range(max_tasks):
+                    logging.info(f"Max tasks: {max_tasks}")
+                    if task_queue.qsize() > 0:
+                        kwargs = task_queue.get()
+                        logging.info(f"{task_queue.qsize()} tasks left.")
+                        kwargs['results_queue'] = results_queue
+                        logging.debug(f'active processes {len(active_processes)} < max_tasks {max_tasks}')
+                        if gpu_available:
+                            gpu_id = len(active_processes)
                         else:
-                            break
-                    logging.debug(f'active processes {len(active_processes)} >= max_tasks {max_tasks}')
-                    for p in active_processes:
-                        p.join()
-                    
-                    #Collect results
-                    while results_queue.qsize() > 0:
-                        result = results_queue.get()
-                        if None in list(result.values()):
-                            logging.error(f'Got None for {result["protein_names"]}')
-                            results_with_error += 1
-                        value = result['protein_names']
-                        index = find_index(scores, value)
-                        scores[index] = result
-                        logging.debug(f'Index for {value} is {index}')
-                        logging.debug(scores[index])              
-                    write_prediction_results(scores, results_file_pairwise_predictions)
+                            gpu_id = None
+                        logging.debug(f"Current GPU ID: {gpu_id}")
+                        p = multiprocessing.Process(target=predict_structure_wrapper, args=(kwargs, flag_dict, gpu_id))
+                        logging.info("Starting new process")
+                        if not gpu_id is None:
+                            os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+                        else:
+                            os.environ["CUDA_VISIBLE_DEVICES"] = ""
+                        p.start()
+                        active_processes.append(p)
+                    else:
+                        break
+                logging.debug(f'active processes {len(active_processes)} >= max_tasks {max_tasks}')
+                for p in active_processes:
+                    p.join()
+                
+                #Collect results
+                while results_queue.qsize() > 0:
+                    result = results_queue.get()
+                    if None in list(result.values()):
+                        logging.error(f'Got None for {result["protein_names"]}')
+                        results_with_error += 1
+                    value = result['protein_names']
+                    index = find_index(scores, value)
+                    scores[index] = result
+                    logging.debug(f'Index for {value} is {index}')
+                    logging.debug(scores[index])              
+                write_prediction_results(scores, results_file_pairwise_predictions)
                 if results_with_error > 0:
                     logging.warning(f"{results_with_error} results with failed evaluation.")
             

@@ -182,10 +182,9 @@ class EvaluationPipeline:
                             plddt_list.append((plddt, mdl_name))
                             iptm_list.append((iptm, mdl_name))
                             ptm_list.append((ptm, mdl_name))
-                        if not self.prediction == 'rosettafold':
-                            self.save_confidence_json(pkl_data, mdl.replace('.pkl', '.json'))
-                            if self.batch:
-                                self.remove_raw_data_from_pkl(pkl_data, mdl)
+                        self.save_confidence_json(pkl_data, mdl.replace('.pkl', '.json'))
+                        if self.batch:
+                            self.remove_raw_data_from_pkl(pkl_data, mdl)
                 #logging.debug(pae_list)
                 logging.debug("Check none:")
                 logging.debug(self.check_none(pae_list))
@@ -199,26 +198,6 @@ class EvaluationPipeline:
                         no_pae = True
                     plddt_list = self.get_best_prediction_for_model_by_plddt(plddt_list)
                 #logging.debug(pae_list)
-            elif self.prediction == 'rosettafold':
-                for i, mdl in enumerate([os.path.join(self.results_dir, x) for x in os.listdir(self.results_dir)
-                                if x.startswith("result_") and x.endswith(".npz")]):
-                    with open(mdl, 'rb') as f:
-                        data = np.load(f)
-                        logging.debug("Loaded data PAE:")
-                        #logging.debug(data['pae'])
-                        if 'pae' in data:
-                            pae = data['pae']
-                        else:
-                            pae = None
-                        if 'lddt' in data:
-                            plddt = np.mean(data['lddt'])
-                        else:
-                            plddt = None
-                        mdl_name = os.path.splitext(os.path.basename(mdl))[0]
-                        pae_list.append((pae, mdl_name))
-                        logging.debug("PAE list:")
-                        logging.debug(pae_list)
-                        plddt_list.append((plddt, mdl_name))
 
             if not self.check_none(pae_list):
                 average_pae_list = self.analyse_pae(pae_list,
@@ -808,27 +787,25 @@ class EvaluationPipeline:
 
     def get_scores(self, score: dict):
         protein_names_pae, min_pae, model_name_min_pae = self.get_min_inter_pae(self.get_pae_results_unsorted())
-        if not self.prediction == 'rosettafold':
-            protein_names_ptm, max_ptm, model_name_max_ptm = self.get_max_ptm()
-            protein_names_iptm, max_iptm, model_name_max_iptm = self.get_max_iptm()
-            protein_names_score, max_multimer_score, model_name_max_multimer_score = self.get_max_multimer_score()
-            logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{score['protein_names']}")
-            assert protein_names_pae == protein_names_ptm == protein_names_score == protein_names_iptm == score['protein_names']
-            logging.debug(f"model_name_max_ptm: {model_name_max_ptm}")
+        protein_names_ptm, max_ptm, model_name_max_ptm = self.get_max_ptm()
+        protein_names_iptm, max_iptm, model_name_max_iptm = self.get_max_iptm()
+        protein_names_score, max_multimer_score, model_name_max_multimer_score = self.get_max_multimer_score()
+        logging.debug(f"Check if protein names are equal: {protein_names_pae},{protein_names_ptm},{protein_names_iptm},{score['protein_names']}")
+        assert protein_names_pae == protein_names_ptm == protein_names_score == protein_names_iptm == score['protein_names']
+        logging.debug(f"model_name_max_ptm: {model_name_max_ptm}")
         logging.debug(f"model_name_min_pae: {model_name_min_pae}")
         score['min_pae_model_name'] = model_name_min_pae
         logging.debug(f"min_pae: {min_pae}")
         score['min_pae_value'] = min_pae
-        if not self.prediction == 'rosettafold':
-            score['max_ptm_model_name'] = model_name_max_ptm
-            logging.debug(f"min ptm: {max_ptm}")
-            score['max_ptm_value'] = max_ptm
-            logging.debug(f"model_name_max_iptm: {model_name_max_iptm}")
-            score['max_iptm_model_name'] = model_name_max_iptm
-            logging.debug(f"max_iptm_value: {max_iptm}")
-            score['max_iptm_value'] = max_iptm
-            score['max_multimer_score_model_name'] = model_name_max_multimer_score
-            score['max_multimer_score_value'] = max_multimer_score
+        score['max_ptm_model_name'] = model_name_max_ptm
+        logging.debug(f"min ptm: {max_ptm}")
+        score['max_ptm_value'] = max_ptm
+        logging.debug(f"model_name_max_iptm: {model_name_max_iptm}")
+        score['max_iptm_model_name'] = model_name_max_iptm
+        logging.debug(f"max_iptm_value: {max_iptm}")
+        score['max_iptm_value'] = max_iptm
+        score['max_multimer_score_model_name'] = model_name_max_multimer_score
+        score['max_multimer_score_value'] = max_multimer_score
         logging.debug(score['min_pae_model_name'])
         logging.debug("Updated scores dict")
         logging.debug(score)

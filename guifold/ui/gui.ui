@@ -117,6 +117,12 @@
                       <verstretch>0</verstretch>
                      </sizepolicy>
                     </property>
+                    <property name="toolTip">
+                     <string>Only available for &quot;Batch MSA&quot; workflow.</string>
+                    </property>
+                    <property name="statusTip">
+                     <string>Only available for &quot;Batch MSA&quot; workflow.</string>
+                    </property>
                     <property name="text">
                      <string>Split Sequences</string>
                     </property>

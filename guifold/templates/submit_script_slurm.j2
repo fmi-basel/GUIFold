@@ -24,10 +24,10 @@
 # Select appropriate GPU model based on estimated memory
    {% if gpu_mem | int <= 31 %}
 #SBATCH --constraint=
-#SBATCH --partition=gpu_short,gpu_long
+#SBATCH --partition=
    {% elif gpu_mem | int > 31 and gpu_mem | int <= 45 %}
 #SBATCH --constraint=
-#SBATCH --partition=gpu_short,gpu_long
+#SBATCH --partition=
    {% elif gpu_mem | int > 45 %}
 #SBATCH --constraint=
 #SBATCH --partition=

@@ -11,9 +11,10 @@ Main Features:
 * Disabling MSA and/or template search
 * Splitting into feature generation (CPU) and prediction (GPU) steps
 * Support of MMseqs2/colabfold MSA pipeline (in addition to original MSA pipeline)
-* Interface to FastFold
-* Automated pairwise interaction screening
+* Automated pairwise interaction screening (with parallelisation over multiple GPUs)
 * Evaluation pipeline (PAE/pLDDT tables, PAE plots)
+
+**See ![Wiki](https://github.com/fmi-basel/GUIFold/wiki/Usage) for more detailed documentation.**
 
 ![Demo-Image](guifold/images/screenshots.png)
 
@@ -29,7 +30,7 @@ cd guifold
 git clone --recurse-submodules https://github.com/fmi-basel/GUIFold
 ```
 
-It is important to clone with the `--recurse-submodules` option to include the modified alphafold and rosettafold modules.
+It is important to clone with the `--recurse-submodules` option to include the modified alphafold module.
 
 Before proceeding with the installation it is recommended to setup the [global configuration file](#setup-of-global-configuration-file) and [cluster submission script](#setup-of-cluster-submission-template) (if needed).
 
@@ -41,7 +42,7 @@ to the beginning of `GUIFold/install.sh`.
 
 Running the install.sh file will<br/>
 * create a conda environment in the same folder<br/>
-* install required packages (the packages are listed in the `_environment.yml` files, af=alphafold, rf=rosettafold, ff=fastfold) <br/>
+* install required packages (the packages are listed in the `_environment.yml` files <br/>
 * install the modified alphafold package<br/>
 * install GUIFold<br/><br/>
 
@@ -50,11 +51,6 @@ To run the setup:
 bash GUIFold/install.sh
 ```
 `conda_env` will be the default name of the conda repository. The conda env will be installed with an absolute path (which is also needed for activation).
-
-There is the option to skip installation of fastfold and/or rosettafold:
-`bash GUIFold/install.sh --no-rosettafold`
-`bash GUIFOLD/install.sh --no-fastfold`
-`bash GUIFOLD/install.sh --no-fastfold --no-rosettafold`
 
 (Optional) Install [MMseqs2](https://github.com/soedinglab/mmseqs2) to use the colabfold protocols for MSA generation.
 
@@ -65,15 +61,6 @@ afgui.py
 ```
 
 #### Troubleshooting
-
-Issue: Package incompatibilities during conda installation
-Solution: Try to install with `bash GUIFOLD/install.sh --no-fastfold --no-rosettafold`
-
-Issue: Errors related to fastfold installation
-Solution: Try to install with `bash GUIFOLD/install.sh --no-fastfold`
-
-Issue: Errors related to rosettafold installation
-Solution: Try to install with `bash GUIFOLD/install.sh --no-rosettafold`
 
 Issue: When trying to run `afgui.py`: `ImportError: libXss.so.1: cannot open shared object file: No such file or directory`
 Solution: Add the following path to the LD_LIBRARY_PATH in the command prompt: `export LD_LIBRARY_PATH=/path/to/conda_env/x86_64-conda-linux-gnu/sysroot/usr/lib64/:$LD_LIBRARY_PATH`
@@ -230,6 +217,7 @@ When the conda env is activated (conda activate /path/to/af-conda) or added to P
 To re-run an evaluation go to the job folder (where the FASTA sequence is stored) and type<br/>
 `afeval.py --fasta_path name_of_sequence.fasta`
 
+**See ![Wiki](https://github.com/fmi-basel/GUIFold/wiki/Usage) for more detailed documentation.**
 
 ## Licenses
 
@@ -240,3 +228,11 @@ Icons are from the GTK framework, licensed under [GPL](https://gitlab.gnome.org/
 The modified AlphaFold code retains its original license. See (https://github.com/deepmind/alphafold)
 
 Third-party software and libraries may be governed by separate terms and conditions or license provisions. Your use of the third-party software, libraries or code is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.
+
+## Citations
+
+Some features were inspired by other projects and implemented from scratch if not indicated in the code.
+
+[AlphaPulldown](https://github.com/KosinskiLab/AlphaPulldown)
+[Colabfold](https://github.com/sokrypton/ColabFold)
+[Alphafold](https://github.com/google-deepmind/alphafold)

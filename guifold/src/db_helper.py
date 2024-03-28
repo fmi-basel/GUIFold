@@ -269,11 +269,8 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN pipeline VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE settings RENAME COLUMN uniref30_database_path TO uniref30_mmseqs_database_path']
         stmts += ['ALTER TABLE settings RENAME COLUMN uniclust30_database_path TO uniref30_database_path']
-        #Add FastFold parameters
         stmts += ['ALTER TABLE jobparams ADD COLUMN prediction VARCHAR DEFAULT "alphafold"']
         stmts += ['ALTER TABLE jobparams ADD COLUMN num_gpu INTEGER DEFAULT(1)']
-        stmts += ['ALTER TABLE jobparams ADD COLUMN chunk_size INTEGER DEFAULT(0)']
-        stmts += ['ALTER TABLE jobparams ADD COLUMN inplace BOOLEAN DEFAULT FALSE']
         stmts += ['ALTER TABLE settings RENAME COLUMN num_cpus TO num_cpu']
         stmts += ['ALTER TABLE settings ADD num_cpu INTEGER DEFAULT(20)']
         stmts += ['ALTER TABLE jobparams ADD COLUMN pairwise_batch_prediction BOOLEAN DEFAULT FALSE']

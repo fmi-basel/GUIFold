@@ -980,9 +980,7 @@ class JobParams(GUIVariables):
         pipeline (Variable): Pipeline preset (reflects AF argument)
         prediction_dict (dict): Dictionary with prediction presets
         prediction (Variable): Prediction protocol preset
-        num_gpu (Variable): Number of GPUs (only for FastFold protocol)
-        chunk_size (Variable): Chunk size (only for FastFold protocol)
-        inplace (Variable): Toggle inplace prediction (only for FastFold protocol)
+        num_gpu (Variable): Number of GPUs
         pairwise_batch_prediction (Variable): Toggle pairwise batch prediction of a set of sequences
         
         """
@@ -1041,23 +1039,9 @@ class JobParams(GUIVariables):
                               8: 'grouped_all_vs_all',
                               9: 'only_relax'}
         self.pipeline = Variable('pipeline', 'str', ctrl_type='cmb', cmb_dict=self.pipeline_dict, cmd=True)
-        self.prediction_dict = {0: 'alphafold',
-                                1: 'fastfold',
-                                2: 'rosettafold'}
-        #Remove fastfold and/or rosettafold option if the modules are not installed
-        # try:
-        #     import fastfold
-        # except ImportError:
-        #     del self.predict_dict[1]
-        # try:
-        #     import rosettafold
-        # except ImportError:
-        #     del self.predict_dict[2]
+        self.prediction_dict = {0: 'alphafold'}
         self.prediction = Variable('prediction', 'str', ctrl_type='cmb', cmb_dict=self.prediction_dict, cmd=True)
-        #FastFold params
         self.num_gpu = Variable('num_gpu', 'int', ctrl_type="sbo", cmd=True)
-        self.chunk_size = Variable('chunk_size', 'int', ctrl_type="sbo", cmd=True)
-        self.inplace = Variable('inplace', 'bool', ctrl_type="chk", cmd=True)
         self.pairwise_batch_prediction = Variable('pairwise_batch_prediction', 'bool')
         self.use_model_1 = Variable('use_model_1', 'bool', ctrl_type='chk')
         self.use_model_2 = Variable('use_model_2', 'bool', ctrl_type='chk')
@@ -1213,7 +1197,7 @@ class JobParams(GUIVariables):
         self.sequences.ctrl.setPlainText(fasta_string)
 
 
-    def process_single_template(self, template: str, msgs: list, output_folder: str, index: int) -> bool:
+    def process_single_template(self, template: str, msgs: list, output_folder: str, index: int, multichain: bool = False) -> bool:
         """Process single template.
           Make sure that the input file only contains one model and one chain and if the chain doesn't have id 'A' rename it.
             Save the cif with a new 4 letter filename."""
@@ -1229,14 +1213,15 @@ class JobParams(GUIVariables):
                 msgs.append(f"More than one model found in {template_name}. Make sure that only one model and chain is present in the file.")
                 return False
             chains = [x.get_id() for x in structure[0].get_chains()]
-            if len(chains) > 1:
-                msgs.append(f"More than one chain found in {template_name}. Make sure only the chain that matches the target is present in the file.")
-                return False
-            elif not 'A' in chains:
-                logger.debug("Chain IDs in template")
-                logger.debug(chains)
-                msgs.append(f"The template chain needs to have id 'A'in {template_name}.")
-                return False
+            if not multichain:
+                if len(chains) > 1:
+                    msgs.append(f"More than one chain found in {template_name}. Make sure only the chain that matches the target is present in the file.")
+                    return False
+                elif not 'A' in chains:
+                    logger.debug("Chain IDs in template")
+                    logger.debug(chains)
+                    msgs.append(f"The template chain needs to have id 'A'in {template_name}.")
+                    return False
 
             if index < 10:
                 out_name = f'cus{index}'
@@ -1276,10 +1261,14 @@ class JobParams(GUIVariables):
         """Process custom template files."""
         msgs = []
         new_custom_template_list = []
+        multichain_template_path = None
+        folder_count = 0
         for i, item in enumerate(self.custom_template_list.get_value().split(',')):
-            custom_template_folder = os.path.join(job_dir, f"custom_templates_{i}")
+            custom_template_folder = os.path.join(job_dir, f"custom_templates_{folder_count}")
+            logging.debug(f"Processing custom template: {item}")
             if not item in [None, "None"]:
                 if not os.path.exists(custom_template_folder):
+                    folder_count += 1
                     os.mkdir(custom_template_folder)
                 if os.path.isdir(item):
                     cif_files = [f for f in os.listdir(item) if f.endswith(".cif")]
@@ -1293,13 +1282,26 @@ class JobParams(GUIVariables):
                                 break
                 else:
                     template = item
-                    self.process_single_template(template, msgs, custom_template_folder, i)
+                    self.process_single_template(template, msgs, custom_template_folder, 0)
                 logger.debug(f"{i} {template}")
                 new_custom_template_list.append(custom_template_folder)
             else:
                 new_custom_template_list.append("None")
+        
+        if not self.multichain_template_path.get_value() in [None, "None"]:
+            template = self.multichain_template_path.get_value()
+            if os.path.exists(template):
+                custom_template_folder = os.path.join(job_dir, f"custom_templates_{folder_count}")
+                if not os.path.exists(custom_template_folder):
+                    os.mkdir(custom_template_folder)
+                self.process_single_template(template, msgs, custom_template_folder, 0, multichain=True)
+            else:
+                msgs.append(f"{template} does not exist!")
+            multichain_template_path = os.path.join(custom_template_folder, f'cus0.cif')
+
+
             
-        return ','.join(new_custom_template_list), msgs
+        return ','.join(new_custom_template_list), multichain_template_path, msgs
 
 
     def update_from_sequence_table(self) -> None:
@@ -1518,12 +1520,8 @@ class Job(GUIVariables):
         msgs = []
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
-        if job_params['prediction'] in ['alphafold', 'rosettafold']:
+        if job_params['prediction'] in ['alphafold']:
             command = ["run_prediction.py\\\n"] + job_args
-        elif job_params['prediction'] == 'fastfold':
-            fastfold_exec = shutil.which('run_prediction.py')
-            #-rdzv_backend c10d --rdzv_endpoint localhost:0 allows running multiple instances on the same machine -> https://github.com/pytorch/pytorch/issues/73320
-            command = [f"torchrun --rdzv_backend c10d --rdzv_endpoint localhost:0 {fastfold_exec}\\\n"] + job_args
         command = ' '.join(command)
         logfile = os.path.join(job_params['job_path'], job_params["log_file"])
         submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
@@ -1639,37 +1637,6 @@ class Job(GUIVariables):
         #mem = int(math.ceil(4.8898*math.exp(0.00077181*total_seq_length)))
         logger.debug(f"Calculated memory: {mem}")
         return mem
-    
-    #Calculate required gpu memory in GB by sequence length for fastfold
-    def calculate_gpu_mem_fastfold(self, total_seq_length: int) -> Tuple[int, int]:
-        chunks: List[int] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-        logger.debug(total_seq_length)
-        logger.debug(f"Total sequence length: {total_seq_length}")
-        mem: int = int(math.ceil(6.20911259*math.exp(0.00075350*total_seq_length)))
-        #This was calculated for A100 GPU
-        chunk_size: int = int(135097*math.exp(-0.00272605*total_seq_length))
-        for i, chunk in enumerate(chunks):
-            if chunk_size < chunks[0]:
-                selected_chunk_size: int = chunks[0]
-                break
-            elif chunk_size > chunks[-1]:
-                selected_chunk_size: int = chunks[-1]
-                break
-            elif chunk < chunk_size:
-                continue
-            else:
-                if i > 0:
-                    selected_chunk_size: int = chunks[i-1]
-                else:
-                    selected_chunk_size = chunks[0]
-                break
-        #The above formula works for A100. On GPUs with less memory, the chunk_size needs to be smaller to avoid memory fragmentation and oom errors.
-        if mem < 48.0:
-            chunk_size = chunk_size / 16
-            
-        logger.debug(f"Calculated memory: {mem}")
-        logger.debug(f"Estimated chunk size: {chunk_size}, Selected chunk_size: {selected_chunk_size}")
-        return mem, selected_chunk_size
 
     #Try to get GPU memory from host. Not available when submitted to queue.
     def get_gpu_mem(self):
@@ -1684,11 +1651,9 @@ class Job(GUIVariables):
         return mem_gb
 
     def prepare_cmd(self, job_params, cmd_dict, split_job_step=None):
-        #cmd_dict = job_params.copy()
         error_msgs, warn_msgs = [], []
-        estimated_gpu_mem, estimated_chunk_size = None, None
+        estimated_gpu_mem = None
         logger.debug(cmd_dict)
-        #self.convert_protocol(cmd_dict)
         logger.debug(cmd_dict)
         job_args = []
         log_file = os.path.join(job_params['job_path'], job_params['log_file'])
@@ -1697,23 +1662,7 @@ class Job(GUIVariables):
         cmd_dict['job_status_log_file'] = job_status_log_file
 
         #Estimate memory
-        #In case of FastFold also chunk_size needs to be adjusted
-        if job_params['prediction'] == 'fastfold':
-            estimated_gpu_mem, estimated_chunk_size = self.calculate_gpu_mem_fastfold(job_params['total_seqlen'])
-            if job_params['chunk_size'] == 0:
-                job_params['chunk_size'] = int(estimated_chunk_size)
-                if 'chunk_size' in cmd_dict:
-                    cmd_dict['chunk_size'] = job_params['chunk_size']
-                logger.debug(f"Set chunk_size to {estimated_chunk_size}")
-            elif abs((int(job_params['chunk_size']) - estimated_chunk_size) / estimated_chunk_size) > 0.1:
-                warn_msgs.append(f"The user defined chunk size {job_params['chunk_size']} deviates more than 10% from the estimated chunk_size {estimated_chunk_size}. This might cause longer runtimes or out-of-memory errors. The chunk_size can be set to auto or adjusted in the Advanced Settings dialog. Run anyways?") 
-            
-            #if job_params['queue']:
-            #    estimated_gpu_mem = job_params['max_gpu_mem']
-            #else:
-            #    estimated_gpu_mem = self.get_gpu_mem()
-        else:
-            estimated_gpu_mem = self.calculate_gpu_mem_alphafold(job_params['total_seqlen'])
+        estimated_gpu_mem = self.calculate_gpu_mem_alphafold(job_params['total_seqlen'])
 
         #Generate job argument list
         if 'model_preset' in cmd_dict:
@@ -1796,7 +1745,7 @@ class Job(GUIVariables):
             cmd += [f"run_prediction.py\\\n"]
             cmd += job_args + [f">> {log_file} 2>&1"]
         logger.debug("Job command\n{}".format(cmd))
-        return cmd, error_msgs, warn_msgs, estimated_gpu_mem, estimated_chunk_size
+        return cmd, error_msgs, warn_msgs, estimated_gpu_mem
 
     def insert_evaluation(self, _evaluation: object, job_params: dict, sess: sqlalchemy.orm.session.Session) -> bool:
         if not _evaluation.check_exists(job_params['job_id'], sess):
