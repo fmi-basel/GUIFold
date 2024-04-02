@@ -10,5 +10,8 @@ cd $base_dir
 echo "Creating conda environment with prefix $(pwd)/$CONDA_ENV_NAME and installing packages"
 conda env create -p $(pwd)/$CONDA_ENV_NAME -f GUIFold/${conda_yaml}
 conda activate $(pwd)/$CONDA_ENV_NAME
+cd ${base_dir}/GUIFold
+python setup.py install
+cd alphafold
+python setup.py install
 cd $base_dir
-fi

@@ -231,6 +231,9 @@ class AccessionSpeciesDB(Base):
     accession_id = Column(String)
     species_id = Column(String)
 
+class InputError(Exception):
+    pass
+
 
 def _check_flag(flag_name: str,
                 other_flag_name: str,
@@ -241,7 +244,7 @@ def _check_flag(flag_name: str,
                      f'"--{other_flag_name}={FLAGS[other_flag_name].value}".')
   
 def _write_job_status_log(path, msg):
-    with open(path, 'w+') as f:
+    with open(path, 'a') as f:
         f.write(f'{msg}\n')
 
 
@@ -428,15 +431,18 @@ def predict_structure(
         if flags['pipeline'] == 'continue_from_features' or load_existing_features:
             #Backward compatibility
             if not os.path.exists(features_output_path) and not os.path.exists(f"{features_output_path}.gz"):
-                features_output_path = os.path.join(output_dir_base, fasta_name, 'features.pkl')
-            if os.path.exists(features_output_path):
+                features_output_path_alternative = os.path.join(output_dir_base, fasta_name, 'features.pkl')
+                if os.path.exists(features_output_path_alternative):
+                    with open(features_output_path_alternative, 'rb') as f:
+                        feature_dict = pickle.load(f)
+                elif os.path.exists(f"{features_output_path}.gz"):
+                    with gzip.open(f"{features_output_path}.gz", 'rb') as f:
+                        feature_dict = pickle.load(f)
+                elif not use_existing_features:
+                    raise Exception(f"Continue_from_features requested but no feature pickle file found in expected location: {features_output_path} or {features_output_path_alternative}.")
+            else:
                 with open(features_output_path, 'rb') as f:
                     feature_dict = pickle.load(f)
-            elif os.path.exists(f"{features_output_path}.gz"):
-                with gzip.open(f"{features_output_path}.gz", 'rb') as f:
-                    feature_dict = pickle.load(f)
-            elif not use_existing_features:
-                raise Exception(f"Continue_from_features requested but no feature pickle file found in expected location: {features_output_path}.")
             if os.path.exists(msa_stats_output_path):
                 with open(msa_stats_output_path, 'r') as f:
                     msa_stats = json.load(f)
@@ -475,8 +481,8 @@ def predict_structure(
                 #if flags['multimer_template']:
                 #    feature_dict['no_multichain_mask'] = True
                 t_0 = time.time()
-                if multichain_template_list:
-                    logging.info(f"Multichain template list: {', '.join([str(item) for item in multichain_template_list])}")
+                if any([x == True for x in multichain_template_list]) and is_multimer:
+                    logging.info(f"Multichain template list: {', '.join([str(item) for item in multichain_template_list])}: Multimer mode: {is_multimer}")
                     multichain_mask = processed_feature_dict['asym_id'][:, None] == processed_feature_dict['asym_id'][None, :]
                     #Make a pairwise matrix for aysm_id pairs
                     asym_id_pairwise_matrix = pairwise_matrix = np.empty((len(processed_feature_dict['asym_id']), len(processed_feature_dict['asym_id'])), dtype=object)
@@ -860,7 +866,6 @@ def main(argv):
         logging.set_verbosity(logging.DEBUG)
     else:
         logging.set_verbosity(logging.INFO)
-    flag_specific_imports()
     logging.info("Alphafold pipeline starting...")
     if FLAGS.precomputed_msas_list is None:
         FLAGS.precomputed_msas_list = [FLAGS.precomputed_msas_list]
@@ -1131,6 +1136,7 @@ def main(argv):
     else:
         precomputed_msas_list = [None] * len(description_sequence_dict)
 
+
     #Find matching MSAs in case of monomer pipeline. In case of multimer pipeline this is done in pipeline_multimer.py
     if not run_multimer_system and not FLAGS.pipeline == 'batch_msas' and FLAGS.precomputed_msas_path:
         #Only search for MSAs in precomputed_msas_path if no direct path is given in precomputed_msas_list
@@ -1149,7 +1155,8 @@ def main(argv):
         pcmsa_map = pipeline.get_pcmsa_map(FLAGS.precomputed_msas_path,
                                                         description_sequence_dict,
                                                         FLAGS.db_preset)
-        precomputed_msas_list = list(pcmsa_map.values())
+        if len(pcmsa_map) == len(precomputed_msas_list):
+            precomputed_msas_list = list(pcmsa_map.values())
 
     #Batch predictions
     results_file_pairwise_predictions = os.path.join(FLAGS.output_dir, "predictions", FLAGS.predictions_dir, "pairwise_prediction_results.csv")
@@ -1215,44 +1222,31 @@ def main(argv):
         if FLAGS.pipeline == 'first_vs_all':
             bait_stop_index = 1
         elif FLAGS.pipeline == 'first_n_vs_rest':
-            bait_stop_index = FLAGS.first_n_sequences
+            bait_stop_index = FLAGS.first_n_seq
         else:
             bait_stop_index = None
+        if bait_stop_index:
+            if bait_stop_index >= len(description_sequence_dict):
+                raise InputError("first_n_seq needs to be smaller than the total number of given sequences.")
         for i, (desc, seq) in enumerate(description_sequence_dict.items()):
             logging.debug(desc)
             if bait_stop_index:
+                if not 'group1' in prediction_groups_mapping:
+                    prediction_groups_mapping['group1'] = {}
                 if not 'baits' in prediction_groups_mapping['group1']:
-                    prediction_groups_mapping['group1'] = {'baits': {}}
+                    prediction_groups_mapping['group1']['baits'] = {}
                 if not 'preys' in prediction_groups_mapping['group1']:
-                    prediction_groups_mapping['group1'] = {'preys': {}}
+                    prediction_groups_mapping['group1']['preys'] = {}
                 if i < bait_stop_index:
                     prediction_groups_mapping['group1']['baits'][desc] = (seq, i)
                 else:
                     prediction_groups_mapping['group1']['preys'][desc] = (seq, i)
-
             else:
+                if not 'group1' in prediction_groups_mapping:
+                    prediction_groups_mapping['group1'] = {}
                 if not 'preys' in prediction_groups_mapping['group1']:
-                    prediction_groups_mapping['group1'] = {'preys': {}}
+                    prediction_groups_mapping['group1']['preys'] = {}
                 prediction_groups_mapping['group1']['preys'][desc] = (seq, i)
-
-            
-        # for o, (desc_2, seq_2) in enumerate(description_sequence_dict.items()):
-        #     kwargs = {k: v for (k,v) in kwargs_common.items()}
-        #     i = 0
-        #     desc_1 = list(description_sequence_dict.keys())[i]
-        #     seq_1 = description_sequence_dict[desc_1]
-        #     if desc_1 == desc_2:
-        #         desc_1 = f"{desc_1}_1"
-        #         desc_2 = f"{desc_2}_2"
-        #     kwargs['no_msa_list'] = [no_msa_list[i], no_msa_list[o]]
-        #     kwargs['no_template_list'] =  [no_template_list[i], no_template_list[o]]
-        #     kwargs['custom_template_list'] = [custom_template_list[i], custom_template_list[o]]
-        #     kwargs['precomputed_msas_list'] = [precomputed_msas_list[i], precomputed_msas_list[o]]
-        #     if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline):
-        #         kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
-        #         index = find_index(scores, kwargs['protein_names'])
-        #         kwargs['score_dict'] = scores[index]
-        #         tasks.append(kwargs)
 
     elif FLAGS.pipeline in ['grouped_bait_vs_preys', 'grouped_all_vs_all']:
         for index, (desc, seq) in enumerate(description_sequence_dict.items()):
@@ -1461,6 +1455,8 @@ def main(argv):
                 logging.debug(f'active processes {len(active_processes)} >= max_tasks {max_tasks}')
                 for p in active_processes:
                     p.join()
+
+                time.sleep(10)
                 
                 #Collect results
                 while results_queue.qsize() > 0:

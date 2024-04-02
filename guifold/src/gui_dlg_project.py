@@ -108,5 +108,5 @@ class ProjectDlg(QtWidgets.QDialog):
                 logger.debug(f"index in project combo is {index}, project name is {prj_name}")
                 if index >= 0:
                     self.prj.list.ctrl.setCurrentIndex(index)
-                self.gui_params = self.job.init_gui(self.gui_params, self.sess)
+                self.gui_params = self.job.init_gui(self.gui_params, sess=self.sess)
 

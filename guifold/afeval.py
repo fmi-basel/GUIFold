@@ -1044,15 +1044,16 @@ class EvaluationPipelineBatch:
         else:
             self.pae_list_grouped, self.iptm_list_grouped, self.ptm_list_grouped, self.multimer_score_list_grouped = None, None, None, None
         protein_pae_mapping, protein_iptm_mapping, protein_ptm_mapping, protein_multimer_score_mapping = {}, {}, {}, {}
+        logging.debug(self.scores)
         for score in self.scores:
             protein_pae_mapping[score['protein_names']] = (score['min_pae_value'], [score['min_pae_model_name']])
-            self.protein_pae_mapping = dict(sorted(protein_pae_mapping.items(), key=lambda item: item[1][0], reverse=False))
+            self.protein_pae_mapping = dict(sorted(protein_pae_mapping.items(), key=lambda item: float(item[1][0]), reverse=False))
             protein_iptm_mapping[score['protein_names']] = (score['max_iptm_value'], [score['max_iptm_model_name']])
-            self.protein_iptm_mapping = dict(sorted(protein_iptm_mapping.items(), key=lambda item: item[1][0], reverse=True))
+            self.protein_iptm_mapping = dict(sorted(protein_iptm_mapping.items(), key=lambda item: float(item[1][0]), reverse=True))
             protein_ptm_mapping[score['protein_names']] = (score['max_ptm_value'], [score['max_ptm_model_name']])
-            self.protein_ptm_mapping = dict(sorted(protein_ptm_mapping.items(), key=lambda item: item[1][0], reverse=True))
+            self.protein_ptm_mapping = dict(sorted(protein_ptm_mapping.items(), key=lambda item: float(item[1][0]), reverse=True))
             protein_multimer_score_mapping[score['protein_names']] = (score['max_multimer_score_value'], [score['max_multimer_score_model_name']])
-            self.protein_multimer_score_mapping = dict(sorted(protein_multimer_score_mapping.items(), key=lambda item: item[1][0], reverse=True))
+            self.protein_multimer_score_mapping = dict(sorted(protein_multimer_score_mapping.items(), key=lambda item: float(item[1][0]), reverse=True))
 
     def write_html(self):
         templates_path = pkg_resources.resource_filename("guifold", "templates")

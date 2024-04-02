@@ -166,7 +166,7 @@ test_jobs = {'simple_monomer': {'MODEL_PRESET': 'monomer_ptm',
                                                             "CUSTOM_TEMPLATE_LIST": "None,None",
                                                             "DB_PRESET": "full_dbs",
                                                             "PRECOMPUTED_MSAS_PATH": "None,None",
-                                                            "FIRST_N": "2",
+                                                            "FIRST_N": "1",
                                                             "PIPELINE": "first_n_vs_rest",
                                                             "PREDICTION": "alphafold",
                                                             "MULTICHAIN_TEMPLATE_PATH": None},
@@ -274,12 +274,16 @@ for title, params in test_jobs.items():
             rmtree(output_dir)
         os.mkdir(output_dir)
         copyfile(params['FASTA_PATH'], os.path.join(output_dir, os.path.basename(params['FASTA_PATH'])))
-        if params['PIPELINE'] == 'simple_monomer_continue_from_features':
-            copyfile('calculated/features_SRP9_bait_id1_SRP14_bait_id1.pkl', os.path.join(output_dir, params['DB_PRESET'], 'features_SRP9_bait_id1_SRP14_bait_id1.pkl'))
-            copyfile('calculated/features_SRP9_bait_id1.pkl', os.path.join(output_dir, params['DB_PRESET'], 'features_SRP9_bait_id1.pkl'))
+        if title == 'simple_monomer_continue_from_features':
+            #copyfile('calculated/features_SRP9_bait_id1_SRP14_bait_id1.pkl', os.path.join(output_dir, params['DB_PRESET'], 'features_SRP9.pkl'))
+            os.makedirs(os.path.join(output_dir, 'features', params['DB_PRESET']), exist_ok=True)
+            copyfile('calculated/SRP9.pkl', os.path.join(output_dir, 'features', params['DB_PRESET'], 'features_SRP9.pkl'))
+            print(f"Copying to {os.path.join(output_dir, 'features', params['DB_PRESET'], 'features_SRP9.pkl')}")
+        else:
+            print("Not copying")
         fasta_path = os.path.join(output_dir, os.path.basename(params['FASTA_PATH']))
         if not 'FIRST_N' in params:
-            params['FIRST_N'] = 2
+            params['FIRST_N'] = 1
         formatted_cmd = cmd.format(MODEL_PRESET=params['MODEL_PRESET'],
                 OUTPUT_DIR=output_dir,
                 FASTA_PATH=fasta_path,
