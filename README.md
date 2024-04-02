@@ -70,7 +70,6 @@ Solution: Add the following path to the LD_LIBRARY_PATH in the command prompt: `
 
 Follow instructions in the [AlphaFold readme](https://github.com/deepmind/alphafold#genetic-databases).
 
-If you want to use the colabfold protocol you also need to download "uniref30_2202" and "colabfold_envdb_202108" (available at [Link](https://colabfold.mmseqs.com/)). It is recommended to generate database indices for full performance (see [MMseqs2 documentation](https://mmseqs.com/latest/userguide.pdf)).
 
 ### Setup of global configuration file
 
@@ -85,11 +84,75 @@ When the global configuration needs to be changed later on, the users can re-loa
 
 Re-install the package if it has been installed before:
 ```
-(conda activate /path/to/af-conda)
+(conda activate /path/to/conda_env)
 cd GUIFold
 python setup.py clean --all install clean --all
 ```
 
+### Setup of MMseqs2 and colabfold databases (OPTIONAL)
+
+#### MMSeqs2 installation
+
+MMSeqs is not automatically installed. It can be easily added to the conda environment with
+```
+(conda activate /path/to/conda_env)
+conda install -c conda-forge -c bioconda mmseqs2
+```
+or installed in diffrent ways as described in [MMseqs2 documentation](https://mmseqs.com/latest/userguide.pdf)
+
+#### Database setup
+
+If you want to use the colabfold protocol you also need to download "uniref30_2202" and "colabfold_envdb_202108" (available at [Link](https://colabfold.mmseqs.com/)). It is required to convert these databses to expandable profile databases and generate database indices (see [MMseqs2 documentation](https://mmseqs.com/latest/userguide.pdf)).
+
+`mmseqs createindex` is used to create database indices. The `--split 0` flag will automatically determine the number of splits based on the available RAM. Therefore this step should be run on the machine where Alphafold is later run (or adjusted to the minimal available RAM with `--split-memory-limit` in addition to the `--split 0` flag). `--threads` can be used for parallelisation. More details in [MMseqs2 documentation](https://mmseqs.com/latest/userguide.pdf).
+
+
+1. Go to the uniref90 database directory (which contains uniref90.fasta) and run
+```
+mmseqs createindex uniref90 tmp --split 0
+```
+
+In the global configuration file (see below) the uniref90_mmseqs path needs to point to `your_directory_with_databases/uniref90/uniref90`
+
+2. Go to the uniprot database directory (which contains uniprot.fasta) and run
+```
+mmseqs createindex uniprot tmp --split 0
+```
+
+In the global configuration file the uniref90_mmseqs path needs to point to 
+`your_directory_with_databases/uniprot/uniprot`
+
+3. Go to the colabfold_envdb directory and run
+```
+mmseqs tsv2exprofiledb colabfold_envdb_202108 colabfold_envdb_202108_db
+mmseqs createindex colabfold_envdb_202108_db tmp --split 0
+```
+
+In the global configuration file the colabfold_envdb path needs to point to 
+`your_directory_with_databases/colabfold_envdb_202108_db/colabfold_envdb_202108_db`
+
+4. Go to the uniref30_2202 directory and run
+```
+mmseqs tsv2exprofiledb uniref30_2202 uniref30_2202_db
+mmseqs createindex uniref30_2202_db tmp --split 0
+```
+
+In the global configuration file the uniref30_mmseqs path needs to point to 
+`your_directory_with_databases/uniref30_2202/uniref30_2202`
+
+#### Species database
+
+Create database for accession to species identifier mapping:
+
+To use the standard Alphafold protocol for MSA pairing, GUIFold currently needs to create a database which maps accession to species identifiers. This database will be automatically created when the `colabfold_local` or `colabfold_web` protocols are used for the first time. If installation is done for a multi-user environment it is recommended to run this as part of the installation. 
+
+1. Make sure the global configuraiton file is properly setup (esp. the uniprot database path needs to be defined)
+2. Open the GUI (see Usage)
+3. Paste any random sequence in FASTA format in the sequence input
+4. Click `Read sequence` button
+5. Select `colabfold_local` from the `Feature pipeline` dropdown menu
+6. Click `Run` button
+7. In the `Log` tab after some initialization, you should see the lines `Creating database...`. This step can take up to a few hours depending on hardware.
 
 ### Setup of cluster submission template
 
@@ -99,7 +162,7 @@ The template needs to be saved to `GUIFold/guifold/templates/submit_script.j2`. 
 
 After saving the template to the above location, re-install the package if it has been installed before:
 ```
-(conda activate /path/to/af-conda)
+(conda activate /path/to/conda_env)
 cd GUIFold
 python setup.py clean --all install clean --all
 ```
