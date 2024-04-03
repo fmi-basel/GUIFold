@@ -1802,7 +1802,7 @@ class Job(GUIVariables):
             with open(log_file, 'r') as f:
                 lines = f.readlines()
         else:
-            msg = f"Job status file {params['job_status_log_file']} does not exist."
+            msg = f"Job status file {job_status_log_file} does not exist."
             params['errors'].append(msg)
             if params['log_file_lines']:
                 #Only lines added since last update
@@ -1868,24 +1868,32 @@ class Job(GUIVariables):
                 job_status = 'finished'
         
         logger.debug(f"exit_code_script {exit_code_script} exit_code_queue {exit_code_queue}")
-        if exit_code_script == 1 or exit_code_queue == 1:
-            logger.debug("Either exit code script or exit code_queue is 1")
-            exit_code = 1
-        elif exit_code_script == 2:
-            logger.debug("Exit code script is 2")
-            exit_code = 2
-        elif exit_code_script == 0 and exit_code_queue == 0:
-            logger.debug("Exit code script and exit_code_queue are 0")
-            exit_code = 0
-        elif exit_code_queue == 0 and exit_code_script is None:
-            #Assume there is an error if there is no exit code from the script
-            exit_code = 1
-        elif exit_code_queue:
-            if exit_code_queue > 2:
+        if exit_code_queue is None:
+            if exit_code_script == 1:
                 exit_code = 1
-        #except Exception as e:
-        #    logger.debug(f"Error while updating job status params: {e}")
-        #    logger.debug(traceback.print_exc())
+            elif exit_code_script == 2:
+                exit_code = 2
+            elif exit_code_script == 0:
+                exit_code = 0
+        else:
+            if exit_code_script == 1 or exit_code_queue == 1:
+                logger.debug("Either exit code script or exit code_queue is 1")
+                exit_code = 1
+            elif exit_code_script == 2:
+                logger.debug("Exit code script is 2")
+                exit_code = 2
+            elif exit_code_script == 0 and exit_code_queue == 0:
+                logger.debug("Exit code script and exit_code_queue are 0")
+                exit_code = 0
+            elif exit_code_queue == 0 and exit_code_script is None:
+                #Assume there is an error if there is no exit code from the script
+                exit_code = 1
+            elif exit_code_queue:
+                if exit_code_queue > 2:
+                    exit_code = 1
+            #except Exception as e:
+            #    logger.debug(f"Error while updating job status params: {e}")
+            #    logger.debug(traceback.print_exc())
 
         
         if not 'task_status' in params:

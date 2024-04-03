@@ -318,7 +318,6 @@ class MonitorJob(QObject):
         if self.job_params['queue']:
             self._parent.job.get_queue_pid(self.log_file, self.job_params['job_id'], self.sess)
         #Update job_params status parameters exit_code, status, and task_status
-        
         self.job_params = self._parent.job.get_job_status_from_log(self.job_params)
         time.sleep(10)
 
@@ -420,10 +419,16 @@ class MonitorJob(QObject):
                         logger.debug(f"{thread_info} No exit code found so far")
                         #If no PID is found and the job is not a queue job, it is assumed that the job has crashed
                         if pid_found and not self._parent.job.check_pid(pid) and not self.job_params['queue']:
-                            logger.debug(f"{thread_info} No exit code but pid does not exist. assuming there is an error.")
-                            self.job_params['status'] = "error"
-                            self._parent.job.update_status("error", self.job_params['job_id'], self.sess)
-                            break
+                            count = 0
+                            while count < 6:
+                                self.job_params = self._parent.job.get_job_status_from_log(self.job_params)
+                                time.sleep(10)
+                                count += 1
+                            if self.job_params['exit_code'] is None:
+                                logger.debug(f"{thread_info} No exit code but pid does not exist. assuming there is an error.")
+                                self.job_params['status'] = "error"
+                                self._parent.job.update_status("error", self.job_params['job_id'], self.sess)
+                                break
                         else:
                             logger.debug(f"{thread_info} pid {pid} found for job id or is queue job.")
                     else:
