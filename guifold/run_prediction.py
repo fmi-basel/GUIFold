@@ -78,6 +78,7 @@ Base = declarative_base()
 
 
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "false"
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 logging.set_verbosity(logging.INFO)
 
@@ -1417,7 +1418,8 @@ def main(argv):
                 os.environ["CUDA_VISIBLE_DEVICES"] = ""
                 FLAGS.num_gpu = 0
                 gpu_available = False
-                max_tasks = FLAGS.num_cpu
+                #Can only use one CPU otherwise too many threads are created https://github.com/google/jax/issues/1539
+                max_tasks = 1
                 logging.warning(f"No GPUs found. Switching to CPU.")
             elif available_gpus < FLAGS.num_gpu:
                 FLAGS.num_gpu = available_gpus

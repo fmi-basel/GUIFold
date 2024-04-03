@@ -57,6 +57,7 @@ PKL_KEYS_TO_KEEP = ['predicted_aligned_error',
                     'num_recycles']
 
 matplotlib.use('Agg')
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
 
 class EvaluationPipeline:
     def __init__(self, fasta_path: str = None, results_dir: str = None, features_dir: str = None, continue_from_existing_results: bool = False, custom_spacing: bool = False,
