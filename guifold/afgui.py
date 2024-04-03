@@ -866,7 +866,10 @@ class MainFrame(QtWidgets.QMainWindow):
                         else:
                             logger.debug(f"No batch msa folder found: {batch_msas_path}")
                         if not self.jobparams.precomputed_msas_path.is_set():
-                            msg =  'Pairwise combinatorial prediction requires precomputed MSAs (e.g. from batch_msas job).'
+                            msg =  (f"Pairwise combinatorial prediction requires precomputed MSAs for all "
+                                        f"sequences (from a batch_msas job). In the 'Precomputed MSAs path' choose " 
+                                        f"a directory that contains subfolders with MSAs for all subunits and from the same feature pipeline. "
+                                        f"e.g. /path/to/project/batch_msas_job_name/features/{job_params['db_preset']}")
                             message_dlg('error', msg) 
                             raise InputError(msg)
                         else:
@@ -876,7 +879,11 @@ class MainFrame(QtWidgets.QMainWindow):
                                 missing_msa_list.append(desc)
                         if len(missing_msa_list) > 0:
                             missing_msa_string = ', '.join(missing_msa_list)
-                            msg = f'MSA for {missing_msa_string} not found in {self.jobparams.precomputed_msas_path.get_value()}'
+                            msg = (f"MSA(s) for {missing_msa_string} not found in {self.jobparams.precomputed_msas_path.get_value()}\n\n"
+                                        f"Pairwise combinatorial prediction requires precomputed MSAs for all "
+                                        f"sequences (from a batch_msas job). In the 'Precomputed MSAs path' choose "
+                                        f"a directory that contains subfolders with MSAs for all subunits and from the same feature pipeline. "
+                                        f"e.g. /path/to/project/batch_msas_job_name/features/{job_params['db_preset']}")
                             message_dlg('error', msg) 
                             raise InputError(msg)      
 
@@ -1422,6 +1429,20 @@ class MainFrame(QtWidgets.QMainWindow):
             self.btn_split_sequences.setEnabled(True)
         else:
             self.btn_split_sequences.setEnabled(False)
+        if pipeline_name in self.screening_protocol_names:
+            if 'features_path' in self.gui_params:
+                batch_msas_path = self.gui_params["features_path"]
+                if batch_msas_path:
+                    if os.path.exists(batch_msas_path):
+                        logger.debug(f"batch msa folder found: {batch_msas_path} ")
+                        self.jobparams.precomputed_msas_path.set_value(batch_msas_path)
+                        self.jobparams.precomputed_msas_path.ctrl.setText(batch_msas_path)
+                    else:
+                        logger.debug(f"{batch_msas_path} does not exist")
+                else:
+                    logger.debug("batch_msas_path not defined")
+            else:
+                logger.debug(f"features_path not in gui_params")
 
     def OnCmbPrediction(self):
         prediction = self.jobparams.prediction.ctrl.currentText()

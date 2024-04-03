@@ -154,6 +154,7 @@ class LoadJob(QObject):
                 self._parent.gui_params['pairwise_batch_prediction'] = self._parent.jobparams.pairwise_batch_prediction.get_value()
                 self._parent.gui_params['protein_names'] = self._parent.jobparams.get_protein_names()
                 self._parent.gui_params['predictions_dir'] = self._parent.jobparams.predictions_dir.get_value()
+                self._parent.gui_params['features_dir'] = self._parent.jobparams.features_dir.get_value()
                 if self._parent.gui_params['pairwise_batch_prediction']:
                     if self._parent.gui_params['predictions_dir']:
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['predictions_dir'])
@@ -165,6 +166,10 @@ class LoadJob(QObject):
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
                         if not os.path.exists(self._parent.gui_params['results_path']):
                             self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']  
+                    if self._parent.gui_params['features_dir']:
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['features_dir'])
+                    else:
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'])
                 else:
                     if self._parent.gui_params['predictions_dir']:
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['predictions_dir'], self._parent.gui_params['protein_names'])
@@ -176,6 +181,10 @@ class LoadJob(QObject):
                             self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
                             if not os.path.exists(self._parent.gui_params['results_path']):
                                 self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
+                    if self._parent.gui_params['features_dir']:
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['features_dir'])
+                    else:
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'])
                 self._parent.gui_params['self._parent_settings_changed'] = True
 
                 #Reads log file
