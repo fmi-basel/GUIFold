@@ -676,6 +676,9 @@ def find_index(list_of_dicts, value):
     return None
 
 def check_batch_prediction_task(description_1, description_2, combinations, scores, prediction_pipeline, flags):
+    if isinstance(description_1, list):
+        description_1 = '_'.join(description_1)
+    
     #Skip task if the complementary pair already exists
     if (description_2, description_1) in combinations:
         return False
@@ -1279,36 +1282,46 @@ def main(argv):
         #Split sequences if too long
         #prediction_groups_mapping = split_sequences(prediction_groups_mapping, max_batch_sequence_length=FLAGS.batch_max_sequence_length)
         for id, group in prediction_groups_mapping.items():
+            desc_1_list, seq_1_list, index_1_list = [], [], []
             for desc_1, (seq_1, index_1) in group['baits'].items():
                 desc_1_prev = desc_1
-                for desc_2, (seq_2, index_2) in group['preys'].items():
-                    desc_2_prev = desc_2
-                    kwargs = {k: v for (k,v) in kwargs_common.items()}
+                desc_1_list.append(desc_1)
+                seq_1_list.append(seq_1)
+                index_1_list.append(index_1)
+            for desc_2, (seq_2, index_2) in group['preys'].items():
+                desc_2_prev = desc_2
+                kwargs = {k: v for (k,v) in kwargs_common.items()}
+                if len(desc_1_list) == 1:
+                    desc_1 = desc_1_list[0]
+                    desc_1_prev = desc_1
                     if desc_1 == desc_2:
                         desc_1 = f"{desc_1}_1"
                         desc_2 = f"{desc_2}_2"
-                    no_msa_list = [no_msa_list_full[index_1]] + [no_msa_list_full[index_2]]
-                    no_template_list = [no_template_list_full[index_1]] + [no_template_list_full[index_2]]
-                    custom_template_list = [custom_template_list_full[index_1]] + [custom_template_list_full[index_2]]
-                    precomputed_msas_list = [precomputed_msas_list_full[index_1]] + [precomputed_msas_list_full[index_2]]
-                    multichain_template_list = [multichain_template_list_full[index_1]] + [multichain_template_list_full[index_2]]
-                    kwargs['no_msa_list'] = no_msa_list
-                    kwargs['no_template_list'] =  no_template_list
-                    kwargs['custom_template_list'] = custom_template_list
-                    kwargs['precomputed_msas_list'] = precomputed_msas_list
-                    kwargs['multichain_template_list'] = multichain_template_list
-                    if check_batch_prediction_task(desc_1, desc_2, combinations, scores, prediction_pipeline, FLAGS):
-                        kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1, desc_2, seq_1, seq_2)
-                        index = find_index(scores, kwargs['protein_names'])
-                        kwargs['score_dict'] = scores[index]
-                        if not kwargs in tasks:
-                            tasks.append(kwargs)
-                        else:
-                            logging.warning(f"{kwargs['protein_names']} already in task list. Not added again.")
+                else:
+                    desc_1_prev = None
+                no_msa_list = [no_msa_list_full[index_1] for index_1 in index_1_list] + [no_msa_list_full[index_2]]
+                no_template_list = [no_template_list_full[index_1] for index_1 in index_1_list] + [no_template_list_full[index_2]]
+                custom_template_list = [custom_template_list_full[index_1] for index_1 in index_1_list] + [custom_template_list_full[index_2]]
+                precomputed_msas_list = [precomputed_msas_list_full[index_1] for index_1 in index_1_list] + [precomputed_msas_list_full[index_2]]
+                multichain_template_list = [multichain_template_list_full[index_1] for index_1 in index_1_list] + [multichain_template_list_full[index_2]]
+                kwargs['no_msa_list'] = no_msa_list
+                kwargs['no_template_list'] =  no_template_list
+                kwargs['custom_template_list'] = custom_template_list
+                kwargs['precomputed_msas_list'] = precomputed_msas_list
+                kwargs['multichain_template_list'] = multichain_template_list
+                if check_batch_prediction_task(desc_1_list, desc_2, combinations, scores, prediction_pipeline, FLAGS):
+                    kwargs['protein_names'], kwargs['fasta_path'] = create_input_fasta(desc_1_list, desc_2, seq_1_list, seq_2)
+                    index = find_index(scores, kwargs['protein_names'])
+                    kwargs['score_dict'] = scores[index]
+                    if not kwargs in tasks:
+                        tasks.append(kwargs)
+                    else:
+                        logging.warning(f"{kwargs['protein_names']} already in task list. Not added again.")
+                    for desc_1 in desc_1_list:
                         subunit_list.append(desc_1)
-                        subunit_list.append(desc_2)
-                    desc_1 = desc_1_prev
-                    desc_2 = desc_2_prev
+                    subunit_list.append(desc_2)
+                desc_1 = desc_1_prev
+                desc_2 = desc_2_prev
         
     elif FLAGS.pipeline in ['grouped_all_vs_all', 'all_vs_all']:
         logging.info(f"Task list at beginning")
