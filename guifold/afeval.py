@@ -40,6 +40,7 @@ from alphafold.data import parsers
 import pickle
 import re
 import typing
+import logging as logging_python
 
 
 import plotly.graph_objects as go
@@ -58,6 +59,7 @@ PKL_KEYS_TO_KEEP = ['predicted_aligned_error',
 
 matplotlib.use('Agg')
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
+logging_python.getLogger('matplotlib.font_manager').disabled = True
 
 class EvaluationPipeline:
     def __init__(self, fasta_path: str = None, results_dir: str = None, features_dir: str = None, continue_from_existing_results: bool = False, custom_spacing: bool = False,
