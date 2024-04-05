@@ -191,7 +191,7 @@ def check_force_settings_update():
         else:
             logger.debug("\'OTHER\' section not found in config.")
     else:
-        logger.debug("Config file not found")
+        logger.debug("Global config file not found")
     return force_update
 
 def center_on_screen(obj):
@@ -261,11 +261,12 @@ class MainFrame(QtWidgets.QMainWindow):
 
         logger.debug("GUI params")
         logger.debug(self.gui_params)
-        #picker_widget = StylePickerWidget() # <-- this QComboBox allows the user to change style sheets
-        #self.setCentralWidget(picker_widget) 
+
+        msgs = self.validate_settings()
 
 
-    # self.check_executables()
+
+
         self.currentDirectory = os.getcwd()
         self.threads = []
         self.thread_workers = []
@@ -273,6 +274,14 @@ class MainFrame(QtWidgets.QMainWindow):
         self.show() # Show the GUI
         logger.debug("GUI params")
         logger.debug(self.gui_params)
+        if len(msgs) > 0:
+            msgs.append('You will not be able to run a default job!')
+            message_dlg('warning', '\n'.join(msgs))
+        if self.jobparams.queue.get_value():
+            msgs = self.validate_settings(category='queue')
+            if len(msgs) > 0:
+                msgs.insert(0, 'Submit to Queue selected but queue submission not configured properly:')
+                message_dlg('warning', '\n'.join(msgs))
 
 
 
@@ -389,13 +398,14 @@ class MainFrame(QtWidgets.QMainWindow):
     def init_settings(self):
         logger.debug("=== Initializing Settings ===")
         if self.settings.add_blank_entry(self.sess):
-            self.settings.update_from_global_config()
+            self.settings.update_from_config()
             slurm_account = self.settings.get_slurm_account()
             if not slurm_account is None:
                 self.settings.set_slurm_account(slurm_account, self.sess)
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
         elif self.gui_params['settings_locked'] or self.gui_params['force_settings_update']:
-            self.settings.update_from_global_config()
+            logger.info("Settings are updated from global configuration file.")
+            self.settings.update_from_config()
             self.settings.update_settings(self.settings.get_dict_db_insert(), self.sess)
 
     def create_monitor_thread(self, job_params):
@@ -418,10 +428,54 @@ class MainFrame(QtWidgets.QMainWindow):
         if self.prj.is_empty(self.sess):
             dlg = ProjectDlg(self, "add")
             if dlg.exec_():
-                self.gui_params = self.prj.init_gui(self.gui_params, sess=self.sess)
+                self.gui_params = self.prj.init_gui(self.gui_params, other=self, sess=self.sess)
         if self.prj.is_empty(self.sess):
             logger.error("Cannot start GUI without initial project.")
             raise SystemExit
+        
+    def validate_settings(self, category=None):
+        msgs = []
+        required_default = ['jackhmmer_binary_path',
+                    'hhblits_binary_path',
+                    'hhsearch_binary_path',
+                    'hmmsearch_binary_path',
+                    'hmmbuild_binary_path',
+                    'hhalign_binary_path',
+                    'kalign_binary_path',
+                    'data_dir',
+                    'uniref90_database_path',
+                    'uniref30_database_path',
+                    'bfd_database_path',
+                    'uniprot_database_path',
+                    'pdb70_database_path',
+                    'pdb_seqres_database_path',
+                    'template_mmcif_dir']
+        required_queue = ['queue_submit',
+                                    'queue_cancel',
+                                    'min_cpus',
+                                    'max_cpus',
+                                    'max_gpu_mem',
+                                    'min_ram',
+                                    'max_ram',
+                                    'queue_jobid_regex']
+        required_colabfold = ['uniref90_mmseqs_database_path',
+                                        'uniref30_mmseqs_database_path',
+                                        'uniprot_mmseqs_database_path',
+                                        'colabfold_envdb_database_path',
+                                        'mmseqs_binary_path']
+        if category is None:
+            required = required_default
+        elif category == 'queue':
+            required = required_queue
+        elif category == 'colabfold':
+            required = required_colabfold
+        settings = self.settings.get_from_db(self.sess)
+        for var in vars(settings):
+            if var in required:
+                obj = getattr(settings, var)
+                if obj is None or obj == '':
+                    msgs.append(f'{var} needs to be defined in Settings.')
+        return msgs
 
     def reconnect_jobs(self):
         jobs = self.job.reconnect_jobs(self.sess)
@@ -464,6 +518,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.evaluation.pairwise_combinations_list.ctrl.activated.connect(self.OnCmbCombinations)
         self.jobparams.pipeline.ctrl.activated.connect(self.OnCmbPipeline)
         self.jobparams.prediction.ctrl.activated.connect(self.OnCmbPrediction)
+        self.jobparams.db_preset.ctrl.activated.connect(self.OnCmbDbPreset)
         #TreeWidget
         self.job.list.ctrl.itemExpanded.connect(self.OnItemExpanded)
         self.job.list.ctrl.itemCollapsed.connect(self.OnItemCollapsed)
@@ -718,6 +773,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     job_params['split_job'] = settings.split_job
                     job_params['split_job_step'] = None
                     job_params['queue_jobid_regex'] = settings.queue_jobid_regex
+                    job_params['submission_script_template_path'] = settings.submission_script_template_path
                     if job_params['split_job']:
                         if job_params['queue_jobid_regex'] is None or job_params['queue_jobid_regex'] == "":
                             message_dlg('Error', 'Split_job requested but no queue_jobid_regex defined!')
@@ -1448,6 +1504,17 @@ class MainFrame(QtWidgets.QMainWindow):
         prediction = self.jobparams.prediction.ctrl.currentText()
         if prediction == 'alphafold':
             self.jobparams.num_gpu.set_value(1)
+
+    def OnCmbDbPreset(self):
+        logger.debug("OnCmbDbPreset")
+        db_preset = self.jobparams.db_preset.ctrl.currentText()
+        logger.debug(f"db_preset {db_preset}")
+        if db_preset == 'colabfold_local':
+            msgs = self.validate_settings(category='colabfold')
+            if len(msgs) > 0:
+                msgs.insert(0, 'Settings are not configured properly for colabfold_local pipeline:')
+                message_dlg('warning', '\n'.join(msgs))
+
 
     def update_from_db_slot(self, params, thread):
         self.jobparams.update_from_db(params)

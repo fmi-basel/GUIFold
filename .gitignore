@@ -25,3 +25,4 @@ testing/mmseqs_test.py
 testing/mmseqs_api.py
 testing/prepare_fastfold_memory.py
 joss/
+guifold/config/guifold_test.conf

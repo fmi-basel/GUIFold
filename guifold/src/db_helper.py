@@ -27,7 +27,7 @@ from shutil import copyfile
 #Base = declarative_base()
 logger = logging.getLogger('guifold')
 
-DB_REVISION = 12
+DB_REVISION = 13
 
 def get_type(type):
     types = {'str': String,
@@ -286,7 +286,6 @@ class DBHelper:
         stmts += ['ALTER TABLE settings ADD COLUMN max_cpus INTEGER DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD COLUMN uniref90_mmseqs_database_path VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE settings ADD COLUMN uniprot_mmseqs_database_path VARCHAR DEFAULT NULL']
-        stmts += ['ALTER TABLE settings ADD COLUMN pdb100_database_path VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN first_n_seq INTEGER DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN batch_max_sequence_length INTEGER DEFAULT(5000)']
         stmts += ['ALTER TABLE job ADD COLUMN job_status_log_file VARCHAR DEFAULT NULL']
@@ -294,6 +293,7 @@ class DBHelper:
         stmts += ['ALTER TABLE jobparams ADD COLUMN predictions_dir VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN features_dir VARCHAR DEFAULT NULL']
         stmts += ['ALTER TABLE jobparams ADD COLUMN multichain_template_path VARCHAR DEFAULT NULL']
+        stmts += ['ALTER TABLE settings ADD COLUMN submission_script_template_path VARCHAR DEFAULT NULL']
         with self.engine.connect() as conn:
             for stmt in stmts:
                 try:

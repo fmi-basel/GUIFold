@@ -28,6 +28,7 @@ class SettingsDlg(QtWidgets.QDialog):
         self.sess = _parent.sess
         self.settings = _parent.settings
         uic.loadUi(pkg_resources.resource_filename('guifold.ui', 'settings.ui'), self)
+        #Second element determines whether folder (True) or File (False)
         self.btn_choosefolder_names = [('jackhmmer_binary_path', False),
                                        ('hhblits_binary_path', False),
                                        ('hhsearch_binary_path', False),
@@ -37,6 +38,7 @@ class SettingsDlg(QtWidgets.QDialog):
                                        ('mmseqs_binary_path', False),
                                        ('kalign_binary_path', False),
                                        ('uniref90_database_path', False),
+                                       ('uniref90_mmseqs_database_path', False),
                                        ('uniref30_database_path', False),
                                        ('uniref30_mmseqs_database_path', False),
                                        ('colabfold_envdb_database_path', False),
@@ -44,6 +46,7 @@ class SettingsDlg(QtWidgets.QDialog):
                                        ('bfd_database_path', False),
                                        ('small_bfd_database_path', False),
                                        ('uniprot_database_path', False),
+                                       ('uniprot_mmseqs_database_path', True),
                                        ('pdb70_database_path', True),
                                        ('pdb_seqres_database_path', False),
                                        ('template_mmcif_database_path', True),
@@ -61,6 +64,8 @@ class SettingsDlg(QtWidgets.QDialog):
 
         self.settings.set_controls(self, self.settings.db_table)
         self.btn_settings_load_global_settings = self.findChild(QtWidgets.QPushButton, "btn_settings_load_global_settings")
+        self.btn_settings_load_local_settings = self.findChild(QtWidgets.QPushButton, "btn_settings_load_local_settings")
+        self.btn_settings_submission_script_template_path = self.findChild(QtWidgets.QToolButton, "btn_settings_submission_script_template_path")
         self.button_box = self.findChild(QtWidgets.QDialogButtonBox, "btn_settings_button_box")
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -75,6 +80,8 @@ class SettingsDlg(QtWidgets.QDialog):
             logger.debug(f"{item}")
         #self.btn_ok.clicked.connect(self.OnBtnOk)
         self.btn_settings_load_global_settings.clicked.connect(self.OnBtnLoadGlobalSettings)
+        self.btn_settings_load_local_settings.clicked.connect(self.OnBtnLoadLocalSettings)
+        self.btn_settings_submission_script_template_path.clicked.connect(self.OnBtnChooseFolderSubmissionTemplate)
 
     def init(self):
         settings = self.settings.get_from_db(self.sess)
@@ -94,16 +101,31 @@ class SettingsDlg(QtWidgets.QDialog):
             var.ctrl.setText(path)
 
     def OnBtnLoadGlobalSettings(self):
-        msgs = self.settings.update_from_global_config()
-        self.settings.update_from_self()
-        for msg in msgs:
-            message_dlg("error", msg)
+        msgs = self.settings.update_from_config()
+        if len(msgs) == 0:
+            self.settings.update_from_self()
+        else:
+            message_dlg("error", '\n'.join(msgs))   
 
-    def OnBtnChooseFolderQueueTemplate(self):
+    def OnBtnLoadLocalSettings(self):
+        dlg = QtWidgets.QFileDialog()
+        if dlg.exec_():
+            path = dlg.selectedFiles()[0]
+            logger.debug(path)
+            msgs = self.settings.update_from_config(custom_path=path)
+            if len(msgs) == 0:
+                self.settings.update_from_self()
+            else:
+                message_dlg("error", '\n'.join(msgs))
+
+    def OnBtnChooseFolderSubmissionTemplate(self):
         logger.debug("OnBtnChooseFolderQueueTemplate")
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
-        self.settings.queue_template.set_value(path)
-        self.settings.queue_template.ctrl.setText(path)
+        dlg = QtWidgets.QFileDialog()
+        if dlg.exec_():
+            path = dlg.selectedFiles()[0]
+            logger.debug(path)
+        self.settings.submission_script_template_path.set_value(path)
+        self.settings.submission_script_template_path.ctrl.setText(path)
 
     def accept(self):
         self.settings.update_from_gui()

@@ -124,8 +124,6 @@ flags.DEFINE_string('uniprot_mmseqs_database_path', None, 'Path to the Uniprot '
                     'database for use by JackHMMer.')
 flags.DEFINE_string('pdb70_database_path', None, 'Path to the PDB70 '
                     'database for use by HHsearch.')
-flags.DEFINE_string('pdb100_database_path', None, 'Path to the PDB100 '
-                    'database for use by HHsearch.')
 flags.DEFINE_string('pdb_seqres_database_path', None, 'Path to the PDB '
                     'seqres database for use by hmmsearch.')
 flags.DEFINE_string('template_mmcif_dir', None, 'Path to a directory with '

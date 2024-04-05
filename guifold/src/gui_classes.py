@@ -27,7 +27,7 @@ import logging
 import socket
 from Bio import SeqIO
 from PyQt5 import QtWidgets, QtGui, QtCore, QtWebEngineWidgets
-from jinja2 import Template, Environment, meta, PackageLoader
+from jinja2 import FileSystemLoader, Template, Environment, meta, PackageLoader
 from guifold.src.db_helper import DBHelper
 from guifold.src.gui_dialogs import message_dlg, open_files_and_dirs_dlg
 from sqlalchemy.orm.exc import NoResultFound
@@ -773,9 +773,9 @@ class GUIVariables:
             obj = getattr(self, var)
             if hasattr(obj, 'db'):
                 if obj.db is True and obj.db_primary_key is False and obj.db_foreign_key is None and obj.db_relationship is None:
-                    logger.debug(f"dict db insert var {var} value {obj.value}")
-                    if obj.is_set():
-                        insert_dict[obj.var_name] = obj.value
+                    logger.debug(f"dict db insert var {var} value {obj.value} type {type(obj.value)}")
+                    #if obj.is_set():
+                    insert_dict[obj.var_name] = obj.value
                 elif not obj.db_relationship is None:
                     if not foreign_obj is None:
                         insert_dict[obj.var_name] = foreign_obj
@@ -1516,7 +1516,7 @@ class Job(GUIVariables):
         else:
             return False
 
-    def prepare_submit_script(self, job_params, job_args, estimated_gpu_mem, split_mem):
+    def prepare_submission_script(self, job_params, job_args, estimated_gpu_mem, split_mem):
         msgs = []
         logger.debug("Preparing submit script")
         logger.debug(f"Estimated GPU mem: {estimated_gpu_mem}")
@@ -1524,12 +1524,29 @@ class Job(GUIVariables):
             command = ["run_prediction.py\\\n"] + job_args
         command = ' '.join(command)
         logfile = os.path.join(job_params['job_path'], job_params["log_file"])
-        submit_script = f"{job_params['job_path']}/submit_script_{job_params['type']}.run"
+        submission_script = f"{job_params['job_path']}/submission_script_{job_params['type']}.run"
 
         #templates = pkg_resources.resource_filename("guifold", "templates")
-        env = Environment(loader=PackageLoader("guifold", "templates"))
-        template = env.get_template('submit_script.j2')
-        template_source = env.loader.get_source(env, 'submit_script.j2')
+        submission_script_template = job_params['submission_script_template_path']
+        if submission_script_template:
+            if os.path.exists(submission_script_template):
+                env = Environment(loader=FileSystemLoader(os.path.dirname(submission_script_template)))
+                template = env.get_template(os.path.basename(submission_script_template))
+                template_source = env.loader.get_source(env, os.path.basename(submission_script_template))
+            else:
+                msg = f"Custom submission script not found in {submission_script_template}!"
+                msgs.append(msg)
+                logger.debug(msg)
+                return None, msgs
+        else:
+            env = Environment(loader=PackageLoader("guifold", "templates"))
+            template = env.get_template('submission_script.j2')
+            template_source = env.loader.get_source(env, 'submission_script.j2')
+            if not os.path.exists(template.filename):
+                msg = f"Global submission script template not found in {template.filename}. A custom submission script template can be defined in settings."
+                msgs.append(msg)
+                logger.debug(msg)
+                return None, msgs
         parsed_content = env.parse(template_source)
         template_vars = meta.find_undeclared_variables(parsed_content)
         logger.debug("Template vars:")
@@ -1623,10 +1640,10 @@ class Job(GUIVariables):
                                    command=command,
                                    logfile=logfile)
 
-        logger.debug(f"Writing to file {submit_script}")
-        with open(submit_script, 'w') as f:
+        logger.debug(f"Writing to file {submission_script}")
+        with open(submission_script, 'w') as f:
             f.write(rendered)
-        return submit_script, msgs
+        return submission_script, msgs
 
     def calculate_gpu_mem_alphafold(self, total_seq_length: int) -> int:
         """Calculate required gpu memory in GB by sequence length for alphafold"""
@@ -1731,9 +1748,9 @@ class Job(GUIVariables):
                           job_params['pipeline'] in ['only_features', 'batch_msas']])
         if job_params['queue']:
             queue_submit = job_params['queue_submit']
-            submit_script, more_msgs = self.prepare_submit_script(job_params, job_args, estimated_gpu_mem, split_mem)
+            submission_script, more_msgs = self.prepare_submission_script(job_params, job_args, estimated_gpu_mem, split_mem)
             error_msgs.extend(more_msgs)
-            cmd = [queue_submit, submit_script]
+            cmd = [queue_submit, submission_script]
         else:
             cmd = []
             if not split_mem is None and not job_params['force_cpu']:
@@ -2472,6 +2489,7 @@ class Settings(GUIVariables):
         self.queue_submit = Variable('queue_submit', 'str', ctrl_type='lei')
         self.queue_cancel = Variable('queue_cancel', 'str', ctrl_type='lei')
         self.queue_account = Variable('queue_account', 'str', ctrl_type='lei')
+        self.submission_script_template_path = Variable('submission_script_template_path', 'str', ctrl_type='lei')
         self.num_cpu = Variable('num_cpu', 'int', ctrl_type='sbo', cmd=True, db=False)
         self.min_cpus = Variable('min_cpus', 'int', ctrl_type='sbo')
         self.max_cpus = Variable('max_cpus', 'int', ctrl_type='sbo')
@@ -2502,7 +2520,6 @@ class Settings(GUIVariables):
         self.uniprot_database_path = Variable('uniprot_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.uniprot_mmseqs_database_path = Variable('uniprot_mmseqs_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb70_database_path = Variable('pdb70_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
-        self.pdb100_database_path = Variable('pdb100_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.pdb_seqres_database_path = Variable('pdb_seqres_database_path', 'str', ctrl_type='lei', cmd=True, required=True)
         self.template_mmcif_dir = Variable('template_mmcif_dir', 'str', ctrl_type='lei', cmd=True, required=True)
         self.obsolete_pdbs_path = Variable('obsolete_pdbs_path', 'str', ctrl_type='lei', cmd=True, required=True)
@@ -2552,10 +2569,14 @@ class Settings(GUIVariables):
         result.queue_account = account
         sess.commit()
 
-    def update_from_global_config(self):
+    def update_from_config(self, custom_path=None):
         msgs = []
-        logger.debug("update from global config")
-        config_file = pkg_resources.resource_filename('guifold.config', 'guifold.conf')
+        if custom_path is None:
+            config_file = pkg_resources.resource_filename('guifold.config', 'guifold.conf')
+            logger.debug("update from global config")
+        else:
+            config_file = custom_path
+            logger.debug("update from custom config")
         logger.debug(config_file)
         if os.path.exists(config_file):
             config = configparser.ConfigParser()
@@ -2577,6 +2598,10 @@ class Settings(GUIVariables):
                     error_msg = f"{section} section missing from config file"
                     logger.error(error_msg)
                     msgs.append(error_msg)
+        else:
+            error_msg = f"{config_file} does not exist!"
+            logger.error(error_msg)
+            msgs.append(error_msg)
 
         return msgs
 
@@ -2626,14 +2651,14 @@ class Settings(GUIVariables):
             for var in vars(self):
                 logger.debug(var)
                 obj = getattr(self, var)
-                try:
-                    if hasattr(obj, db):
-                        if obj.db and not obj.db_primary_key:
-                            blank[obj] = ''
-                except NameError:
-                    pass
-                except Exception as e:
-                    traceback.print_exc()
+                #try:
+                #    if hasattr(obj, db):
+                #        if obj.db and not obj.db_primary_key:
+                #            blank[obj] = ''
+                #except NameError:
+                #    pass
+                #except Exception as e:
+                #    traceback.print_exc()
             #blank.update({'global_config': False})
             self.db_insert_settings([blank], sess)
             return True
@@ -2663,6 +2688,7 @@ class Settings(GUIVariables):
         else:
             for key, value in insert_dict[0].items():
                 setattr(settings, key, value)
+                logger.debug(f"Setting {key} to {value} type {type(value)}")
             sess.commit()
 
 class DefaultValues:

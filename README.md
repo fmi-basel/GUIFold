@@ -71,7 +71,7 @@ Solution: Add the following path to the LD_LIBRARY_PATH in the command prompt: `
 Follow instructions in the [AlphaFold readme](https://github.com/deepmind/alphafold#genetic-databases).
 
 
-### Setup of global configuration file
+### (OPTIONAL) Setup of global configuration file
 
 When GUIFold is installed in a shared location it is recommended 
 to create a global configuration file so that the users don't have to configure the paths on their own.
@@ -89,7 +89,17 @@ cd GUIFold
 python setup.py clean --all install clean --all
 ```
 
-### Setup of MMseqs2 and colabfold databases (OPTIONAL)
+### (OPTIONAL) Setup of a local configuration file
+
+As an alternative to a global configuration file stored inside the GUIFold installation directory, a "local" configuration file can be created from the template `GUIFold/guifold/config/template.conf` and stored in any location. To load the settings from this file go to the `Settings` dialog in the GUI and click the `Load local config` button (bottom right). 
+
+### Manual configuration of settings inside the GUI
+
+If no configuration file is supplied, settings need to be defined in the `Settings` dialog and will be stored in the user's database. This has to be done by each user separately.
+
+### (OPTIONAL) Setup of MMseqs2 and colabfold databases
+
+The following steps are only required if the optional feature pipeline 'colabfold_local' is intended to be used. It is not necessary to run the default alphafold pipeline.
 
 #### MMSeqs2 installation
 
@@ -154,35 +164,65 @@ To use the standard Alphafold protocol for MSA pairing, GUIFold currently needs 
 6. Click `Run` button
 7. In the `Log` tab after some initialization, you should see the lines `Creating database...`. This step can take up to a few hours depending on hardware.
 
-### Setup of cluster submission template
+### (OPTIONAL) Configuration of cluster submission
 
-The Jinja2 package is used to render the submission script template. See [Jinja2 documentation](https://jinja.palletsprojects.com/en/3.0.x/) for further information. The variables listed below can be used to create a template. See also examples below.
+**This step is only required if GUIFold is inteded to be used in combination with queuing systems (on a cluster).**
 
-The template needs to be saved to `GUIFold/guifold/templates/submit_script.j2`. In the same folder you can find an example for a SLURM cluster.
+#### Settings
 
-After saving the template to the above location, re-install the package if it has been installed before:
-```
-(conda activate /path/to/conda_env)
-cd GUIFold
-python setup.py clean --all install clean --all
-```
+Queuing system specific settings need to be defined in the configuration file or in the `Settings`dialog of the GUI.
+
+The following table shows configurations for common queueing systems:
+
+Setting      | SLURM        | UGE/SGE
+-----------: | -----------: | ----------:
+Submit cmd   | sbatch       | qsub
+Cancel cmd   | scancel      | qdel
+JobID regex  | \D*(\d+)\D   | ?
+
+Other settings:
+
+`Min num CPUs` The minimum number of CPUs to request. This number of CPUs will be used for feature pipelines based on jackhmmer and hhblits. In our case a number of 20 CPUs works well.
+
+`Max num CPUs` The maximum number of CPUs to request. This number is only used by feature pipelines based on mmseqs (currently only colabfold_local). In our case a number of 50 CPUs works well.
+
+`Max RAM (GB)` The maximum RAM to request. This is only needed for certain tasks such as unified memory prediction or local mmseqs depending on the database (split) size (see setup of colabfold databases). We use 600 GB.
+
+`Min RAM (GB)` The minimum RAM to request. This will be requested by default and should be high enough to avoid out of memory errors during the MSA step. In a few cases MSAs can get very large and require up to 120 GB.
+
+`Max GPU memory (GB)` The maximum available GPU memory (on a single GPU model). 
+
+`Split job` Whether to split the job into feature (CPU-only) and prediction steps (requires specific configuration of the submission script template, see below)
+
+`Queue account` (Optional) Only needs to be set when an account is needed to submit jobs on a cluster. Each user has to define it individually.
+
+`Use queue by default` Activates the `Submit to Queue` checkbox by default.
+
+#### Preparation of a submission script template
+
+The Jinja2 package is used to render the submission script template. See [Jinja2 documentation](https://jinja.palletsprojects.com/en/3.0.x/) for further information. The variables listed below can be used to create a template. An example file for a slurm cluster can be found in `guifold/templates/submission_script_slurm.j2`. The content of the file is also listed below ![link](example-of-a-template-for-SLURM).
+
+The template file can be saved to any location. The path to the template needs to be set in the configuration file (see above) or in the `Settings` dialog of the GUI
+
 
 #### Automatically splitting a job into CPU and GPU parts
+
 If the queueing system supports dependencies (i.e. a job waits in the queue until another job has finished), the "split job feature" can be activated in the GUI settings if needed. Since the feature generation step does not require GPU, this step can be run on CPU-only resources. Two jobs will be submitted, the first job will request CPU (`use_gpu=False`) and the second job (`use_gpu=True`) will wait for the first job to finish (if the dependency is configured). An example how to add a dependency for SLURM and how to create a conditional to request CPU or GPU resources is provided below. Alternatively, the job can be manually devided into CPU and GPU steps by choosing `Only Features` in the GUI and, after this job has finished, re-starting the job with `Only Features` deactivated. 
 
-#### Variables that can be accessed in the submission template
+#### Variables that can be used in the submission script template
+
 GUIFold supports the following variables that can be used in the submission template. The parameters are determined based on the input and settings (configuration file or Settings dialog in the app):<br/><br/>
-`{{logfile}}` (required) Path to the log file<br/>
-`{{account}}` (optional) When a specific account is needed to run jobs on the cluster<br/>
+`{{logfile}}` (required) Path to the log file. Generated by the App.<br/>
+`{{account}}` (optional) When a specific account is needed to run jobs on the cluster. As defined in settings.<br/>
 `{{use_gpu}}` (optional) This can be used to build a conditional (example below) to select CPU or GPU nodes/queues<br/>
-`{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory for unified memory.<br/>
-`{{num_cpu}}` (optional) Number of CPUs to request
-`{{num_cpu}}` (optional) Number of GPUs to request (only relevant for FastFold)
-`{{total_sequence_length}}` (optional) Total sequence length (not accounting for identical sequences)<br/>
-`{{gpu_mem}}` (optional) Useful when the queuing system supports selection of GPU by memory requirement. Value in GB.<br/>
+`{{mem}}` (optional) How much RAM (in GB) should be reserved. The RAM will be automatically increased with the GPU memory for unified memory. Depends on min/max RAM defined in settings and on the task.<br/>
+`{{num_cpu}}` (optional) Number of CPUs to request (depends on the task and min/max CPUs defined in Settings)
+`{{num_gpu}}` (optional) Number of GPUs to request (depends on the task and number of GPUs set in Advanced job settings)
+`{{total_sequence_length}}` (optional) Total sequence length (not accounting for identical sequences). Useful to set runtime limits. Calculated by the App.<br/>
+`{{gpu_mem}}` (optional) Useful when the queuing system supports selection of GPU by memory requirement. Calculated by the App (in GB unit) based on sequence length.<br/>
 `{{split_mem}}` (optional) If the required memory exceeds the available GPU memory, the job can be run with unified memory. The split_mem variable holds None or the memory split fraction and can be used for a conditional to set the FLAGS required to enable unified memory use (see SLURM example below).<br/>
 `{{add_dependency}}` (required) When the job is started with "split job setting", this variable will be True for the second job (prediction step) and allows adding a dependency on the first job (feature step). <br/>
-`{{commnad}}` (required) The command to run the AlphaFold job
+`{{commnad}}` (required) The command to run the AlphaFold job. Generated by the App.
 
 To cancel jobs from the GUI, the script also needs to write the Job ID to the logfile.
 The pattern needs to be as follows:<br/>
@@ -190,10 +230,7 @@ The pattern needs to be as follows:<br/>
 In case of SLURM it would be:<br/>
 ```echo "QUEUE_JOB_ID=$SLURM_JOB_ID"```
 
-The number of CPUs should be set to 16 (at maximum 1 jackhmmer and 1 hhblits jobs are run in parallel, each set to use 8 CPUs in the respective alphafold.data.tools classes).
-
-
-#### Example of a template for a SLURM cluster.
+#### Example of a template for a SLURM cluster
 
 The cluster in the example below has two types of GPUs, V100 (32 GB) and A100 (80 GB). The variable gpu_mem can be used
 to build conditionals for choosing the appropriate GPU. 
