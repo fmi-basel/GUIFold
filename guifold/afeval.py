@@ -757,10 +757,10 @@ class EvaluationPipeline:
                       key = lambda x: x[1][list(x[1].keys())[2]],
                       reverse=False)
         logging.info(results)
-        protein_name = list(results[0][1].keys())[3]
+        protein_names = '_'.join(self.seq_titles)
         model_name = results[0][0]
-        min_pae = results[0][1][protein_name]
-        return (protein_name.replace(" vs ", "_"), min_pae, model_name)
+        min_pae = results[0][1]['Overall']
+        return (protein_names, min_pae, model_name)
     
     def get_max_iptm(self) -> tuple:
         #return model_name, value
