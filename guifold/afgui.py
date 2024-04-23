@@ -140,6 +140,7 @@ def main():
         obj.set_db(db)
     db.update_queue_jobid_regex(sess)
     db.migrate_to_pipeline_cmb(sess)
+    db.update_db_preset_names(sess)
     db.update_job_type(sess)
 
     sys.excepthook = handle_exception
@@ -797,7 +798,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         job_params['pairwise_batch_prediction'] = False
 
                     #Adjust num cpus based on pipeline
-                    if job_params['db_preset'] == 'colabfold_local':
+                    if job_params['db_preset'] == 'colabfold_dbs_local':
                         if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
                             job_params['num_cpu'] = job_params['max_cpus']
                             logger.debug(f"Switched CPUs to max {job_params['num_cpu']}")  
@@ -969,11 +970,11 @@ class MainFrame(QtWidgets.QMainWindow):
                     logger.debug(f"Log file {job_params['log_file']}")
 
                     #Check if mmseqs_api is selected and give warning notice
-                    if job_params['db_preset'] == 'colabfold_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
+                    if job_params['db_preset'] == 'colabfold_dbs_web' and not split_job_step == 'gpu' and not job_params['pipeline'] == 'continue_from_features':
                         if job_params['pipeline'] in self.screening_protocol_names:
-                            message = "You selected the colabfold_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
+                            message = "You selected the colabfold_dbs_web preset. In case of missing MSAs, this will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel."
                         else:
-                            message = "You selected the colabfold_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
+                            message = "You selected the colabfold_dbs_web preset. This will send your sequences to the MMseqs2 server (https://www.colabfold.com). Please confirm or cancel." 
                         ret = QtWidgets.QMessageBox.question(self, 'Warning', message,
                                                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel)
                         if ret == QtWidgets.QMessageBox.Cancel:
@@ -1271,7 +1272,7 @@ class MainFrame(QtWidgets.QMainWindow):
                         if job_params['use_precomputed_msas']:
                             cmd_dict['use_precomputed_msas'] = ""
                     #Do not use precomputed MSAs in case of colabfold batch mode
-                    if job_params['pipeline'] == 'batch_msas' and job_params['db_preset'] == 'colabfold_local':
+                    if job_params['pipeline'] == 'batch_msas' and job_params['db_preset'] == 'colabfold_dbs_local':
                         if 'use_precomputed_msas' in cmd_dict:
                             del cmd_dict['use_precomputed_msas']
                         if 'precomputed_msas_path' in cmd_dict:
@@ -1289,10 +1290,10 @@ class MainFrame(QtWidgets.QMainWindow):
                         del cmd_dict['uniref30_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
                         del cmd_dict['colabfold_envdb_database_path']
-                    if job_params['db_preset'] == 'colabfold_local':
+                    if job_params['db_preset'] == 'colabfold_dbs_local':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_database_path']
-                    if job_params['db_preset'] == 'colabfold_web':
+                    if job_params['db_preset'] == 'colabfold_dbs_web':
                         del cmd_dict['small_bfd_database_path']
                         del cmd_dict['uniref30_database_path']
                         del cmd_dict['uniref30_mmseqs_database_path']
@@ -1509,10 +1510,10 @@ class MainFrame(QtWidgets.QMainWindow):
         logger.debug("OnCmbDbPreset")
         db_preset = self.jobparams.db_preset.ctrl.currentText()
         logger.debug(f"db_preset {db_preset}")
-        if db_preset == 'colabfold_local':
+        if db_preset == 'colabfold_dbs_local':
             msgs = self.validate_settings(category='colabfold')
             if len(msgs) > 0:
-                msgs.insert(0, 'Settings are not configured properly for colabfold_local pipeline:')
+                msgs.insert(0, 'Settings are not configured properly for colabfold_dbs_local pipeline:')
                 message_dlg('warning', '\n'.join(msgs))
 
 

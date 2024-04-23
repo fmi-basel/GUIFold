@@ -162,14 +162,16 @@ class LoadJob(QObject):
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset']}-{self._parent.gui_params['params_hash']}")
                     #Backward compatibility
                     if not os.path.exists(self._parent.gui_params['results_path']):
-                        logger.debug(f"{self._parent.gui_params['results_path']} does not exist.")
-                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
+                        self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset'].replace('colabfold_dbs', 'colabfold')}-{self._parent.gui_params['params_hash']}")
                         if not os.path.exists(self._parent.gui_params['results_path']):
-                            self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']  
+                            logger.debug(f"{self._parent.gui_params['results_path']} does not exist.")
+                            self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'])
+                            if not os.path.exists(self._parent.gui_params['results_path']):
+                                self._parent.gui_params['results_path'] = self._parent.gui_params['job_path']  
                     if self._parent.gui_params['features_dir']:
                         self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['features_dir'])
                     else:
-                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'])
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'].replace('colabfold_dbs'))
                 else:
                     if self._parent.gui_params['predictions_dir']:
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['predictions_dir'], self._parent.gui_params['protein_names'])
@@ -177,14 +179,16 @@ class LoadJob(QObject):
                         self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset']}-{self._parent.gui_params['params_hash']}", self._parent.gui_params['protein_names'])
                         #Backward compatibility
                         if not os.path.exists(self._parent.gui_params['results_path']):
-                            logger.debug(f"{self._parent.gui_params['results_path']} does not exist.")
-                            self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
+                            self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", f"{self._parent.gui_params['prediction']}-{self._parent.gui_params['db_preset'].replace('colabfold_dbs', 'colabfold')}-{self._parent.gui_params['params_hash']}", self._parent.gui_params['protein_names'])
                             if not os.path.exists(self._parent.gui_params['results_path']):
-                                self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
+                                logger.debug(f"{self._parent.gui_params['results_path']} does not exist.")
+                                self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], "predictions", self._parent.gui_params['prediction'], self._parent.gui_params['protein_names'])
+                                if not os.path.exists(self._parent.gui_params['results_path']):
+                                    self._parent.gui_params['results_path'] = os.path.join(self._parent.gui_params['job_path'], self._parent.gui_params['job_name'])
                     if self._parent.gui_params['features_dir']:
                         self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['features_dir'])
                     else:
-                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'])
+                        self._parent.gui_params['features_path'] = os.path.join(self._parent.gui_params['job_path'], "features", self._parent.gui_params['db_preset'].replace('colabfold_dbs', 'colabfold'))
                 self._parent.gui_params['self._parent_settings_changed'] = True
 
                 #Reads log file

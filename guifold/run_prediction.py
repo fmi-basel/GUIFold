@@ -134,12 +134,12 @@ flags.DEFINE_string('obsolete_pdbs_path', None, 'Path to file containing a '
                     'mapping from obsolete PDB IDs to the PDB IDs of their '
                     'replacements.')
 flags.DEFINE_enum('db_preset', 'full_dbs',
-                  ['full_dbs', 'reduced_dbs', 'colabfold_local', 'colabfold_web'],
+                  ['full_dbs', 'reduced_dbs', 'colabfold_dbs_local', 'colabfold_dbs_web'],
                   'Choose preset MSA database configuration - '
                   'full_dbs: uniref30_bfd:hhblits, mgnify:jackhmmer, uniref90:jackhmmer, uniprot:jackhmmer '
                   'reduced_dbs: uniref30:jackhmmer, small_bfd:jackhmmer, uniref90:jackhmmer, uniprot:jackhmmer '
-                  'colabfold_local: uniref30:mmseqs, colabfold_envdb:mmseqs, uniref90:mmseqs, uniprot:mmseqs '
-                  'colabfold_webserver: uniref30:mmseqs (server), colabfold_envdb:mmseqs (server), uniref90:jackhmmer, unirpot:jackhmmer')
+                  'colabfold_dbs_local: uniref30:mmseqs, colabfold_envdb:mmseqs, uniref90:mmseqs, uniprot:mmseqs '
+                  'colabfold_dbs_webserver: uniref30:mmseqs (server), colabfold_envdb:mmseqs (server), uniref90:jackhmmer, unirpot:jackhmmer')
 flags.DEFINE_enum('model_preset', 'monomer',
                   ['monomer', 'monomer_casp14', 'monomer_ptm', 'multimer'],
                   'Choose preset model configuration - the monomer model, '
@@ -880,8 +880,9 @@ def main(argv):
     prediction_pipeline = FLAGS.prediction
     feature_pipeline = FLAGS.db_preset
     use_small_bfd = FLAGS.db_preset == 'reduced_dbs'
-    use_mmseqs_local = FLAGS.db_preset == 'colabfold_local'
-    use_mmseqs_api = FLAGS.db_preset == 'colabfold_web'
+    use_mmseqs_local = FLAGS.db_preset == 'colabfold_dbs_local'
+    use_mmseqs_api = FLAGS.db_preset == 'colabfold_dbs_web'
+    batch_mmseqs = FLAGS.db_preset == 'colabfold_dbs_local'
     if FLAGS.precomputed_msas_path and FLAGS.precomputed_msas_list:
         logging.warning("Flags --precomputed_msas_path and --precomputed_msas_list selected at the same time. "
                         "MSAs from --precomputed_msas_list get priority over MSAs from --precomputed_msas_path.")
@@ -902,13 +903,13 @@ def main(argv):
         _check_flag('uniref30_database_path', 'db_preset',
                     should_be_set=FLAGS.db_preset=='full_dbs')
         _check_flag('colabfold_envdb_database_path', 'db_preset',
-                    should_be_set=FLAGS.db_preset=='colabfold_local')
+                    should_be_set=FLAGS.db_preset=='colabfold_dbs_local')
         _check_flag('uniref30_mmseqs_database_path', 'db_preset',
-                    should_be_set=FLAGS.db_preset=='colabfold_local')
+                    should_be_set=FLAGS.db_preset=='colabfold_dbs_local')
         _check_flag('uniref90_mmseqs_database_path', 'db_preset',
-                    should_be_set=FLAGS.db_preset=='colabfold_local')
+                    should_be_set=FLAGS.db_preset=='colabfold_dbs_local')
         _check_flag('uniprot_mmseqs_database_path', 'db_preset',
-                    should_be_set=FLAGS.db_preset=='colabfold_local')
+                    should_be_set=FLAGS.db_preset=='colabfold_dbs_local')
     global num_ensemble
     if FLAGS.model_preset == 'monomer_casp14':
         
@@ -952,7 +953,7 @@ def main(argv):
         strict_error_check=True)
 
     accession_species_db = None
-    if FLAGS.db_preset in ['colabfold_local', 'colabfold_web']:
+    if FLAGS.db_preset in ['colabfold_dbs_local', 'colabfold_dbs_web']:
         accession_species_db = os.path.join(os.path.dirname(FLAGS.uniprot_database_path), 'accession_species.db')
         if not os.path.exists(accession_species_db):
             logging.info(f"Creating database with accession to species identifier mapping from uniprot in {accession_species_db}. This takes ~30 min and is only done if the file is missing.")
@@ -998,7 +999,7 @@ def main(argv):
       monomer_data_pipeline.template_featurizer_hmm = template_featurizer_hmm
       #Calculates uniprot hits
       monomer_data_pipeline.multimer = True
-      data_pipeline = pipeline_batch.DataPipeline(monomer_data_pipeline=monomer_data_pipeline, batch_mmseqs=FLAGS.db_preset=='colabfold_local')
+      data_pipeline = pipeline_batch.DataPipeline(monomer_data_pipeline=monomer_data_pipeline, batch_mmseqs=batch_mmseqs)
       global num_predictions_per_model
       num_predictions_per_model = 1
     elif run_multimer_system and not FLAGS.pipeline == 'batch_msas':
@@ -1153,12 +1154,17 @@ def main(argv):
             elif len(pcmsa_map) > 1:
                 logging.warning("Found more than one precomputed MSA for given sequence. Will use the first one in the list.")
                 precomputed_msas_list = list(pcmsa_map.values())[0]
-    elif FLAGS.pipeline == 'batch_msas' and FLAGS.precomputed_msas_path:
+    elif (FLAGS.pipeline == 'batch_msas' or batch_mmseqs) and FLAGS.precomputed_msas_path:
         pcmsa_map = pipeline.get_pcmsa_map(FLAGS.precomputed_msas_path,
                                                         description_sequence_dict,
                                                         FLAGS.db_preset)
         if len(pcmsa_map) == len(precomputed_msas_list):
             precomputed_msas_list = list(pcmsa_map.values())
+            #Don't run batch_mmseqs if all MSAs are found
+            if batch_mmseqs:
+                batch_mmseqs = False
+        else:
+            logging.info("Not all required MSAs found in precomputed MSAs path.")
 
     #Batch predictions
     results_file_pairwise_predictions = os.path.join(FLAGS.output_dir, "predictions", FLAGS.predictions_dir, "pairwise_prediction_results.csv")
@@ -1394,7 +1400,7 @@ def main(argv):
             precomputed_msas_list=precomputed_msas_list,
             prediction_pipeline=prediction_pipeline,
             feature_pipeline=feature_pipeline,
-            batch_mmseqs=FLAGS.db_preset=='colabfold_local',
+            batch_mmseqs=batch_mmseqs,
             multichain_template_list=multichain_template_list,
             flags=flag_dict)
 

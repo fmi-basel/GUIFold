@@ -222,6 +222,18 @@ class DBHelper:
         except:
             logger.debug("Could not update jobidregex")
 
+    def update_db_preset_names(self, sess):
+        try:
+            result_jobparams = sess.query(self.Jobparams).all()
+            for row in result_jobparams:
+                if row.db_preset == 'colabfold_local':
+                    row.db_preset = 'colabfold_dbs_local'
+                if row.db_preset == 'colabfold_web':
+                    row.db_preset = 'colabfold_dbs_web'
+            sess.commit()
+        except:
+            logger.debug("Error while renaming feature_pipeline names")
+
     def migrate_to_pipeline_cmb(self, sess):
         try:
             result_jobparams = sess.query(self.Jobparams).all()

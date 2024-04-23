@@ -1011,8 +1011,8 @@ class JobParams(GUIVariables):
         self.queue = Variable('queue', 'bool', ctrl_type='chk')
         self.db_preset_dict = {0: 'full_dbs',
                                1: 'reduced_dbs',
-                               2: 'colabfold_local',
-                               3: 'colabfold_web'}
+                               2: 'colabfold_dbs_local',
+                               3: 'colabfold_dbs_web'}
         self.db_preset = Variable('db_preset', 'str', ctrl_type='cmb', cmb_dict=self.db_preset_dict, cmd=True)
         self.model_preset_dict = {0: 'automatic',
                                   1: 'monomer',
@@ -1717,7 +1717,7 @@ class Job(GUIVariables):
                 gpu_mem = self.get_gpu_mem()
 
         #Increase RAM for mmseqs caching, approximately half of the database size should be sufficient
-        if job_params['db_preset'] == 'colabfold_local':
+        if job_params['db_preset'] == 'colabfold_dbs_local':
             if job_params['pipeline'] in ['full', 'only_features', 'batch_msas']:
                 if job_params['max_ram'] < 800:
                    job_params['min_ram'] = job_params['max_ram']

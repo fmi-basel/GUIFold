@@ -26,3 +26,9 @@ testing/mmseqs_api.py
 testing/prepare_fastfold_memory.py
 joss/
 guifold/config/guifold_test.conf
+testing/create_benchmark_casp15.py
+testing/test_install.sh
+testing/pdb_files
+testing/*.ipynb
+*.csv
+*.ent
