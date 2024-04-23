@@ -152,11 +152,11 @@ In the global configuration file the uniref30_mmseqs path needs to point to
 
 #### Species database
 
-Create database for accession to species identifier mapping:
+To use the standard Alphafold protocol for MSA pairing, GUIFold currently needs to create a database which maps accession to species identifiers.  You can download a precalculated accession-to-species-id database file based on uniprot (Nov 3rd 2021) from [https://www.dropbox.com/scl/fi/5gsrgoqhj74joo8ehlb4l/accession_species.db?rlkey=0uj0vnv96sv7bnuhi9ngjidmw&dl=0](https://www.dropbox.com/scl/fi/5gsrgoqhj74joo8ehlb4l/accession_species.db?rlkey=0uj0vnv96sv7bnuhi9ngjidmw&dl=0). The file needs to be placed into the uniprot folder (where the uniprot.fasta file is stored) and the filename needs to be "accession_species.db".
 
-To use the standard Alphafold protocol for MSA pairing, GUIFold currently needs to create a database which maps accession to species identifiers. This database will be automatically created when the `colabfold_local` or `colabfold_web` protocols are used for the first time. If installation is done for a multi-user environment it is recommended to run this as part of the installation. 
+Alternatively you can create a new accession-to-species-id database from the uniprot.fasta file (this database will be also automatically created when the `colabfold_local` or `colabfold_web` protocols are used for the first time and the database file is not found in the expected location). If installation is done for a multi-user environment it is recommended to run this as part of the installation. 
 
-1. Make sure the global configuraiton file is properly setup (esp. the uniprot database path needs to be defined)
+1. Make sure the global configuraiton file is properly set up (esp. the uniprot database path needs to be defined)
 2. Open the GUI (see Usage)
 3. Paste any random sequence in FASTA format in the sequence input
 4. Click `Read sequence` button
